@@ -1,0 +1,40 @@
+# golangci-lint v1 config (local install is v1.64.x)
+run:
+  timeout: 3m
+
+linters:
+  disable-all: true
+  enable:
+    # Defaults
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Formatting
+    - gofumpt
+    - goimports
+    # Extras (kept modest on purpose)
+    - misspell
+    - revive
+    - gocritic
+    - copyloopvar
+    - unconvert
+    - unparam
+    - nolintlint
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/jaminalder/go-graphics
+  revive:
+    rules:
+      - name: exported
+        arguments: ["checkPrivateReceivers"]
+
+issues:
+  exclude-rules:
+    # Test helpers may ignore errors and skip doc comments.
+    - path: _test\.go
+      linters:
+        - errcheck
+        - revive
