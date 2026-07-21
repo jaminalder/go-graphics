@@ -80,17 +80,23 @@ gradient; then `.Shuffled(rng)` for the banded ones.
 
 | Field | Default | Note |
 |---|---|---|
-| `Frequency` | 12.0 | cycles per canvas unit |
+| `Frequency` | 6.0 | cycles per canvas unit |
 | `Octaves` | 2 | max octave index → 3 fBm components, persistence 0.5 |
 | `Bands` | 50 | discrete colors per gradient |
+| `Gain` | 1.0 | multiplier on raw noise before banding |
 | `LowThreshold` / `HighThreshold` | −0.15 / 0.15 | band split points |
-| `NoiseMin` / `NoiseMax` | −1.0 / 1.0 | outer mapping range |
+| `NoiseMin` / `NoiseMax` | −0.6 / 0.6 | outer mapping range |
 
 Our Perlin fBm has a different value distribution than thi.ng's simplex
-(2D Perlin single octave stays within ≈ ±0.71, sum ≈ ±1.24), so expect to
-tune thresholds and possibly rescale `n` so the three bands get similar area
-coverage to the reference. Tune by rendering previews side by side with the
-target image.
+(2D Perlin single octave stays within ≈ ±0.71, sum ≈ ±1.24, but practical
+values rarely exceed ±0.6). Tuning results (2026-07-21): the spec-derived
+`Frequency` 12 produced blobs half the size of the reference → 6 matches;
+`NoiseMin/Max` at ±1.0 left most shuffled-band colors unused → ±0.6 spreads
+the full gradient across the rings.
+
+**Status: implemented.** Default CLI palette is `kandinsky-soft-pressure`
+(gold/rust/teal), chosen by rendering candidates; the reference's own colors
+remain available as `--palette staticart-seven`.
 
 ## Acceptance checklist (visual, at `web` size vs the reference)
 

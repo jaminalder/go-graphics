@@ -123,9 +123,13 @@ for every sketch (invariant 2 handles composition).
 type Context struct {
     Width, Height int
     Seed          uint64
-    RNG           *rand.Rand      // derived from Seed; the only randomness source
     Palette       palette.Palette
 }
+
+// RNG returns a generator derived from (Seed, stream). Sketches use distinct
+// stream ids per consumer (shuffle A, shuffle B, …) so adding a consumer
+// never disturbs the values existing streams produce.
+func (c Context) RNG(stream uint64) *rand.Rand
 
 type Sketch interface {
     Name() string        // CLI id, kebab-case, e.g. "contour"
