@@ -96,6 +96,34 @@ func TestStripeAt(t *testing.T) {
 	}
 }
 
+func TestDisableStripes(t *testing.T) {
+	striped := renderNRGBA(t, testCtx(t, 42))
+
+	s := New()
+	s.DisableStripes = true
+	img, err := s.Render(testCtx(t, 42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := img.(*image.NRGBA)
+
+	if bytes.Equal(striped.Pix, plain.Pix) {
+		t.Error("disabling stripes changed nothing")
+	}
+	// The underlying composition must survive: many pixels sit in
+	// pass-through stripes and must be identical in both renders.
+	same := 0
+	for i := 0; i < len(plain.Pix); i += 4 {
+		if plain.Pix[i] == striped.Pix[i] && plain.Pix[i+1] == striped.Pix[i+1] &&
+			plain.Pix[i+2] == striped.Pix[i+2] {
+			same++
+		}
+	}
+	if total := len(plain.Pix) / 4; same < total/20 {
+		t.Errorf("only %d/%d pixels unchanged — stripe stream leaked into the base composition", same, total)
+	}
+}
+
 func TestGolden(t *testing.T) {
 	got := renderNRGBA(t, testCtx(t, 42))
 	golden := filepath.Join("testdata", "tapestry_seed42_64.png")

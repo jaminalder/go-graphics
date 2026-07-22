@@ -41,6 +41,11 @@ type Sketch struct {
 	RegionOctaves int     // region fBm max octave index
 	GrainRes      float64 // grain lattice cells per canvas unit
 	StreakRatio   float64 // streak-grain cell elongation (y cells = GrainRes/StreakRatio)
+
+	// DisableStripes turns layer 3 off (one pass-through stripe). Stripes
+	// use their own RNG stream, so the rest of the composition is identical
+	// to the striped render of the same seed.
+	DisableStripes bool
 }
 
 // New returns the sketch with its defaults.
@@ -219,6 +224,9 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 func (s *Sketch) planStripes(ctx sketch.Context) []stripe {
 	rng := ctx.RNG(streamStripes)
 	aspect := float64(ctx.Width) / float64(ctx.Height)
+	if s.DisableStripes {
+		return []stripe{{end: aspect + 1, mode: modeNone, grainMul: 1}}
+	}
 	var stripes []stripe
 	pos := 0.0
 	for pos < aspect {

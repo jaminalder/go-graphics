@@ -82,6 +82,7 @@ func runRender(args []string) error {
 	paletteName := fs.String("palette", "kandinsky-soft-pressure", "palette slug (see: staticart palettes)")
 	format := fs.String("format", "png", "output format: png|jpg")
 	outDir := fs.String("out", "out", "output directory")
+	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -89,6 +90,15 @@ func runRender(args []string) error {
 	s, ok := registry().Get(name)
 	if !ok {
 		return fmt.Errorf("unknown sketch %q (try: staticart list)", name)
+	}
+	fileName := s.Name()
+	if *noStripes {
+		ts, ok := s.(*tapestry.Sketch)
+		if !ok {
+			return fmt.Errorf("--no-stripes only applies to the tapestry sketch")
+		}
+		ts.DisableStripes = true
+		fileName += "-nostripes"
 	}
 	pal, ok := palette.ByName(*paletteName)
 	if !ok {
@@ -116,7 +126,7 @@ func runRender(args []string) error {
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		return err
 	}
-	file := fmt.Sprintf("%s_%s_%d_%dx%d.%s", s.Name(), pal.Slug, *seed, w, h, *format)
+	file := fmt.Sprintf("%s_%s_%d_%dx%d.%s", fileName, pal.Slug, *seed, w, h, *format)
 	path := filepath.Join(*outDir, file)
 	switch *format {
 	case "png":
