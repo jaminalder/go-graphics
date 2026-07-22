@@ -43,12 +43,15 @@ stripes, large tinted regions, and grain texture.
    sampled on a fixed lattice in normalized coordinates (resolution
    independent). Two styles per stripe: `speckle` (square cells) and
    `streak` (tall thin cells → vertical fiber look).
-   **Regional grain (optional, `--grain` / `Sketch.RegionalGrain`)** — a
-   low-frequency selector field boosts the grain 2.5–5.5× on 15–30% of
-   the area (all per-seed draws on a dedicated RNG stream; threshold
-   quantile-calibrated). Intensity ramps are invisible as boundaries, so
-   unlike color changes this needs no terrain alignment. The composition
-   is pixel-identical with and without the flag.
+   **Height grain (optional, `--grain` / `Sketch.HeightGrain`)** — one
+   height window of the terrain (per-seed: 15–30% of the folded noise
+   range, centered anywhere within it) gets the grain boosted 2.5–5.5×,
+   with soft edges. Because it keys off the same noise value as the color
+   bands, the textured band aligns with the visible terraces and appears
+   at that elevation across the whole image — like scree at one altitude.
+   (A spatial-region version was tried first and rejected: the user wants
+   height-dependent, not location-dependent.) Draws live on a dedicated
+   RNG stream; the composition is pixel-identical with the flag off.
 
 ## Per-seed randomization ("art director" draws)
 

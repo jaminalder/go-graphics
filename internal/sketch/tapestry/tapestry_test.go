@@ -155,11 +155,11 @@ func TestDisableStripes(t *testing.T) {
 	}
 }
 
-func TestRegionalGrain(t *testing.T) {
+func TestHeightGrain(t *testing.T) {
 	plain := renderNRGBA(t, testCtx(t, 42))
 
 	s := New()
-	s.RegionalGrain = true
+	s.HeightGrain = true
 	img, err := s.Render(testCtx(t, 42))
 	if err != nil {
 		t.Fatal(err)
@@ -167,10 +167,10 @@ func TestRegionalGrain(t *testing.T) {
 	grained := img.(*image.NRGBA)
 
 	if bytes.Equal(plain.Pix, grained.Pix) {
-		t.Error("regional grain changed nothing")
+		t.Error("height grain changed nothing")
 	}
 	// Grain draws use their own stream, so the base composition must
-	// survive: most pixels sit outside boosted regions and within them the
+	// survive: most pixels sit outside the height window and within it the
 	// change is only an amplitude boost of the same grain values — a large
 	// share of pixels must be byte-identical.
 	same := 0
@@ -184,13 +184,18 @@ func TestRegionalGrain(t *testing.T) {
 		t.Errorf("only %d/%d pixels unchanged — grain draws leaked into the base composition", same, total)
 	}
 
-	// Bounds of the grain draws.
-	p := s.plan(testCtx(t, 42))
-	if p.rgFreq < 1.0 || p.rgFreq > 1.8 || p.rgBoost < 2.5 || p.rgBoost > 5.5 {
-		t.Errorf("grain draws out of range: freq %v boost %v", p.rgFreq, p.rgBoost)
-	}
-	if math.IsNaN(p.rgThresh) || math.IsInf(p.rgThresh, 0) {
-		t.Errorf("bad grain threshold %v", p.rgThresh)
+	// The height window must lie inside the mapped range across seeds.
+	for seed := uint64(0); seed < 100; seed++ {
+		p := s.plan(testCtx(t, seed))
+		if p.hgLo >= p.hgHi || p.hgLo < -p.span || p.hgHi > p.span {
+			t.Fatalf("seed %d: height window [%v, %v] outside ±%v", seed, p.hgLo, p.hgHi, p.span)
+		}
+		if width := p.hgHi - p.hgLo; width < 0.15*2*p.span-1e-9 || width > 0.30*2*p.span+1e-9 {
+			t.Fatalf("seed %d: window width %v out of range", seed, width)
+		}
+		if p.hgBoost < 2.5 || p.hgBoost > 5.5 {
+			t.Fatalf("seed %d: boost %v out of range", seed, p.hgBoost)
+		}
 	}
 }
 

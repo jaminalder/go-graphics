@@ -83,7 +83,7 @@ func runRender(args []string) error {
 	format := fs.String("format", "png", "output format: png|jpg")
 	outDir := fs.String("out", "out", "output directory")
 	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
-	grain := fs.Bool("grain", false, "tapestry only: boost grain strongly on ~15-30% of areas for extra structure")
+	grain := fs.Bool("grain", false, "tapestry only: boost grain strongly within one height band of the terrain")
 	relief := fs.Bool("relief", false, "tapestry only: 3D relief shading (hillshade + paper-cut edges)")
 	reliefPreset := fs.String("relief-preset", "", "tapestry only: named relief look (implies --relief): "+strings.Join(tapestry.ReliefPresetNames(), "|"))
 	if err := fs.Parse(args[1:]); err != nil {
@@ -124,7 +124,7 @@ func runRender(args []string) error {
 		if !ok {
 			return fmt.Errorf("--grain only applies to the tapestry sketch")
 		}
-		ts.RegionalGrain = true
+		ts.HeightGrain = true
 		fileName += "-grain"
 	}
 	pal, ok := palette.ByName(*paletteName)

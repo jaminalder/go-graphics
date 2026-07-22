@@ -32,12 +32,9 @@ const (
 	streamParams    = 4
 	streamShuffleB3 = 5
 	streamShuffleB4 = 6
-	streamGrain     = 7 // regional-grain draws; separate stream so the
-	// base composition is identical with and without RegionalGrain
+	streamGrain     = 7 // height-grain draws; separate stream so the
+	// base composition is identical with and without HeightGrain
 )
-
-// grainSeedSalt derives the regional-grain selector noise seed.
-const grainSeedSalt = 0x67726e // "grn"
 
 // Sketch holds the structural knobs. The per-seed variation draws happen in
 // Render (see the spec); these fields bound or fix that variation.
@@ -60,11 +57,12 @@ type Sketch struct {
 	// ReliefParams tunes the relief pass; ignored unless Relief is set.
 	ReliefParams ReliefParams
 
-	// RegionalGrain boosts the grain strongly on a minority of areas
-	// (~15–30%, per seed), picked by a low-frequency selector field, for
-	// extra surface structure. Uses its own RNG stream: the composition
-	// is identical with and without it, only the grain differs.
-	RegionalGrain bool
+	// HeightGrain boosts the grain strongly within one height range of the
+	// terrain (a per-seed window of 15–30% of the noise value range), so
+	// the same elevation band is textured across the whole image — like
+	// scree at a certain altitude. Uses its own RNG stream: the
+	// composition is identical with and without it, only grain differs.
+	HeightGrain bool
 }
 
 // ReliefParams are the lighting/shading knobs of the relief pass.
@@ -174,13 +172,13 @@ type plan struct {
 	stripes  []stripe
 	grainAmt float64
 
-	// Regional grain (only set when Sketch.RegionalGrain): areas where the
-	// selector field exceeds rgThresh get the grain amplified by up to
-	// 1+rgBoost, ramping over rgBlend.
-	rgFreq   float64
-	rgThresh float64
-	rgBlend  float64
-	rgBoost  float64
+	// Height grain (only set when Sketch.HeightGrain): folded noise values
+	// inside [hgLo, hgHi] get the grain amplified by up to 1+hgBoost,
+	// ramping over hgBlend at both window edges.
+	hgLo    float64
+	hgHi    float64
+	hgBlend float64
+	hgBoost float64
 }
 
 // fold reflects n back into [-span, span] (triangle wave). Without it,
@@ -217,10 +215,6 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	p := s.plan(ctx)
 	field := noise.New(ctx.Seed)
-	var grainSel *noise.Perlin
-	if s.RegionalGrain {
-		grainSel = noise.New(ctx.Seed ^ grainSeedSalt)
-	}
 
 	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
 		// Layers 1+2: contour banding with terrain-owned colorways —
@@ -240,17 +234,17 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 			c = s.shadeRelief(field, p, u, v, bandFrac, c)
 		}
 
-		// Layer 4: grain, regionally boosted when enabled.
+		// Layer 4: grain, boosted within the height window when enabled.
 		gx := int64(u * s.GrainRes)
 		gy := int64(v * s.GrainRes)
 		if st.streak {
 			gy = int64(v * s.GrainRes / s.StreakRatio)
 		}
 		amt := p.grainAmt * st.grainMul
-		if grainSel != nil {
-			sel := grainSel.FBM(u*p.rgFreq, v*p.rgFreq, 1)
-			w := smoothstep(p.rgThresh-p.rgBlend, p.rgThresh+p.rgBlend, sel)
-			amt *= 1 + w*p.rgBoost
+		if s.HeightGrain {
+			w := smoothstep(p.hgLo-p.hgBlend, p.hgLo+p.hgBlend, n) *
+				(1 - smoothstep(p.hgHi-p.hgBlend, p.hgHi+p.hgBlend, n))
+			amt *= 1 + w*p.hgBoost
 		}
 		g := (noise.Hash01(ctx.Seed, gx, gy) - 0.5) * amt
 		return palette.Color{R: c.R + g, G: c.G + g, B: c.B + g}.Clamp()
@@ -315,28 +309,14 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 
 	p.stripes = s.planStripes(ctx)
 
-	if s.RegionalGrain {
+	if s.HeightGrain {
 		rg := ctx.RNG(streamGrain)
-		coverage := 0.15 + rg.Float64()*0.15 // 15–30% of the area
-		p.rgFreq = 1.0 + rg.Float64()*0.8
-		p.rgBoost = 2.5 + rg.Float64()*3.0
-		p.rgBlend = 0.08
-
-		// Calibrate the threshold by quantile-sampling the selector field
-		// so the drawn coverage is honored regardless of the field's
-		// value distribution.
-		sel := noise.New(ctx.Seed ^ grainSeedSalt)
-		const grid = 48
-		samples := make([]float64, 0, grid*grid)
-		for y := range grid {
-			for x := range grid {
-				su := (float64(x) + 0.5) / grid
-				sv := (float64(y) + 0.5) / grid
-				samples = append(samples, sel.FBM(su*p.rgFreq, sv*p.rgFreq, 1))
-			}
-		}
-		sort.Float64s(samples)
-		p.rgThresh = samples[int(float64(len(samples))*(1-coverage))]
+		width := (0.15 + rg.Float64()*0.15) * 2 * span // 15–30% of the value range
+		center := (rg.Float64()*2 - 1) * (span - width/2)
+		p.hgLo = center - width/2
+		p.hgHi = center + width/2
+		p.hgBlend = 0.04
+		p.hgBoost = 2.5 + rg.Float64()*3.0
 	}
 	return p
 }
