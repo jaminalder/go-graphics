@@ -164,6 +164,21 @@ type plan struct {
 	grainAmt float64
 }
 
+// fold reflects n back into [-span, span] (triangle wave). Without it,
+// noise values beyond the mapped range clamp to the outer gradient's last
+// color, leaving large flat single-color caps on the tallest hills; with
+// it, the rings continue inward across the very tops.
+func fold(n, span float64) float64 {
+	r := math.Mod(n+span, 4*span)
+	if r < 0 {
+		r += 4 * span
+	}
+	if r > 2*span {
+		r = 4*span - r
+	}
+	return r - span
+}
+
 // bandOf returns the band index for noise value n and the value range of
 // that band.
 func (p *plan) bandOf(n float64) (band int, lo, hi float64) {
@@ -188,7 +203,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// Layers 1+2: contour banding with terrain-owned colorways —
 		// which value band this pixel's noise falls in decides both the
 		// ring and its color register. bandFrac feeds relief shading.
-		n := field.FBM(u*p.freq, v*p.freq, s.Octaves)
+		n := fold(field.FBM(u*p.freq, v*p.freq, s.Octaves), p.span)
 		band, lo, hi := p.bandOf(n)
 		idx, bandFrac := gradient.Locate(remap(n, lo, hi), p.bands)
 		c := p.grads[band][idx]

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,6 +85,29 @@ func TestPlanBounds(t *testing.T) {
 				t.Fatalf("seed %d: stripe amount %v out of range", seed, st.amount)
 			}
 		}
+	}
+}
+
+func TestFold(t *testing.T) {
+	const span = 0.6
+	tests := []struct{ in, want float64 }{
+		{0, 0},
+		{0.5, 0.5},
+		{-0.5, -0.5},
+		{0.6, 0.6},
+		{-0.6, -0.6},
+		{0.7, 0.5},   // reflects at +span
+		{-0.7, -0.5}, // reflects at -span
+		{1.3, -0.1},  // continues down past the reflection
+	}
+	for _, tt := range tests {
+		if got := fold(tt.in, span); math.Abs(got-tt.want) > 1e-12 {
+			t.Errorf("fold(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+	// Continuity across the boundary.
+	if math.Abs(fold(span-1e-9, span)-fold(span+1e-9, span)) > 1e-8 {
+		t.Error("fold is discontinuous at +span")
 	}
 }
 
