@@ -148,6 +148,12 @@ func mulBlend(a, b palette.Color) palette.Color {
 	return palette.Color{R: a.R * b.R, G: a.G * b.G, B: a.B * b.B}
 }
 
+// colorway is one full gradient trio — the contour pattern rendered in one
+// color register. Zones of the region field select between colorways.
+type colorway struct {
+	low, mid, high gradient.Discrete
+}
+
 // plan is everything Render derives from the seed before the pixel loop.
 type plan struct {
 	freq       float64
@@ -155,13 +161,16 @@ type plan struct {
 	highThresh float64
 	noiseMin   float64
 	noiseMax   float64
+	bands      int
 
-	gradLow, gradMid, gradHigh gradient.Discrete
-
-	regionFreq     float64
-	regionThresh   float64
-	regionStrength float64
-	regionTint     palette.Color
+	// Colorway zones selected by the region field value: deep register on
+	// the low tail, bright register on the high tail, mid between, with a
+	// smoothstep crossfade of half-width zoneBlend at each threshold.
+	zones      [3]colorway // deep, mid, bright
+	regionFreq float64
+	zoneT1     float64
+	zoneT2     float64
+	zoneBlend  float64
 
 	stripes  []stripe
 	grainAmt float64
@@ -177,27 +186,30 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	region := noise.New(ctx.Seed ^ regionSeedSalt)
 
 	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
-		// Layer 1: contour base. bandFrac is the position within the
-		// current color band (0 = lower edge), used by relief shading.
+		// Layer 1: contour banding — which band, and where within it
+		// (bandFrac feeds relief shading).
 		n := field.FBM(u*p.freq, v*p.freq, s.Octaves)
 		var (
-			c        palette.Color
-			bandFrac float64
+			slot int // 0 low, 1 mid, 2 high
+			t    float64
 		)
 		switch {
 		case n < p.lowThresh:
-			c, bandFrac = bandAt(p.gradLow, remap(n, p.noiseMin, p.lowThresh))
+			slot, t = 0, remap(n, p.noiseMin, p.lowThresh)
 		case n < p.highThresh:
-			c, bandFrac = bandAt(p.gradMid, remap(n, p.lowThresh, p.highThresh))
+			slot, t = 1, remap(n, p.lowThresh, p.highThresh)
 		default:
-			c, bandFrac = bandAt(p.gradHigh, remap(n, p.highThresh, p.noiseMax))
+			slot, t = 2, remap(n, p.highThresh, p.noiseMax)
 		}
+		idx, bandFrac := gradient.Locate(t, p.bands)
 
-		// Layer 2: region tint — multiply blend, rings showing through.
+		// Layer 2: colorway zones — the region field picks which color
+		// register renders this band. Same band index in every zone, so
+		// the ring geometry flows through zone borders.
 		r := region.FBM(u*p.regionFreq, v*p.regionFreq, s.RegionOctaves)
-		if w := smoothstep(p.regionThresh, p.regionThresh+0.08, r); w > 0 {
-			c = palette.Lerp(c, mulBlend(c, p.regionTint), w*p.regionStrength)
-		}
+		wDeep := 1 - smoothstep(p.zoneT1-p.zoneBlend, p.zoneT1+p.zoneBlend, r)
+		wBright := smoothstep(p.zoneT2-p.zoneBlend, p.zoneT2+p.zoneBlend, r)
+		c := p.zoneColor(slot, idx, wDeep, 1-wDeep-wBright, wBright)
 
 		// Layer 3: vertical stripe.
 		st := p.stripeAt(u)
@@ -225,14 +237,14 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 func (s *Sketch) plan(ctx sketch.Context) plan {
 	prm := ctx.RNG(streamParams)
 
-	// Palette roles by luminance: lightest anchors the smooth middle
-	// gradient, darkest tints the regions, two random remaining colors
-	// anchor the shuffled gradients.
+	// Palette roles by luminance: the bright colorway uses the lightest
+	// color plus two random mid colors; the mid and deep colorways step
+	// down the luminance ladder from there.
 	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
 	sort.SliceStable(byLum, func(i, j int) bool {
 		return byLum[i].Luminance() < byLum[j].Luminance()
 	})
-	darkest, lightest := byLum[0], byLum[len(byLum)-1]
+	lightest := byLum[len(byLum)-1]
 	rest := byLum[1 : len(byLum)-1]
 	i := prm.IntN(len(rest))
 	j := prm.IntN(len(rest) - 1)
@@ -251,22 +263,67 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		highThresh: thresh,
 		noiseMin:   -span,
 		noiseMax:   span,
+		bands:      bands,
 
-		gradLow: gradient.Sample(gradient.CosineBetween(warm, lightest), bands).
-			Shuffled(ctx.RNG(streamShuffleLow)),
-		gradMid: gradient.Sample(gradient.CosineBetween(lightest, cool), bands),
-		gradHigh: gradient.Sample(gradient.CosineBetween(cool, warm), bands).
-			Shuffled(ctx.RNG(streamShuffleHigh)),
-
-		regionFreq:     2.2 + prm.Float64(),
-		regionThresh:   0.10 + prm.Float64()*0.15,
-		regionStrength: 0.50 + prm.Float64()*0.35,
-		regionTint:     darkest.Saturate(0.7).Lighten(0.3),
+		regionFreq: 2.2 + prm.Float64(),
+		zoneT1:     -0.18 + prm.Float64()*0.12,
+		zoneT2:     0.06 + prm.Float64()*0.12,
+		zoneBlend:  0.03 + prm.Float64()*0.04,
 
 		grainAmt: 0.03 + prm.Float64()*0.03,
 	}
+
+	// One band permutation per gradient slot, shared by all colorways, so
+	// ring N is the same ring in every zone — only its color register
+	// changes across zone borders.
+	permLow := ctx.RNG(streamShuffleLow).Perm(bands)
+	permHigh := ctx.RNG(streamShuffleHigh).Perm(bands)
+	build := func(warm, pale, cool palette.Color) colorway {
+		return colorway{
+			low:  gradient.Sample(gradient.CosineBetween(warm, pale), bands).Permuted(permLow),
+			mid:  gradient.Sample(gradient.CosineBetween(pale, cool), bands),
+			high: gradient.Sample(gradient.CosineBetween(cool, warm), bands).Permuted(permHigh),
+		}
+	}
+	// Every register spans dark→light — the reference keeps light ring
+	// accents even inside its deepest zones; narrow-luminance registers
+	// turn murky.
+	n := len(byLum)
+	if warm == byLum[1] && cool == byLum[2] {
+		warm, cool = cool, warm // keep bright distinct from the mid register
+	}
+	p.zones = [3]colorway{
+		build(byLum[0], byLum[n-2], byLum[1]), // deep register
+		build(byLum[1], byLum[n-1], byLum[2]), // mid register
+		build(warm, lightest, cool),           // bright register
+	}
+
 	p.stripes = s.planStripes(ctx)
 	return p
+}
+
+// zoneColor blends the same band across the three zone colorways.
+func (p *plan) zoneColor(slot, idx int, wDeep, wMid, wBright float64) palette.Color {
+	var c palette.Color
+	for z, w := range [3]float64{wDeep, wMid, wBright} {
+		if w <= 0 {
+			continue
+		}
+		cw := p.zones[z]
+		var g gradient.Discrete
+		switch slot {
+		case 0:
+			g = cw.low
+		case 1:
+			g = cw.mid
+		default:
+			g = cw.high
+		}
+		c.R += w * g[idx].R
+		c.G += w * g[idx].G
+		c.B += w * g[idx].B
+	}
+	return c
 }
 
 // planStripes covers [0, aspect] with random-width stripes.
@@ -333,13 +390,6 @@ func (p *plan) stripeAt(u float64) stripe {
 		}
 	}
 	return p.stripes[lo]
-}
-
-// bandAt returns the band color for t plus the fractional position within
-// the band.
-func bandAt(d gradient.Discrete, t float64) (palette.Color, float64) {
-	idx, frac := gradient.Locate(t, len(d))
-	return d[idx], frac
 }
 
 // shadeRelief treats the contour noise as a height field and shades the

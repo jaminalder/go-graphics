@@ -84,6 +84,20 @@ func (d Discrete) Shuffled(rng *rand.Rand) Discrete {
 	return s
 }
 
+// Permuted returns a copy reordered by perm (s[i] = d[perm[i]]). Applying
+// one permutation to several gradients keeps them band-aligned — band i is
+// "the same ring" in each. len(perm) must equal len(d).
+func (d Discrete) Permuted(perm []int) Discrete {
+	if len(perm) != len(d) {
+		panic("gradient: permutation length mismatch")
+	}
+	s := make(Discrete, len(d))
+	for i, p := range perm {
+		s[i] = d[p]
+	}
+	return s
+}
+
 func clamp01(v float64) float64 {
 	return math.Min(1, math.Max(0, v))
 }

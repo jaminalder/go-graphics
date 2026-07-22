@@ -63,11 +63,19 @@ func TestPlanBounds(t *testing.T) {
 		if p.highThresh < 0.10 || p.highThresh > 0.18 || p.lowThresh != -p.highThresh {
 			t.Fatalf("seed %d: thresholds %v/%v out of range", seed, p.lowThresh, p.highThresh)
 		}
-		if n := len(p.gradLow); n < 20 || n > 40 {
-			t.Fatalf("seed %d: %d bands out of range", seed, n)
+		if p.bands < 20 || p.bands > 40 {
+			t.Fatalf("seed %d: %d bands out of range", seed, p.bands)
 		}
-		if p.regionStrength < 0.50 || p.regionStrength > 0.85 {
-			t.Fatalf("seed %d: region strength %v out of range", seed, p.regionStrength)
+		for z, cw := range p.zones {
+			if len(cw.low) != p.bands || len(cw.mid) != p.bands || len(cw.high) != p.bands {
+				t.Fatalf("seed %d: zone %d gradients not %d bands", seed, z, p.bands)
+			}
+		}
+		if p.zoneT1 < -0.18 || p.zoneT1 > -0.06 || p.zoneT2 < 0.06 || p.zoneT2 > 0.18 {
+			t.Fatalf("seed %d: zone thresholds %v/%v out of range", seed, p.zoneT1, p.zoneT2)
+		}
+		if p.zoneT2-p.zoneBlend <= p.zoneT1+p.zoneBlend {
+			t.Fatalf("seed %d: zone crossfades overlap", seed)
 		}
 		if len(p.stripes) < 8 {
 			t.Fatalf("seed %d: only %d stripes on a square canvas", seed, len(p.stripes))
@@ -110,8 +118,11 @@ func TestDisableStripes(t *testing.T) {
 	if bytes.Equal(striped.Pix, plain.Pix) {
 		t.Error("disabling stripes changed nothing")
 	}
-	// The underlying composition must survive: many pixels sit in
-	// pass-through stripes and must be identical in both renders.
+	// The underlying composition must survive: pixels in pass-through
+	// stripes differ only by the per-stripe grain multiplier, so a
+	// meaningful share must still be byte-identical. (Zone crossfading
+	// makes coincidental matches rarer than in earlier versions, hence
+	// the modest 2.5% bar.)
 	same := 0
 	for i := 0; i < len(plain.Pix); i += 4 {
 		if plain.Pix[i] == striped.Pix[i] && plain.Pix[i+1] == striped.Pix[i+1] &&
@@ -119,7 +130,7 @@ func TestDisableStripes(t *testing.T) {
 			same++
 		}
 	}
-	if total := len(plain.Pix) / 4; same < total/20 {
+	if total := len(plain.Pix) / 4; same < total/40 {
 		t.Errorf("only %d/%d pixels unchanged — stripe stream leaked into the base composition", same, total)
 	}
 }

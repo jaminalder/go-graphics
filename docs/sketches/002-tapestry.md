@@ -11,11 +11,15 @@ stripes, large tinted regions, and grain texture.
    (few bands, moderate frequency): user feedback 2026-07-22 was that the
    gap between finest ripples and biggest shadows read as too large, so the
    smallest structures were made bigger and the regions smaller/more complex.
-2. **Region tint** — a second, low-frequency fBm field; where it exceeds a
-   threshold the base color is **multiply-blended** with a saturated,
-   lightened version of the palette's darkest color (smoothstepped near the
-   edge). Multiply acts like dye: hue shifts and deepens while the rings'
-   contrast survives. (Plain lerp-to-dark was tried first and went muddy.)
+2. **Colorway zones** — a second, low-frequency fBm field partitions the
+   canvas into three zones (deep / mid / bright), each rendering the *same*
+   contour bands in a different color register, crossfaded at the zone
+   borders. All three registers share one band permutation per gradient
+   slot, so ring N is the same ring everywhere — only its color family
+   changes. Every register spans dark→light (v3, user feedback 2026-07-22:
+   the earlier multiply-tint region read as "shadows over the image";
+   narrow-luminance registers went murky — the reference keeps light ring
+   accents even in its deepest zones).
 3. **Vertical stripes** — full-height stripes of random width covering the
    canvas: a mix of wide bands and thin lines. Colored stripes multiply with
    a lightened palette color (warp-thread dye); others nudge toward white or
@@ -47,7 +51,7 @@ aesthetics; the tunable struct fields hold the *ranges*, not the values:
 | Band thresholds ±T | 0.10 – 0.18 | ring-area vs cloud-area balance |
 | Noise mapping range | ±0.55 – ±0.70 | how much of each gradient shows |
 | Region frequency | 2.2 – 3.2, 2 fBm octaves | size and edge complexity of tinted areas |
-| Region threshold / strength | 0.10 – 0.25 / 0.50 – 0.85 | tint coverage and depth (multiply) |
+| Zone thresholds t1 / t2 | −0.18 – −0.06 / 0.06 – 0.18, blend 0.03 – 0.07 | deep/mid/bright zone coverage and edge softness |
 | Stripe widths | thin 0.003 – 0.010 (45%), wide 0.02 – 0.09 | warp rhythm |
 | Stripe effect | tint 60% / lighten 12% / darken 13% / none 15%, amount 0.05 – 0.30 | color variety without mud |
 | Stripe grain | multiplier 0.3 – 1.4, streak style 20% | woven texture |
