@@ -88,6 +88,37 @@ func TestHSLRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLerpHSL(t *testing.T) {
+	red := Color{R: 1}
+	blue := Color{B: 1}
+	if got := LerpHSL(red, blue, 0); !almostEqual(got, red) {
+		t.Errorf("t=0 = %v, want %v", got, red)
+	}
+	if got := LerpHSL(red, blue, 1); !almostEqual(got, blue) {
+		t.Errorf("t=1 = %v, want %v", got, blue)
+	}
+	// Shortest hue arc from red (0°) to blue (240°) passes through magenta
+	// (300°), and the blend keeps full saturation — no graying out.
+	h, s, _ := LerpHSL(red, blue, 0.5).HSL()
+	if math.Abs(h-300) > 1e-6 || math.Abs(s-1) > 1e-6 {
+		t.Errorf("midpoint = hue %v sat %v, want hue 300 sat 1", h, s)
+	}
+	// Achromatic endpoint adopts the other's hue: gray→red stays red-hued.
+	h, _, _ = LerpHSL(Color{0.5, 0.5, 0.5}, red, 0.5).HSL()
+	if h != 0 {
+		t.Errorf("gray→red midpoint hue = %v, want 0", h)
+	}
+}
+
+func TestFromHSLWrapsHue(t *testing.T) {
+	if FromHSL(370, 1, 0.5) != FromHSL(10, 1, 0.5) {
+		t.Error("hue should wrap mod 360")
+	}
+	if FromHSL(-30, 1, 0.5) != FromHSL(330, 1, 0.5) {
+		t.Error("negative hue should wrap")
+	}
+}
+
 func TestDesaturate(t *testing.T) {
 	c := MustHex("#ED6A5A")
 	if got := c.Desaturate(0); !almostEqual(got, c) {

@@ -60,22 +60,18 @@ func TestPlanBounds(t *testing.T) {
 		if p.freq < 4 || p.freq > 6 {
 			t.Fatalf("seed %d: freq %v out of range", seed, p.freq)
 		}
-		if p.highThresh < 0.10 || p.highThresh > 0.18 || p.lowThresh != -p.highThresh {
-			t.Fatalf("seed %d: thresholds %v/%v out of range", seed, p.lowThresh, p.highThresh)
-		}
 		if p.bands < 20 || p.bands > 40 {
 			t.Fatalf("seed %d: %d bands out of range", seed, p.bands)
 		}
-		for z, cw := range p.zones {
-			if len(cw.low) != p.bands || len(cw.mid) != p.bands || len(cw.high) != p.bands {
-				t.Fatalf("seed %d: zone %d gradients not %d bands", seed, z, p.bands)
+		for b, g := range p.grads {
+			if len(g) != p.bands {
+				t.Fatalf("seed %d: band %d gradient has %d colors, want %d", seed, b, len(g), p.bands)
 			}
 		}
-		if p.zoneT1 < -0.18 || p.zoneT1 > -0.06 || p.zoneT2 < 0.06 || p.zoneT2 > 0.18 {
-			t.Fatalf("seed %d: zone thresholds %v/%v out of range", seed, p.zoneT1, p.zoneT2)
-		}
-		if p.zoneT2-p.zoneBlend <= p.zoneT1+p.zoneBlend {
-			t.Fatalf("seed %d: zone crossfades overlap", seed)
+		// Band edges must be strictly ordered within the mapped span.
+		if !(-p.span < p.cuts[0] && p.cuts[0] < p.cuts[1] && p.cuts[1] < 0 &&
+			0 < p.cuts[2] && p.cuts[2] < p.cuts[3] && p.cuts[3] < p.span) {
+			t.Fatalf("seed %d: band cuts %v not ordered within ±%v", seed, p.cuts, p.span)
 		}
 		if len(p.stripes) < 8 {
 			t.Fatalf("seed %d: only %d stripes on a square canvas", seed, len(p.stripes))

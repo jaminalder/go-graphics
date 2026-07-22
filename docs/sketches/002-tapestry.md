@@ -6,20 +6,25 @@ stripes, large tinted regions, and grain texture.
 
 ## Layers (applied per pixel, in order)
 
-1. **Contour base** — as sketch 001: fBm noise → three-band gradient
-   coloring, outer bands shuffled, middle smooth. Deliberately chunky rings
-   (few bands, moderate frequency): user feedback 2026-07-22 was that the
-   gap between finest ripples and biggest shadows read as too large, so the
-   smallest structures were made bigger and the regions smaller/more complex.
-2. **Colorway zones** — a second, low-frequency fBm field partitions the
-   canvas into three zones (deep / mid / bright), each rendering the *same*
-   contour bands in a different color register, crossfaded at the zone
-   borders. All three registers share one band permutation per gradient
-   slot, so ring N is the same ring everywhere — only its color family
-   changes. Every register spans dark→light (v3, user feedback 2026-07-22:
-   the earlier multiply-tint region read as "shadows over the image";
-   narrow-luminance registers went murky — the reference keeps light ring
-   accents even in its deepest zones).
+1. **Contour base with terrain-owned colorways (v4)** — one fBm field,
+   its value range split into **five bands**: deep-basin / basin / cloud /
+   peak / high-peak. Each band has its own colorway gradient (outer four
+   shuffled, cloud smooth), so every hill or basin is uniformly one
+   coloring and all color-area boundaries are contour lines of the terrain
+   itself. History: v1 multiply-tint region read as "shadows over the
+   image"; v3's independent zone field cut across hills and still read as
+   overlay (user feedback 2026-07-22: "one hill area one coloring"). The
+   reference works exactly this way — its color areas are the field's own
+   basins and peaks. Deliberately chunky rings (few bands, moderate
+   frequency) per the earlier scale-hierarchy feedback.
+2. **Coloring** — every gradient endpoint is an actual palette color
+   (chosen by luminance role: darkest two, mid, lightest two), and
+   interpolation happens in **HSL space** (`gradient.HSLBetween`,
+   `palette.LerpHSL`, shortest hue arc) so blends stay saturated instead
+   of graying out as RGB interpolation does. Note: distant-hue pairs pass
+   through intermediate hues (e.g. red→navy passes violet) — harmonious,
+   but constrain pairs to nearby hues if stricter palette fidelity is
+   wanted.
 3. **Vertical stripes** — full-height stripes of random width covering the
    canvas: a mix of wide bands and thin lines. Colored stripes multiply with
    a lightened palette color (warp-thread dye); others nudge toward white or
@@ -51,7 +56,8 @@ aesthetics; the tunable struct fields hold the *ranges*, not the values:
 | Band thresholds ±T | 0.10 – 0.18 | ring-area vs cloud-area balance |
 | Noise mapping range | ±0.55 – ±0.70 | how much of each gradient shows |
 | Region frequency | 2.2 – 3.2, 2 fBm octaves | size and edge complexity of tinted areas |
-| Zone thresholds t1 / t2 | −0.18 – −0.06 / 0.06 – 0.18, blend 0.03 – 0.07 | deep/mid/bright zone coverage and edge softness |
+| Band cuts ±t1 / ±t2 | t1 0.08 – 0.14, t2 0.28 – 0.38 | cloud width and deep-band coverage |
+| Cloud partner color | mid or second-lightest (50/50) | cloud tint variation |
 | Stripe widths | thin 0.003 – 0.010 (45%), wide 0.02 – 0.09 | warp rhythm |
 | Stripe effect | tint 60% / lighten 12% / darken 13% / none 15%, amount 0.05 – 0.30 | color variety without mud |
 | Stripe grain | multiplier 0.3 – 1.4, streak style 20% | woven texture |

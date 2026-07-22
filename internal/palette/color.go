@@ -93,6 +93,33 @@ func (c Color) Luminance() float64 {
 	return 0.2126*c.R + 0.7152*c.G + 0.0722*c.B
 }
 
+// HSL returns hue [0,360), saturation [0,1], lightness [0,1].
+func (c Color) HSL() (h, s, l float64) { return c.hsl() }
+
+// FromHSL builds a color from hue (any value, taken mod 360), saturation,
+// and lightness (clamped to [0,1]).
+func FromHSL(h, s, l float64) Color {
+	h = math.Mod(math.Mod(h, 360)+360, 360)
+	return fromHSL(h, clamp01(s), clamp01(l))
+}
+
+// LerpHSL interpolates from a (t=0) to b (t=1) in HSL space, taking the
+// shortest hue arc. Unlike RGB-space interpolation, blends between distant
+// hues stay saturated instead of graying out. Achromatic endpoints adopt
+// the other endpoint's hue.
+func LerpHSL(a, b Color, t float64) Color {
+	ha, sa, la := a.hsl()
+	hb, sb, lb := b.hsl()
+	if sa == 0 {
+		ha = hb
+	}
+	if sb == 0 {
+		hb = ha
+	}
+	d := math.Mod(hb-ha+540, 360) - 180
+	return FromHSL(ha+d*t, sa+(sb-sa)*t, la+(lb-la)*t)
+}
+
 // hsl converts to hue [0,360), saturation [0,1], lightness [0,1].
 func (c Color) hsl() (h, s, l float64) {
 	c = c.Clamp()

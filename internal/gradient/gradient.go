@@ -45,6 +45,22 @@ func (g Cosine) At(t float64) palette.Color {
 	return palette.Color{R: eval(0), G: eval(1), B: eval(2)}.Clamp()
 }
 
+// SmoothHSL eases from C1 (t=0) to C2 (t=1) along a half cosine,
+// interpolating in HSL space so blends between distant hues stay vivid
+// (RGB-space interpolation grays out mid-way).
+type SmoothHSL struct {
+	C1, C2 palette.Color
+}
+
+// HSLBetween builds the HSL-space gradient from c1 to c2.
+func HSLBetween(c1, c2 palette.Color) SmoothHSL { return SmoothHSL{c1, c2} }
+
+// At implements Gradient.
+func (g SmoothHSL) At(t float64) palette.Color {
+	ease := (1 - math.Cos(math.Pi*clamp01(t))) / 2
+	return palette.LerpHSL(g.C1, g.C2, ease)
+}
+
 // Discrete is a gradient of equally sized color bands.
 type Discrete []palette.Color
 

@@ -1,11 +1,13 @@
-// Package tapestry implements sketch 002: striped, grained contour layers
-// (spec: docs/sketches/002-tapestry.md).
+// Package tapestry implements sketch 002: contour terrain with
+// terrain-owned colorways (spec: docs/sketches/002-tapestry.md).
 //
-// Four layers per pixel: a contour-noise base (as sketch 001, finer rings),
-// a low-frequency region field tinting large areas toward the palette's
-// darkest color, full-height vertical stripes that shift the color beneath
-// them, and deterministic grain. Each seed draws its own composition
-// parameters from bounded ranges, so seeds are distinct but stay presentable.
+// One fBm field split into five value bands (deep-basin / basin / cloud /
+// peak / high-peak), each colored by its own HSL-interpolated palette
+// gradient — every hill is uniformly one coloring and color boundaries are
+// contour lines. Optional layers: full-height vertical stripes, 3D relief
+// shading, and deterministic grain. Each seed draws its composition
+// parameters from bounded ranges, so seeds are distinct but stay
+// presentable.
 package tapestry
 
 import (
@@ -24,23 +26,20 @@ import (
 
 // RNG stream ids (see sketch.Context.RNG).
 const (
-	streamShuffleLow  = 1
-	streamShuffleHigh = 2
-	streamStripes     = 3
-	streamParams      = 4
+	streamShuffleB0 = 1
+	streamShuffleB1 = 2
+	streamStripes   = 3
+	streamParams    = 4
+	streamShuffleB3 = 5
+	streamShuffleB4 = 6
 )
-
-// regionSeedSalt derives the region-field noise seed from Context.Seed so
-// the region field is independent of the contour field.
-const regionSeedSalt = 0x7265676e // "regn"
 
 // Sketch holds the structural knobs. The per-seed variation draws happen in
 // Render (see the spec); these fields bound or fix that variation.
 type Sketch struct {
-	Octaves       int     // contour fBm max octave index
-	RegionOctaves int     // region fBm max octave index
-	GrainRes      float64 // grain lattice cells per canvas unit
-	StreakRatio   float64 // streak-grain cell elongation (y cells = GrainRes/StreakRatio)
+	Octaves     int     // contour fBm max octave index
+	GrainRes    float64 // grain lattice cells per canvas unit
+	StreakRatio float64 // streak-grain cell elongation (y cells = GrainRes/StreakRatio)
 
 	// DisableStripes turns layer 3 off (one pass-through stripe). Stripes
 	// use their own RNG stream, so the rest of the composition is identical
@@ -90,11 +89,10 @@ const reliefEps = 0.0005
 // New returns the sketch with its defaults.
 func New() *Sketch {
 	return &Sketch{
-		Octaves:       2,
-		RegionOctaves: 2,
-		GrainRes:      1400,
-		StreakRatio:   6,
-		ReliefParams:  DefaultReliefParams(),
+		Octaves:      2,
+		GrainRes:     1400,
+		StreakRatio:  6,
+		ReliefParams: DefaultReliefParams(),
 	}
 }
 
@@ -148,32 +146,34 @@ func mulBlend(a, b palette.Color) palette.Color {
 	return palette.Color{R: a.R * b.R, G: a.G * b.G, B: a.B * b.B}
 }
 
-// colorway is one full gradient trio — the contour pattern rendered in one
-// color register. Zones of the region field select between colorways.
-type colorway struct {
-	low, mid, high gradient.Discrete
-}
-
 // plan is everything Render derives from the seed before the pixel loop.
+//
+// The noise range is split into five value bands, each with its own
+// colorway gradient. Because band membership is a property of the terrain
+// itself, every "hill" (or basin) is uniformly one coloring and the
+// boundaries between colorings are contour lines — nothing reads as an
+// overlay. grads[2] is the smooth cloud band; the others are shuffled.
 type plan struct {
-	freq       float64
-	lowThresh  float64
-	highThresh float64
-	noiseMin   float64
-	noiseMax   float64
-	bands      int
-
-	// Colorway zones selected by the region field value: deep register on
-	// the low tail, bright register on the high tail, mid between, with a
-	// smoothstep crossfade of half-width zoneBlend at each threshold.
-	zones      [3]colorway // deep, mid, bright
-	regionFreq float64
-	zoneT1     float64
-	zoneT2     float64
-	zoneBlend  float64
+	freq  float64
+	span  float64    // noise mapped over ±span
+	cuts  [4]float64 // band boundaries: -t2, -t1, +t1, +t2
+	bands int
+	grads [5]gradient.Discrete
 
 	stripes  []stripe
 	grainAmt float64
+}
+
+// bandOf returns the band index for noise value n and the value range of
+// that band.
+func (p *plan) bandOf(n float64) (band int, lo, hi float64) {
+	edges := [6]float64{-p.span, p.cuts[0], p.cuts[1], p.cuts[2], p.cuts[3], p.span}
+	for b := 0; b < 4; b++ {
+		if n < edges[b+1] {
+			return b, edges[b], edges[b+1]
+		}
+	}
+	return 4, edges[4], edges[5]
 }
 
 // Render implements sketch.Sketch.
@@ -183,33 +183,15 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	p := s.plan(ctx)
 	field := noise.New(ctx.Seed)
-	region := noise.New(ctx.Seed ^ regionSeedSalt)
 
 	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
-		// Layer 1: contour banding — which band, and where within it
-		// (bandFrac feeds relief shading).
+		// Layers 1+2: contour banding with terrain-owned colorways —
+		// which value band this pixel's noise falls in decides both the
+		// ring and its color register. bandFrac feeds relief shading.
 		n := field.FBM(u*p.freq, v*p.freq, s.Octaves)
-		var (
-			slot int // 0 low, 1 mid, 2 high
-			t    float64
-		)
-		switch {
-		case n < p.lowThresh:
-			slot, t = 0, remap(n, p.noiseMin, p.lowThresh)
-		case n < p.highThresh:
-			slot, t = 1, remap(n, p.lowThresh, p.highThresh)
-		default:
-			slot, t = 2, remap(n, p.highThresh, p.noiseMax)
-		}
-		idx, bandFrac := gradient.Locate(t, p.bands)
-
-		// Layer 2: colorway zones — the region field picks which color
-		// register renders this band. Same band index in every zone, so
-		// the ring geometry flows through zone borders.
-		r := region.FBM(u*p.regionFreq, v*p.regionFreq, s.RegionOctaves)
-		wDeep := 1 - smoothstep(p.zoneT1-p.zoneBlend, p.zoneT1+p.zoneBlend, r)
-		wBright := smoothstep(p.zoneT2-p.zoneBlend, p.zoneT2+p.zoneBlend, r)
-		c := p.zoneColor(slot, idx, wDeep, 1-wDeep-wBright, wBright)
+		band, lo, hi := p.bandOf(n)
+		idx, bandFrac := gradient.Locate(remap(n, lo, hi), p.bands)
+		c := p.grads[band][idx]
 
 		// Layer 3: vertical stripe.
 		st := p.stripeAt(u)
@@ -237,93 +219,52 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 func (s *Sketch) plan(ctx sketch.Context) plan {
 	prm := ctx.RNG(streamParams)
 
-	// Palette roles by luminance: the bright colorway uses the lightest
-	// color plus two random mid colors; the mid and deep colorways step
-	// down the luminance ladder from there.
+	// Palette roles by luminance. Every gradient endpoint is an actual
+	// palette color — no invented colors — and interpolation happens in
+	// HSL space, so blends stay in the palette's family.
 	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
 	sort.SliceStable(byLum, func(i, j int) bool {
 		return byLum[i].Luminance() < byLum[j].Luminance()
 	})
-	lightest := byLum[len(byLum)-1]
-	rest := byLum[1 : len(byLum)-1]
-	i := prm.IntN(len(rest))
-	j := prm.IntN(len(rest) - 1)
-	if j >= i {
-		j++
-	}
-	warm, cool := rest[i], rest[j]
+	nL := len(byLum)
+	dark0, dark1 := byLum[0], byLum[1]
+	mid := byLum[min(2, nL-2)]
+	light1, light0 := byLum[nL-2], byLum[nL-1]
 
-	span := 0.55 + prm.Float64()*0.15 // noise mapped over ±span
-	thresh := 0.10 + prm.Float64()*0.08
+	t1 := 0.08 + prm.Float64()*0.06 // cloud band half-width
+	t2 := 0.28 + prm.Float64()*0.10 // deep-band cutoffs
+	span := 0.55 + prm.Float64()*0.15
 	bands := 20 + prm.IntN(21)
 
 	p := plan{
-		freq:       4 + prm.Float64()*2,
-		lowThresh:  -thresh,
-		highThresh: thresh,
-		noiseMin:   -span,
-		noiseMax:   span,
-		bands:      bands,
-
-		regionFreq: 2.2 + prm.Float64(),
-		zoneT1:     -0.18 + prm.Float64()*0.12,
-		zoneT2:     0.06 + prm.Float64()*0.12,
-		zoneBlend:  0.03 + prm.Float64()*0.04,
+		freq:  4 + prm.Float64()*2,
+		span:  span,
+		cuts:  [4]float64{-t2, -t1, t1, t2},
+		bands: bands,
 
 		grainAmt: 0.03 + prm.Float64()*0.03,
 	}
 
-	// One band permutation per gradient slot, shared by all colorways, so
-	// ring N is the same ring in every zone — only its color register
-	// changes across zone borders.
-	permLow := ctx.RNG(streamShuffleLow).Perm(bands)
-	permHigh := ctx.RNG(streamShuffleHigh).Perm(bands)
-	build := func(warm, pale, cool palette.Color) colorway {
-		return colorway{
-			low:  gradient.Sample(gradient.CosineBetween(warm, pale), bands).Permuted(permLow),
-			mid:  gradient.Sample(gradient.CosineBetween(pale, cool), bands),
-			high: gradient.Sample(gradient.CosineBetween(cool, warm), bands).Permuted(permHigh),
-		}
+	// One colorway per value band: basins get the deep and warm-dark
+	// registers, clouds stay smooth and light, peaks get the mid-light and
+	// dark-accent registers. The cloud's second anchor varies per seed.
+	cloudPartner := mid
+	if prm.Float64() < 0.5 {
+		cloudPartner = light1
 	}
-	// Every register spans dark→light — the reference keeps light ring
-	// accents even inside its deepest zones; narrow-luminance registers
-	// turn murky.
-	n := len(byLum)
-	if warm == byLum[1] && cool == byLum[2] {
-		warm, cool = cool, warm // keep bright distinct from the mid register
+	sample := func(c1, c2 palette.Color) gradient.Discrete {
+		return gradient.Sample(gradient.HSLBetween(c1, c2), bands)
 	}
-	p.zones = [3]colorway{
-		build(byLum[0], byLum[n-2], byLum[1]), // deep register
-		build(byLum[1], byLum[n-1], byLum[2]), // mid register
-		build(warm, lightest, cool),           // bright register
+	p.grads = [5]gradient.Discrete{
+		sample(dark0, mid).Shuffled(ctx.RNG(streamShuffleB0)),
+		sample(dark1, light0).Shuffled(ctx.RNG(streamShuffleB1)),
+		sample(light0, cloudPartner), // smooth cloud
+		sample(mid, light0).Shuffled(ctx.RNG(streamShuffleB3)),
+		sample(dark0, light1).Shuffled(ctx.RNG(streamShuffleB4)),
 	}
 
 	p.stripes = s.planStripes(ctx)
 	return p
-}
-
-// zoneColor blends the same band across the three zone colorways.
-func (p *plan) zoneColor(slot, idx int, wDeep, wMid, wBright float64) palette.Color {
-	var c palette.Color
-	for z, w := range [3]float64{wDeep, wMid, wBright} {
-		if w <= 0 {
-			continue
-		}
-		cw := p.zones[z]
-		var g gradient.Discrete
-		switch slot {
-		case 0:
-			g = cw.low
-		case 1:
-			g = cw.mid
-		default:
-			g = cw.high
-		}
-		c.R += w * g[idx].R
-		c.G += w * g[idx].G
-		c.B += w * g[idx].B
-	}
-	return c
 }
 
 // planStripes covers [0, aspect] with random-width stripes.
@@ -437,10 +378,4 @@ func (s *Sketch) shadeRelief(field *noise.Perlin, p plan, u, v, bandFrac float64
 // remap maps x from [lo, hi] to [0,1]; Discrete.At clamps the result.
 func remap(x, lo, hi float64) float64 {
 	return (x - lo) / (hi - lo)
-}
-
-// smoothstep is the standard cubic step from 0 (x≤lo) to 1 (x≥hi).
-func smoothstep(lo, hi, x float64) float64 {
-	t := math.Min(1, math.Max(0, (x-lo)/(hi-lo)))
-	return t * t * (3 - 2*t)
 }

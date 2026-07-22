@@ -171,6 +171,7 @@ type Sketch interface {
 | 5 | Reproduce the *look* of sketch_7, not bit-exact output | Original uses thi.ng simplex noise + JVM shuffle; we use our own Perlin. Thresholds/scales are tuned visually against the reference image. |
 | 6 | `float64` sRGB color math, no linear-light pipeline | The source material (thi.ng gradients) also interpolates in sRGB; simpler, matches reference. Revisit if blending artifacts appear. |
 | 7 | golangci-lint v1 config format | Local toolchain is v1.64.x. Migrate config when the tool is upgraded to v2. |
+| 8 | Gradient interpolation in HSL space for new work | RGB-space blends between distant hues gray out; HSL (shortest hue arc) stays vivid and closer to the palette (user request 2026-07-22). `palette.LerpHSL` + `gradient.HSLBetween`. The contour sketch keeps RGB cosine gradients for fidelity to the original staticart port. |
 
 ## 9. Roadmap
 
