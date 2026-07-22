@@ -92,6 +92,44 @@ func TestLocate(t *testing.T) {
 	}
 }
 
+func TestTerraced(t *testing.T) {
+	colors := Discrete{palette.Color{R: 1}, palette.Color{G: 1}, palette.Color{B: 1}}
+	tg := NewTerraced(colors, []float64{1, 2, 1}) // bounds at 0.25, 0.75, 1
+
+	tests := []struct {
+		t    float64
+		idx  int
+		frac float64
+	}{
+		{0, 0, 0},
+		{0.125, 0, 0.5},
+		{0.25, 0, 1},
+		{0.5, 1, 0.5},
+		{0.75, 1, 1},
+		{0.875, 2, 0.5},
+		{1, 2, 1},
+		{-1, 0, 0},
+		{2, 2, 1},
+	}
+	for _, tt := range tests {
+		idx, frac := tg.Locate(tt.t)
+		if idx != tt.idx || math.Abs(frac-tt.frac) > 1e-9 {
+			t.Errorf("Locate(%v) = (%d, %v), want (%d, %v)", tt.t, idx, frac, tt.idx, tt.frac)
+		}
+	}
+	if tg.Len() != 3 || tg.At(0.5) != colors[1] || tg.Band(2) != colors[2] {
+		t.Error("Len/At/Band inconsistent")
+	}
+
+	// Widths are normalized: same layout regardless of scale.
+	tg2 := NewTerraced(colors, []float64{10, 20, 10})
+	if i1, _ := tg.Locate(0.6); true {
+		if i2, _ := tg2.Locate(0.6); i1 != i2 {
+			t.Error("normalization changed the layout")
+		}
+	}
+}
+
 func TestShuffledDeterministicAndComplete(t *testing.T) {
 	d := Sample(CosineBetween(palette.MustHex("#ED6A5A"), palette.MustHex("#F4F1BB")), 50)
 

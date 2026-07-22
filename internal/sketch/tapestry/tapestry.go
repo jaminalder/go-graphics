@@ -26,14 +26,12 @@ import (
 
 // RNG stream ids (see sketch.Context.RNG).
 const (
-	streamShuffleB0 = 1
-	streamShuffleB1 = 2
-	streamStripes   = 3
-	streamParams    = 4
-	streamShuffleB3 = 5
-	streamShuffleB4 = 6
-	streamGrain     = 7 // height-grain draws; separate stream so the
+	streamStripes = 3
+	streamParams  = 4
+	streamGrain   = 7 // height-grain draws; separate stream so the
 	// base composition is identical with and without HeightGrain
+	streamTerrace = 8 // terrace widths + level shuffles; seeded from
+	// TerraceSeed so layouts can vary on a fixed composition
 )
 
 // Sketch holds the structural knobs. The per-seed variation draws happen in
@@ -63,6 +61,11 @@ type Sketch struct {
 	// scree at a certain altitude. Uses its own RNG stream: the
 	// composition is identical with and without it, only grain differs.
 	HeightGrain bool
+
+	// TerraceSeed seeds the terrace layout (level widths and color
+	// shuffles). 0 means "use the context seed". Varying it produces
+	// different terracings of the same composition.
+	TerraceSeed uint64
 }
 
 // ReliefParams are the lighting/shading knobs of the relief pass.
@@ -167,7 +170,7 @@ type plan struct {
 	span  float64    // noise mapped over ±span
 	cuts  [4]float64 // band boundaries: -t2, -t1, +t1, +t2
 	bands int
-	grads [5]gradient.Discrete
+	grads [5]gradient.Terraced
 
 	stripes  []stripe
 	grainAmt float64
@@ -222,8 +225,8 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// ring and its color register. bandFrac feeds relief shading.
 		n := fold(field.FBM(u*p.freq, v*p.freq, s.Octaves), p.span)
 		band, lo, hi := p.bandOf(n)
-		idx, bandFrac := gradient.Locate(remap(n, lo, hi), p.bands)
-		c := p.grads[band][idx]
+		idx, bandFrac := p.grads[band].Locate(remap(n, lo, hi))
+		c := p.grads[band].Band(idx)
 
 		// Layer 3: vertical stripe.
 		st := p.stripeAt(u)
@@ -295,16 +298,38 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		darkA, lightA, darkB, lightB = darkB, lightB, darkA, lightA
 	}
 	cloudPartner := nearestHue(light0, byLum[nL-3:nL-1])
-	sample := func(c1, c2 palette.Color) gradient.Discrete {
-		return gradient.Sample(gradient.HSLBetween(c1, c2), bands)
-	}
 	lighter := func(d, l palette.Color) palette.Color { return palette.LerpHSL(d, l, 0.45) }
-	p.grads = [5]gradient.Discrete{
-		sample(darkA, lightA).Shuffled(ctx.RNG(streamShuffleB0)),                  // deep basin: family A, full depth
-		sample(lighter(darkA, lightA), lightA).Shuffled(ctx.RNG(streamShuffleB1)), // basin: family A, light register
-		sample(light0, cloudPartner),                                              // smooth cloud
-		sample(lighter(darkB, lightB), lightB).Shuffled(ctx.RNG(streamShuffleB3)), // peak: family B, light register
-		sample(darkB, lightB).Shuffled(ctx.RNG(streamShuffleB4)),                  // high peak: family B, full depth
+
+	// Terrace layouts: level widths draw from an exponential on top of the
+	// uniform width (1/bands) as the floor, so the narrowest terraces
+	// match the previous uniform spacing and many levels are much wider.
+	// Seeded via TerraceSeed so layouts can vary on a fixed composition.
+	tseed := s.TerraceSeed
+	if tseed == 0 {
+		tseed = ctx.Seed
+	}
+	trng := rand.New(rand.NewPCG(tseed, streamTerrace))
+	tspread := 1.5 + trng.Float64()*2.5
+	build := func(g gradient.Gradient, shuffle bool) gradient.Terraced {
+		wMin := 1.0 / float64(bands)
+		var widths []float64
+		for total := 0.0; total < 1 || len(widths) < 2; {
+			w := wMin * (1 + trng.ExpFloat64()*tspread)
+			widths = append(widths, w)
+			total += w
+		}
+		colors := gradient.Sample(g, len(widths))
+		if shuffle {
+			colors = colors.Shuffled(trng)
+		}
+		return gradient.NewTerraced(colors, widths)
+	}
+	p.grads = [5]gradient.Terraced{
+		build(gradient.HSLBetween(darkA, lightA), true),                  // deep basin: family A, full depth
+		build(gradient.HSLBetween(lighter(darkA, lightA), lightA), true), // basin: family A, light register
+		build(gradient.HSLBetween(light0, cloudPartner), false),          // smooth cloud
+		build(gradient.HSLBetween(lighter(darkB, lightB), lightB), true), // peak: family B, light register
+		build(gradient.HSLBetween(darkB, lightB), true),                  // high peak: family B, full depth
 	}
 
 	p.stripes = s.planStripes(ctx)

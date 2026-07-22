@@ -61,7 +61,8 @@ aesthetics; the tunable struct fields hold the *ranges*, not the values:
 | Draw | Range | Purpose |
 |---|---|---|
 | Contour frequency | 4.0 – 6.0 | feature scale variation |
-| Bands per gradient | 20 – 40 | ring density |
+| Bands per gradient | 20 – 40 | narrowest-terrace width (1/bands of the band range) |
+| Terrace widths | 1/bands × (1 + Exp·spread), spread 1.5 – 4.0 | irregular level spacing: narrowest ≈ old uniform width, many levels much wider (v6, user feedback 2026-07-22). Seeded by `TerraceSeed`/`--terrace-seed` (default = main seed) so layouts can vary on a fixed composition |
 | Band thresholds ±T | 0.10 – 0.18 | ring-area vs cloud-area balance |
 | Noise mapping range | ±0.55 – ±0.70 | how much of each gradient shows |
 | Region frequency | 2.2 – 3.2, 2 fBm octaves | size and edge complexity of tinted areas |

@@ -65,8 +65,10 @@ func TestPlanBounds(t *testing.T) {
 			t.Fatalf("seed %d: %d bands out of range", seed, p.bands)
 		}
 		for b, g := range p.grads {
-			if len(g) != p.bands {
-				t.Fatalf("seed %d: band %d gradient has %d colors, want %d", seed, b, len(g), p.bands)
+			// Terrace widths are floored at 1/bands, so a band has at most
+			// bands+1 levels and at least 2.
+			if g.Len() < 2 || g.Len() > p.bands+1 {
+				t.Fatalf("seed %d: band %d has %d terraces (bands=%d)", seed, b, g.Len(), p.bands)
 			}
 		}
 		// Band edges must be strictly ordered within the mapped span.

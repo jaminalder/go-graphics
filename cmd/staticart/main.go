@@ -84,6 +84,7 @@ func runRender(args []string) error {
 	outDir := fs.String("out", "out", "output directory")
 	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
 	grain := fs.Bool("grain", false, "tapestry only: boost grain strongly within one height band of the terrain")
+	terraceSeed := fs.Uint64("terrace-seed", 0, "tapestry only: seed for the terrace layout (0 = main seed); vary for different terracings of the same composition")
 	relief := fs.Bool("relief", false, "tapestry only: 3D relief shading (hillshade + paper-cut edges)")
 	reliefPreset := fs.String("relief-preset", "", "tapestry only: named relief look (implies --relief): "+strings.Join(tapestry.ReliefPresetNames(), "|"))
 	if err := fs.Parse(args[1:]); err != nil {
@@ -126,6 +127,14 @@ func runRender(args []string) error {
 		}
 		ts.HeightGrain = true
 		fileName += "-grain"
+	}
+	if *terraceSeed != 0 {
+		ts, ok := s.(*tapestry.Sketch)
+		if !ok {
+			return fmt.Errorf("--terrace-seed only applies to the tapestry sketch")
+		}
+		ts.TerraceSeed = *terraceSeed
+		fileName += fmt.Sprintf("-t%d", *terraceSeed)
 	}
 	pal, ok := palette.ByName(*paletteName)
 	if !ok {

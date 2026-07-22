@@ -6,6 +6,7 @@ package gradient
 import (
 	"math"
 	"math/rand/v2"
+	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
 )
@@ -66,6 +67,9 @@ type Discrete []palette.Color
 
 // Sample evaluates g at n evenly spaced points (t=0 … t=1 inclusive).
 func Sample(g Gradient, n int) Discrete {
+	if n == 1 {
+		return Discrete{g.At(0.5)}
+	}
 	d := make(Discrete, n)
 	for i := range d {
 		d[i] = g.At(float64(i) / float64(n-1))
@@ -99,6 +103,69 @@ func (d Discrete) Shuffled(rng *rand.Rand) Discrete {
 	rng.Shuffle(len(s), func(i, j int) { s[i], s[j] = s[j], s[i] })
 	return s
 }
+
+// Terraced is a discrete gradient whose bands ("terraces") have unequal
+// widths over [0,1].
+type Terraced struct {
+	colors Discrete
+	ends   []float64 // cumulative upper bounds; ends[len-1] == 1
+}
+
+// NewTerraced pairs each color with a width; widths are normalized to sum
+// to 1. len(widths) must equal len(colors) and be > 0.
+func NewTerraced(colors Discrete, widths []float64) Terraced {
+	if len(colors) == 0 || len(colors) != len(widths) {
+		panic("gradient: colors and widths must be non-empty and equal length")
+	}
+	total := 0.0
+	for _, w := range widths {
+		if w <= 0 {
+			panic("gradient: terrace widths must be positive")
+		}
+		total += w
+	}
+	ends := make([]float64, len(widths))
+	acc := 0.0
+	for i, w := range widths {
+		acc += w / total
+		ends[i] = acc
+	}
+	ends[len(ends)-1] = 1
+	return Terraced{colors: colors, ends: ends}
+}
+
+// At implements Gradient.
+func (tg Terraced) At(t float64) palette.Color {
+	idx, _ := tg.Locate(t)
+	return tg.colors[idx]
+}
+
+// Locate returns the terrace index for t (clamped to [0,1]) and the
+// fractional position within that terrace (0 = lower edge, →1 = upper).
+func (tg Terraced) Locate(t float64) (idx int, frac float64) {
+	t = clamp01(t)
+	idx = sort.SearchFloat64s(tg.ends, t)
+	if idx >= len(tg.ends) {
+		idx = len(tg.ends) - 1
+	}
+	// ends[idx] is the first bound >= t, except t just below a bound
+	// belongs to that terrace; SearchFloat64s returns the first i with
+	// ends[i] >= t, which is exactly the terrace containing t.
+	start := 0.0
+	if idx > 0 {
+		start = tg.ends[idx-1]
+	}
+	if width := tg.ends[idx] - start; width > 0 {
+		frac = (t - start) / width
+	}
+	return idx, frac
+}
+
+// Band returns the i-th terrace color.
+func (tg Terraced) Band(i int) palette.Color { return tg.colors[i] }
+
+// Len returns the number of terraces.
+func (tg Terraced) Len() int { return len(tg.colors) }
 
 // Permuted returns a copy reordered by perm (s[i] = d[perm[i]]). Applying
 // one permutation to several gradients keeps them band-aligned — band i is
