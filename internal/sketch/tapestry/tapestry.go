@@ -258,9 +258,12 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		}
 
 		// Layer 3c: crackle — dark Voronoi cell borders on the selected
-		// terraces, like crazing in a glaze.
+		// terraces, like crazing in a glaze. The network seed is salted
+		// per terrace, so each level cracks independently and no crack
+		// ever continues across a terrace boundary.
 		if boosts := p.crackleBoost[band]; boosts != nil && boosts[idx] > 0 {
-			f1, f2 := noise.Worley(ctx.Seed^crackleSeedSalt, u*p.crackleRes, v*p.crackleRes)
+			levelSalt := uint64(band)<<32 | uint64(idx) //nolint:gosec // small non-negative ints
+			f1, f2 := noise.Worley(ctx.Seed^crackleSeedSalt^levelSalt, u*p.crackleRes, v*p.crackleRes)
 			if m := 1 - smoothstep(0.03, 0.13, f2-f1); m > 0 {
 				dark := palette.Color{R: c.R * 0.45, G: c.G * 0.45, B: c.B * 0.45}
 				c = palette.Lerp(c, dark, boosts[idx]*m)
@@ -370,14 +373,14 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 	if gseed == 0 {
 		gseed = tseed
 	}
-	assign := func(stream uint64, strength func(*rand.Rand) float64) [5][]float64 {
+	assign := func(stream uint64, minWidthFactor, prob float64, strength func(*rand.Rand) float64) [5][]float64 {
 		rng := rand.New(rand.NewPCG(gseed, stream))
 		var out [5][]float64
 		for b := range p.terraceWidths {
 			boosts := make([]float64, len(p.terraceWidths[b]))
 			any := false
 			for i, w := range p.terraceWidths[b] {
-				if w >= 2.5*wMin && rng.Float64() < 0.45 {
+				if w >= minWidthFactor*wMin && rng.Float64() < prob {
 					boosts[i] = strength(rng)
 					any = true
 				}
@@ -389,12 +392,16 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		return out
 	}
 	if s.TerraceGrain {
-		p.grainBoost = assign(streamGrain, func(r *rand.Rand) float64 { return 2.5 + r.Float64()*3 })
+		p.grainBoost = assign(streamGrain, 2.5, 0.45,
+			func(r *rand.Rand) float64 { return 2.5 + r.Float64()*3 })
 	}
 	if s.TerraceCrackle {
 		crng := rand.New(rand.NewPCG(gseed, streamCrackle))
-		p.crackleRes = 50 + crng.Float64()*50 // crack cells per canvas unit
-		p.crackleBoost = assign(streamCrackle+1, func(r *rand.Rand) float64 { return 0.5 + r.Float64()*0.4 })
+		p.crackleRes = 150 + crng.Float64()*100 // crack cells per canvas unit
+		// Only really wide terraces: cracks must be clearly smaller than
+		// the level they sit on.
+		p.crackleBoost = assign(streamCrackle+1, 5.0, 0.5,
+			func(r *rand.Rand) float64 { return 0.5 + r.Float64()*0.4 })
 	}
 	return p
 }
