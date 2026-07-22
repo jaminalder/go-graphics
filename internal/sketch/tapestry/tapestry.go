@@ -46,7 +46,29 @@ type Sketch struct {
 	// use their own RNG stream, so the rest of the composition is identical
 	// to the striped render of the same seed.
 	DisableStripes bool
+
+	// Relief enables 3D shading: hillshade lighting from the noise
+	// gradient, paper-cut shadows/rims at band edges, and a subtle
+	// specular highlight. Purely a shading pass — the composition is
+	// identical to the unshaded render of the same seed.
+	Relief bool
 }
+
+// Relief shading constants (prototype; promote to fields if they need to
+// vary per sketch instance).
+const (
+	reliefEps     = 0.0005 // finite-difference step in canvas units
+	reliefSlope   = 0.05   // height-gradient → surface-slope scale
+	reliefAmbient = 0.60   // floor of the diffuse term
+	edgeWidth     = 0.45   // band-fraction distance affected by edge shading
+	edgeShadow    = 0.30   // darkening below a band edge (paper-cut shadow)
+	edgeRim       = 0.10   // brightening above a band edge (lit paper rim)
+	specStrength  = 0.10
+	specShininess = 16.0
+)
+
+// Light from the top-left, normalized in shadeRelief.
+var lightDir = [3]float64{-0.6, -0.6, 0.75}
 
 // New returns the sketch with its defaults.
 func New() *Sketch {
@@ -137,16 +159,20 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	region := noise.New(ctx.Seed ^ regionSeedSalt)
 
 	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
-		// Layer 1: contour base.
+		// Layer 1: contour base. bandFrac is the position within the
+		// current color band (0 = lower edge), used by relief shading.
 		n := field.FBM(u*p.freq, v*p.freq, s.Octaves)
-		var c palette.Color
+		var (
+			c        palette.Color
+			bandFrac float64
+		)
 		switch {
 		case n < p.lowThresh:
-			c = p.gradLow.At(remap(n, p.noiseMin, p.lowThresh))
+			c, bandFrac = bandAt(p.gradLow, remap(n, p.noiseMin, p.lowThresh))
 		case n < p.highThresh:
-			c = p.gradMid.At(remap(n, p.lowThresh, p.highThresh))
+			c, bandFrac = bandAt(p.gradMid, remap(n, p.lowThresh, p.highThresh))
 		default:
-			c = p.gradHigh.At(remap(n, p.highThresh, p.noiseMax))
+			c, bandFrac = bandAt(p.gradHigh, remap(n, p.highThresh, p.noiseMax))
 		}
 
 		// Layer 2: region tint — multiply blend, rings showing through.
@@ -158,6 +184,11 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// Layer 3: vertical stripe.
 		st := p.stripeAt(u)
 		c = st.apply(c)
+
+		// Layer 3b: relief shading over the assembled surface.
+		if s.Relief {
+			c = s.shadeRelief(field, p, u, v, bandFrac, c)
+		}
 
 		// Layer 4: grain.
 		gx := int64(u * s.GrainRes)
@@ -284,6 +315,52 @@ func (p *plan) stripeAt(u float64) stripe {
 		}
 	}
 	return p.stripes[lo]
+}
+
+// bandAt returns the band color for t plus the fractional position within
+// the band.
+func bandAt(d gradient.Discrete, t float64) (palette.Color, float64) {
+	idx, frac := gradient.Locate(t, len(d))
+	return d[idx], frac
+}
+
+// shadeRelief treats the contour noise as a height field and shades the
+// color: Lambertian hillshade from the field gradient, a paper-cut shadow
+// just below each band edge with a lit rim just above it, and a subtle
+// specular highlight. All in normalized coordinates — resolution
+// independent like everything else.
+func (s *Sketch) shadeRelief(field *noise.Perlin, p plan, u, v, bandFrac float64, c palette.Color) palette.Color {
+	h := func(x, y float64) float64 { return field.FBM(x*p.freq, y*p.freq, s.Octaves) }
+	hx := (h(u+reliefEps, v) - h(u-reliefEps, v)) / (2 * reliefEps)
+	hy := (h(u, v+reliefEps) - h(u, v-reliefEps)) / (2 * reliefEps)
+
+	// Surface normal and normalized light/half vectors.
+	nx, ny, nz := -reliefSlope*hx, -reliefSlope*hy, 1.0
+	nl := math.Sqrt(nx*nx + ny*ny + nz*nz)
+	nx, ny, nz = nx/nl, ny/nl, nz/nl
+	lx, ly, lz := lightDir[0], lightDir[1], lightDir[2]
+	ll := math.Sqrt(lx*lx + ly*ly + lz*lz)
+	lx, ly, lz = lx/ll, ly/ll, lz/ll
+
+	diffuse := math.Max(0, nx*lx+ny*ly+nz*lz)
+	shade := reliefAmbient + (1-reliefAmbient)*diffuse
+
+	// Paper-cut edges: the band above (higher noise) casts a shadow on the
+	// pixels just below its edge (bandFrac → 1); its own lower edge catches
+	// light (bandFrac → 0).
+	shade *= 1 - edgeShadow*math.Max(0, 1-(1-bandFrac)/edgeWidth)
+	shade *= 1 + edgeRim*math.Max(0, 1-bandFrac/edgeWidth)
+
+	// Blinn-Phong specular, faded where the surface is unlit.
+	hz := lz + 1 // half vector = light + view (0,0,1)
+	hl := math.Sqrt(lx*lx + ly*ly + hz*hz)
+	spec := specStrength * math.Pow(math.Max(0, nx*lx/hl+ny*ly/hl+nz*hz/hl), specShininess) * diffuse
+
+	return palette.Color{
+		R: c.R*shade + spec,
+		G: c.G*shade + spec,
+		B: c.B*shade + spec,
+	}.Clamp()
 }
 
 // remap maps x from [lo, hi] to [0,1]; Discrete.At clamps the result.

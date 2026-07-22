@@ -124,6 +124,27 @@ func TestDisableStripes(t *testing.T) {
 	}
 }
 
+func TestRelief(t *testing.T) {
+	plain := renderNRGBA(t, testCtx(t, 42))
+
+	s := New()
+	s.Relief = true
+	a, err := s.Render(testCtx(t, 42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Render(testCtx(t, 42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a.(*image.NRGBA).Pix, b.(*image.NRGBA).Pix) {
+		t.Error("relief render is not deterministic")
+	}
+	if bytes.Equal(a.(*image.NRGBA).Pix, plain.Pix) {
+		t.Error("relief shading changed nothing")
+	}
+}
+
 func TestGolden(t *testing.T) {
 	got := renderNRGBA(t, testCtx(t, 42))
 	golden := filepath.Join("testdata", "tapestry_seed42_64.png")

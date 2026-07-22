@@ -21,6 +21,15 @@ stripes, large tinted regions, and grain texture.
    a lightened palette color (warp-thread dye); others nudge toward white or
    black or pass through. Each stripe carries its own grain multiplier and
    grain style.
+3b. **Relief (optional, `--relief` / `Sketch.Relief`)** — 3D shading pass
+   over the assembled surface, treating the contour noise as a height
+   field: Lambertian hillshade from finite-difference normals, a paper-cut
+   shadow just below every band edge with a lit rim just above it, and a
+   subtle Blinn-Phong specular. A pure shading pass (composition identical
+   to the unshaded seed); also reveals terracing inside the smooth middle
+   gradient, giving cloud areas a carved-lacquer look. Constants are in
+   tapestry.go (`relief*`, `edge*`, `spec*`); promote to fields when they
+   need per-image variation.
 4. **Grain** — deterministic white-noise displacement of the final color,
    sampled on a fixed lattice in normalized coordinates (resolution
    independent). Two styles per stripe: `speckle` (square cells) and

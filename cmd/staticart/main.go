@@ -83,6 +83,7 @@ func runRender(args []string) error {
 	format := fs.String("format", "png", "output format: png|jpg")
 	outDir := fs.String("out", "out", "output directory")
 	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
+	relief := fs.Bool("relief", false, "tapestry only: 3D relief shading (hillshade + paper-cut edges)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -92,6 +93,14 @@ func runRender(args []string) error {
 		return fmt.Errorf("unknown sketch %q (try: staticart list)", name)
 	}
 	fileName := s.Name()
+	if *relief {
+		ts, ok := s.(*tapestry.Sketch)
+		if !ok {
+			return fmt.Errorf("--relief only applies to the tapestry sketch")
+		}
+		ts.Relief = true
+		fileName += "-relief"
+	}
 	if *noStripes {
 		ts, ok := s.(*tapestry.Sketch)
 		if !ok {

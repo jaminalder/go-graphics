@@ -69,6 +69,29 @@ func TestDiscreteAt(t *testing.T) {
 	}
 }
 
+func TestLocate(t *testing.T) {
+	tests := []struct {
+		t    float64
+		n    int
+		idx  int
+		frac float64
+	}{
+		{0, 4, 0, 0},
+		{0.24, 4, 0, 0.96},
+		{0.25, 4, 1, 0},
+		{0.5, 4, 2, 0},
+		{1, 4, 3, 1},
+		{-1, 4, 0, 0},
+		{2, 4, 3, 1},
+	}
+	for _, tt := range tests {
+		idx, frac := Locate(tt.t, tt.n)
+		if idx != tt.idx || math.Abs(frac-tt.frac) > 1e-9 {
+			t.Errorf("Locate(%v, %d) = (%d, %v), want (%d, %v)", tt.t, tt.n, idx, frac, tt.idx, tt.frac)
+		}
+	}
+}
+
 func TestShuffledDeterministicAndComplete(t *testing.T) {
 	d := Sample(CosineBetween(palette.MustHex("#ED6A5A"), palette.MustHex("#F4F1BB")), 50)
 

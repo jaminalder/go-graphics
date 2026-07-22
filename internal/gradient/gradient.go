@@ -60,11 +60,20 @@ func Sample(g Gradient, n int) Discrete {
 // At returns the band color for t; each of the n colors covers an equal
 // 1/n-wide interval of [0,1].
 func (d Discrete) At(t float64) palette.Color {
-	idx := int(clamp01(t) * float64(len(d)))
-	if idx >= len(d) {
-		idx = len(d) - 1
-	}
+	idx, _ := Locate(t, len(d))
 	return d[idx]
+}
+
+// Locate maps t (clamped to [0,1]) onto n equal bands, returning the band
+// index and the fractional position within that band (0 = lower edge,
+// →1 = upper edge). Used by relief shading to find band boundaries.
+func Locate(t float64, n int) (idx int, frac float64) {
+	tb := clamp01(t) * float64(n)
+	idx = int(tb)
+	if idx >= n {
+		return n - 1, 1
+	}
+	return idx, tb - float64(idx)
 }
 
 // Shuffled returns a copy with the colors in random order drawn from rng.
