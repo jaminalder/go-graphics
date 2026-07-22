@@ -221,6 +221,59 @@ func TestTerraceGrain(t *testing.T) {
 	}
 }
 
+func TestTerraceCrackle(t *testing.T) {
+	plain := renderNRGBA(t, testCtx(t, 42))
+
+	s := New()
+	s.TerraceCrackle = true
+	img, err := s.Render(testCtx(t, 42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	crackled := img.(*image.NRGBA)
+
+	if bytes.Equal(plain.Pix, crackled.Pix) {
+		t.Error("crackle changed nothing")
+	}
+	// Cracks are thin lines within selected terraces — the vast majority
+	// of pixels must be untouched.
+	same := 0
+	for i := 0; i < len(plain.Pix); i += 4 {
+		if plain.Pix[i] == crackled.Pix[i] && plain.Pix[i+1] == crackled.Pix[i+1] &&
+			plain.Pix[i+2] == crackled.Pix[i+2] {
+			same++
+		}
+	}
+	if total := len(plain.Pix) / 4; same < total/2 {
+		t.Errorf("only %d/%d pixels unchanged — crackle affects too much", same, total)
+	}
+
+	// Only wide terraces may crackle, with bounded strength.
+	for seed := uint64(0); seed < 100; seed++ {
+		p := s.plan(testCtx(t, seed))
+		if p.crackleRes < 50 || p.crackleRes > 100 {
+			t.Fatalf("seed %d: crackle res %v out of range", seed, p.crackleRes)
+		}
+		wMin := 1.0 / float64(p.bands)
+		for b, boosts := range p.crackleBoost {
+			if boosts == nil {
+				continue
+			}
+			for i, boost := range boosts {
+				if boost == 0 {
+					continue
+				}
+				if w := p.terraceWidths[b][i]; w < 2.5*wMin {
+					t.Fatalf("seed %d: narrow terrace (band %d level %d) crackled", seed, b, i)
+				}
+				if boost < 0.5 || boost > 0.9 {
+					t.Fatalf("seed %d: crackle strength %v out of range", seed, boost)
+				}
+			}
+		}
+	}
+}
+
 func TestRelief(t *testing.T) {
 	plain := renderNRGBA(t, testCtx(t, 42))
 

@@ -32,7 +32,11 @@ const (
 	// base composition is identical with and without TerraceGrain
 	streamTerrace = 8 // terrace widths + level shuffles; seeded from
 	// TerraceSeed so layouts can vary on a fixed composition
+	streamCrackle = 9 // terrace-crackle draws; separate stream like grain
 )
+
+// crackleSeedSalt derives the crack-network feature points from the seed.
+const crackleSeedSalt = 0x63726b // "crk"
 
 // Sketch holds the structural knobs. The per-seed variation draws happen in
 // Render (see the spec); these fields bound or fix that variation.
@@ -67,10 +71,17 @@ type Sketch struct {
 	// different terracings of the same composition.
 	TerraceSeed uint64
 
-	// GrainSeed seeds the terrace-grain assignment (which wide terraces
-	// grain, and how strongly). 0 means "use the terrace seed". Varying
-	// it produces different grain layouts on the same image.
+	// GrainSeed seeds the terrace-grain and terrace-crackle assignments
+	// (which wide terraces are affected, and how strongly). 0 means "use
+	// the terrace seed". Varying it produces different effect layouts on
+	// the same image.
 	GrainSeed uint64
+
+	// TerraceCrackle draws a Voronoi crack network (dried mud, ceramic
+	// crazing) on a random subset (~45%) of the wide terraces — the same
+	// selection rule as TerraceGrain, as an alternative surface finish.
+	// Uses its own RNG stream; composition is unchanged when off.
+	TerraceCrackle bool
 }
 
 // ReliefParams are the lighting/shading knobs of the relief pass.
@@ -183,9 +194,14 @@ type plan struct {
 	// Terrace grain (only set when Sketch.TerraceGrain): per band, per
 	// terrace level, the grain amplification (0 = untouched). Only wide
 	// terraces ever get a non-zero boost. terraceWidths keeps the raw
-	// (pre-normalization) level widths for the assignment and for tests.
+	// (pre-normalization) level widths for the assignments and for tests.
 	terraceWidths [5][]float64
 	grainBoost    [5][]float64
+
+	// Terrace crackle (only set when Sketch.TerraceCrackle): per band,
+	// per terrace level, the crack darkening strength (0 = untouched).
+	crackleBoost [5][]float64
+	crackleRes   float64 // crack cells per canvas unit
 }
 
 // fold reflects n back into [-span, span] (triangle wave). Without it,
@@ -239,6 +255,16 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// Layer 3b: relief shading over the assembled surface.
 		if s.Relief {
 			c = s.shadeRelief(field, p, u, v, bandFrac, c)
+		}
+
+		// Layer 3c: crackle — dark Voronoi cell borders on the selected
+		// terraces, like crazing in a glaze.
+		if boosts := p.crackleBoost[band]; boosts != nil && boosts[idx] > 0 {
+			f1, f2 := noise.Worley(ctx.Seed^crackleSeedSalt, u*p.crackleRes, v*p.crackleRes)
+			if m := 1 - smoothstep(0.03, 0.13, f2-f1); m > 0 {
+				dark := palette.Color{R: c.R * 0.45, G: c.G * 0.45, B: c.B * 0.45}
+				c = palette.Lerp(c, dark, boosts[idx]*m)
+			}
 		}
 
 		// Layer 4: grain, boosted within the height window when enabled.
@@ -337,30 +363,46 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 
 	p.stripes = s.planStripes(ctx)
 
-	// Terrace grain: only terraces at least 2.5× the minimum width are
-	// candidates; ~45% of them get a strong boost. Positional — the boost
-	// belongs to the level, wherever that elevation occurs in the image.
-	if s.TerraceGrain {
-		gseed := s.GrainSeed
-		if gseed == 0 {
-			gseed = tseed
-		}
-		grng := rand.New(rand.NewPCG(gseed, streamGrain))
-		for b := range p.grads {
+	// Terrace effects: only terraces at least 2.5× the minimum width are
+	// candidates; ~45% of them get a strong effect. Positional — the
+	// effect belongs to the level, wherever that elevation occurs.
+	gseed := s.GrainSeed
+	if gseed == 0 {
+		gseed = tseed
+	}
+	assign := func(stream uint64, strength func(*rand.Rand) float64) [5][]float64 {
+		rng := rand.New(rand.NewPCG(gseed, stream))
+		var out [5][]float64
+		for b := range p.terraceWidths {
 			boosts := make([]float64, len(p.terraceWidths[b]))
 			any := false
 			for i, w := range p.terraceWidths[b] {
-				if w >= 2.5*wMin && grng.Float64() < 0.45 {
-					boosts[i] = 2.5 + grng.Float64()*3
+				if w >= 2.5*wMin && rng.Float64() < 0.45 {
+					boosts[i] = strength(rng)
 					any = true
 				}
 			}
 			if any {
-				p.grainBoost[b] = boosts
+				out[b] = boosts
 			}
 		}
+		return out
+	}
+	if s.TerraceGrain {
+		p.grainBoost = assign(streamGrain, func(r *rand.Rand) float64 { return 2.5 + r.Float64()*3 })
+	}
+	if s.TerraceCrackle {
+		crng := rand.New(rand.NewPCG(gseed, streamCrackle))
+		p.crackleRes = 50 + crng.Float64()*50 // crack cells per canvas unit
+		p.crackleBoost = assign(streamCrackle+1, func(r *rand.Rand) float64 { return 0.5 + r.Float64()*0.4 })
 	}
 	return p
+}
+
+// smoothstep is the standard cubic step from 0 (x≤lo) to 1 (x≥hi).
+func smoothstep(lo, hi, x float64) float64 {
+	t := math.Min(1, math.Max(0, (x-lo)/(hi-lo)))
+	return t * t * (3 - 2*t)
 }
 
 // hueDist is the angular hue distance between two colors in degrees.

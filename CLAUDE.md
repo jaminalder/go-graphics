@@ -35,6 +35,8 @@ PNG** to look at it. For sketch 001 compare against the target image at
   acceptance checklist. Write the spec before implementing a new sketch.
 - `docs/reference/colorlisa-palettes.md` — full ColorLisa palette dataset
   (source data for `internal/palette`; don't re-fetch the website).
+- `docs/IDEAS.md` — backlog of brainstormed effects (per-terrace effects
+  etc.); check it before proposing new effect work.
 
 ## Invariants (breaking these is a bug even if output looks fine)
 

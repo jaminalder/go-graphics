@@ -39,6 +39,13 @@ stripes, large tinted regions, and grain texture.
    gradient, giving cloud areas a carved-lacquer look. Constants are in
    tapestry.go (`relief*`, `edge*`, `spec*`); promote to fields when they
    need per-image variation.
+3c. **Crackle (optional, `--crackle` / `Sketch.TerraceCrackle`)** — a
+   Voronoi crack network (noise.Worley cell borders, 50–100 cells per
+   canvas unit) darkens ~45% of the wide terraces: ceramic crazing /
+   dried-mud finish. Same selection rule and seeding as terrace grain
+   (`--grain-seed` varies the layout); composition unchanged when off.
+   Prototyped as the replacement for grain per user request; both can be
+   enabled together. More per-terrace effect ideas: docs/IDEAS.md.
 4. **Grain** — deterministic white-noise displacement of the final color,
    sampled on a fixed lattice in normalized coordinates (resolution
    independent). Two styles per stripe: `speckle` (square cells) and
