@@ -106,7 +106,7 @@ func main() {
 	if !ok {
 		log.Fatal("palette missing")
 	}
-	ctx := sketch.Context{Width: 600, Height: 600, Seed: 66, Palette: pal}
+	ctx := sketch.Context{Width: 2000, Height: 2000, Seed: 66, Palette: pal}
 
 	for _, vr := range variants() {
 		s := tapestry.New()
