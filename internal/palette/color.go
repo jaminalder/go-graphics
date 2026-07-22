@@ -72,11 +72,25 @@ func (c Color) Desaturate(amount float64) Color {
 	return fromHSL(h, s*(1-clamp01(amount)), l)
 }
 
+// Saturate moves saturation toward fully saturated in HSL space.
+// amount 0 leaves the color unchanged; 1 makes it fully saturated.
+func (c Color) Saturate(amount float64) Color {
+	h, s, l := c.hsl()
+	return fromHSL(h, s+(1-s)*clamp01(amount), l)
+}
+
 // Lighten moves lightness toward white in HSL space.
 // amount 0 leaves the color unchanged; 1 makes it white.
 func (c Color) Lighten(amount float64) Color {
 	h, s, l := c.hsl()
 	return fromHSL(h, s, l+(1-l)*clamp01(amount))
+}
+
+// Luminance is the relative luminance approximation
+// 0.2126·R + 0.7152·G + 0.0722·B on the clamped color.
+func (c Color) Luminance() float64 {
+	c = c.Clamp()
+	return 0.2126*c.R + 0.7152*c.G + 0.0722*c.B
 }
 
 // hsl converts to hue [0,360), saturation [0,1], lightness [0,1].

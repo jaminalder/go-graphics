@@ -61,6 +61,21 @@ func TestLerp(t *testing.T) {
 	}
 }
 
+func TestLuminance(t *testing.T) {
+	if got := (Color{1, 1, 1}).Luminance(); math.Abs(got-1) > 1e-9 {
+		t.Errorf("white luminance = %v, want 1", got)
+	}
+	if got := (Color{}).Luminance(); got != 0 {
+		t.Errorf("black luminance = %v, want 0", got)
+	}
+	g := (Color{G: 1}).Luminance()
+	r := (Color{R: 1}).Luminance()
+	b := (Color{B: 1}).Luminance()
+	if !(g > r && r > b) {
+		t.Errorf("expected G > R > B, got %v %v %v", g, r, b)
+	}
+}
+
 func TestHSLRoundTrip(t *testing.T) {
 	for _, s := range []string{"#ED6A5A", "#F4F1BB", "#9BC1BC", "#123456", "#808080"} {
 		c := MustHex(s)
@@ -81,6 +96,18 @@ func TestDesaturate(t *testing.T) {
 	gray := c.Desaturate(1)
 	if math.Abs(gray.R-gray.G) > 1e-9 || math.Abs(gray.G-gray.B) > 1e-9 {
 		t.Errorf("Desaturate(1) not gray: %v", gray)
+	}
+}
+
+func TestSaturate(t *testing.T) {
+	c := MustHex("#8A6E5A") // muted brown
+	if got := c.Saturate(0); !almostEqual(got, c) {
+		t.Errorf("Saturate(0) changed color: %v -> %v", c, got)
+	}
+	_, s0, _ := c.hsl()
+	_, s1, _ := c.Saturate(0.5).hsl()
+	if s1 <= s0 {
+		t.Errorf("Saturate(0.5) did not increase saturation: %v -> %v", s0, s1)
 	}
 }
 

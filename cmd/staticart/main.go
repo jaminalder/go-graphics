@@ -16,11 +16,13 @@ import (
 	"github.com/jaminalder/go-graphics/internal/render"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 	"github.com/jaminalder/go-graphics/internal/sketch/contour"
+	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
 )
 
 func registry() *sketch.Registry {
 	return sketch.NewRegistry(
 		contour.New(),
+		tapestry.New(),
 	)
 }
 
