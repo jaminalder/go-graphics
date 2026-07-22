@@ -257,16 +257,23 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 			c = s.shadeRelief(field, p, u, v, bandFrac, c)
 		}
 
-		// Layer 3c: crackle — dark Voronoi cell borders on the selected
-		// terraces, like crazing in a glaze. The network seed is salted
-		// per terrace, so each level cracks independently and no crack
-		// ever continues across a terrace boundary.
+		// Layer 3c: crackle — tone-on-tone Voronoi cell borders on the
+		// selected terraces, like crazing in a glaze: slightly lighter
+		// lines on dark levels, slightly darker on light ones, same hue.
+		// The network seed is salted per terrace, so each level cracks
+		// independently and no crack ever continues across a boundary.
 		if boosts := p.crackleBoost[band]; boosts != nil && boosts[idx] > 0 {
 			levelSalt := uint64(band)<<32 | uint64(idx) //nolint:gosec // small non-negative ints
 			f1, f2 := noise.Worley(ctx.Seed^crackleSeedSalt^levelSalt, u*p.crackleRes, v*p.crackleRes)
 			if m := 1 - smoothstep(0.03, 0.13, f2-f1); m > 0 {
-				dark := palette.Color{R: c.R * 0.45, G: c.G * 0.45, B: c.B * 0.45}
-				c = palette.Lerp(c, dark, boosts[idx]*m)
+				h, sat, l := c.HSL()
+				const contrast = 0.14
+				if l < 0.5 {
+					l += contrast
+				} else {
+					l -= contrast
+				}
+				c = palette.Lerp(c, palette.FromHSL(h, sat, l), boosts[idx]*m)
 			}
 		}
 
@@ -397,7 +404,7 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 	}
 	if s.TerraceCrackle {
 		crng := rand.New(rand.NewPCG(gseed, streamCrackle))
-		p.crackleRes = 150 + crng.Float64()*100 // crack cells per canvas unit
+		p.crackleRes = 280 + crng.Float64()*140 // crack cells per canvas unit
 		// Only really wide terraces: cracks must be clearly smaller than
 		// the level they sit on.
 		p.crackleBoost = assign(streamCrackle+1, 5.0, 0.5,

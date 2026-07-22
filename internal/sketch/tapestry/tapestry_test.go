@@ -251,7 +251,7 @@ func TestTerraceCrackle(t *testing.T) {
 	// Only wide terraces may crackle, with bounded strength.
 	for seed := uint64(0); seed < 100; seed++ {
 		p := s.plan(testCtx(t, seed))
-		if p.crackleRes < 150 || p.crackleRes > 250 {
+		if p.crackleRes < 280 || p.crackleRes > 420 {
 			t.Fatalf("seed %d: crackle res %v out of range", seed, p.crackleRes)
 		}
 		wMin := 1.0 / float64(p.bands)
