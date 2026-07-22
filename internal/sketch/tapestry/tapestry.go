@@ -32,7 +32,12 @@ const (
 	streamParams    = 4
 	streamShuffleB3 = 5
 	streamShuffleB4 = 6
+	streamGrain     = 7 // regional-grain draws; separate stream so the
+	// base composition is identical with and without RegionalGrain
 )
+
+// grainSeedSalt derives the regional-grain selector noise seed.
+const grainSeedSalt = 0x67726e // "grn"
 
 // Sketch holds the structural knobs. The per-seed variation draws happen in
 // Render (see the spec); these fields bound or fix that variation.
@@ -54,6 +59,12 @@ type Sketch struct {
 
 	// ReliefParams tunes the relief pass; ignored unless Relief is set.
 	ReliefParams ReliefParams
+
+	// RegionalGrain boosts the grain strongly on a minority of areas
+	// (~15–30%, per seed), picked by a low-frequency selector field, for
+	// extra surface structure. Uses its own RNG stream: the composition
+	// is identical with and without it, only the grain differs.
+	RegionalGrain bool
 }
 
 // ReliefParams are the lighting/shading knobs of the relief pass.
@@ -162,6 +173,14 @@ type plan struct {
 
 	stripes  []stripe
 	grainAmt float64
+
+	// Regional grain (only set when Sketch.RegionalGrain): areas where the
+	// selector field exceeds rgThresh get the grain amplified by up to
+	// 1+rgBoost, ramping over rgBlend.
+	rgFreq   float64
+	rgThresh float64
+	rgBlend  float64
+	rgBoost  float64
 }
 
 // fold reflects n back into [-span, span] (triangle wave). Without it,
@@ -198,6 +217,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	p := s.plan(ctx)
 	field := noise.New(ctx.Seed)
+	var grainSel *noise.Perlin
+	if s.RegionalGrain {
+		grainSel = noise.New(ctx.Seed ^ grainSeedSalt)
+	}
 
 	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
 		// Layers 1+2: contour banding with terrain-owned colorways —
@@ -217,13 +240,19 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 			c = s.shadeRelief(field, p, u, v, bandFrac, c)
 		}
 
-		// Layer 4: grain.
+		// Layer 4: grain, regionally boosted when enabled.
 		gx := int64(u * s.GrainRes)
 		gy := int64(v * s.GrainRes)
 		if st.streak {
 			gy = int64(v * s.GrainRes / s.StreakRatio)
 		}
-		g := (noise.Hash01(ctx.Seed, gx, gy) - 0.5) * p.grainAmt * st.grainMul
+		amt := p.grainAmt * st.grainMul
+		if grainSel != nil {
+			sel := grainSel.FBM(u*p.rgFreq, v*p.rgFreq, 1)
+			w := smoothstep(p.rgThresh-p.rgBlend, p.rgThresh+p.rgBlend, sel)
+			amt *= 1 + w*p.rgBoost
+		}
+		g := (noise.Hash01(ctx.Seed, gx, gy) - 0.5) * amt
 		return palette.Color{R: c.R + g, G: c.G + g, B: c.B + g}.Clamp()
 	})
 	return img, nil
@@ -285,7 +314,37 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 	}
 
 	p.stripes = s.planStripes(ctx)
+
+	if s.RegionalGrain {
+		rg := ctx.RNG(streamGrain)
+		coverage := 0.15 + rg.Float64()*0.15 // 15–30% of the area
+		p.rgFreq = 1.0 + rg.Float64()*0.8
+		p.rgBoost = 2.5 + rg.Float64()*3.0
+		p.rgBlend = 0.08
+
+		// Calibrate the threshold by quantile-sampling the selector field
+		// so the drawn coverage is honored regardless of the field's
+		// value distribution.
+		sel := noise.New(ctx.Seed ^ grainSeedSalt)
+		const grid = 48
+		samples := make([]float64, 0, grid*grid)
+		for y := range grid {
+			for x := range grid {
+				su := (float64(x) + 0.5) / grid
+				sv := (float64(y) + 0.5) / grid
+				samples = append(samples, sel.FBM(su*p.rgFreq, sv*p.rgFreq, 1))
+			}
+		}
+		sort.Float64s(samples)
+		p.rgThresh = samples[int(float64(len(samples))*(1-coverage))]
+	}
 	return p
+}
+
+// smoothstep is the standard cubic step from 0 (x≤lo) to 1 (x≥hi).
+func smoothstep(lo, hi, x float64) float64 {
+	t := math.Min(1, math.Max(0, (x-lo)/(hi-lo)))
+	return t * t * (3 - 2*t)
 }
 
 // hueDist is the angular hue distance between two colors in degrees.

@@ -155,6 +155,45 @@ func TestDisableStripes(t *testing.T) {
 	}
 }
 
+func TestRegionalGrain(t *testing.T) {
+	plain := renderNRGBA(t, testCtx(t, 42))
+
+	s := New()
+	s.RegionalGrain = true
+	img, err := s.Render(testCtx(t, 42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	grained := img.(*image.NRGBA)
+
+	if bytes.Equal(plain.Pix, grained.Pix) {
+		t.Error("regional grain changed nothing")
+	}
+	// Grain draws use their own stream, so the base composition must
+	// survive: most pixels sit outside boosted regions and within them the
+	// change is only an amplitude boost of the same grain values — a large
+	// share of pixels must be byte-identical.
+	same := 0
+	for i := 0; i < len(plain.Pix); i += 4 {
+		if plain.Pix[i] == grained.Pix[i] && plain.Pix[i+1] == grained.Pix[i+1] &&
+			plain.Pix[i+2] == grained.Pix[i+2] {
+			same++
+		}
+	}
+	if total := len(plain.Pix) / 4; same < total/3 {
+		t.Errorf("only %d/%d pixels unchanged — grain draws leaked into the base composition", same, total)
+	}
+
+	// Bounds of the grain draws.
+	p := s.plan(testCtx(t, 42))
+	if p.rgFreq < 1.0 || p.rgFreq > 1.8 || p.rgBoost < 2.5 || p.rgBoost > 5.5 {
+		t.Errorf("grain draws out of range: freq %v boost %v", p.rgFreq, p.rgBoost)
+	}
+	if math.IsNaN(p.rgThresh) || math.IsInf(p.rgThresh, 0) {
+		t.Errorf("bad grain threshold %v", p.rgThresh)
+	}
+}
+
 func TestRelief(t *testing.T) {
 	plain := renderNRGBA(t, testCtx(t, 42))
 
