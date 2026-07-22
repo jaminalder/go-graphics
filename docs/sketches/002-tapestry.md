@@ -43,15 +43,16 @@ stripes, large tinted regions, and grain texture.
    sampled on a fixed lattice in normalized coordinates (resolution
    independent). Two styles per stripe: `speckle` (square cells) and
    `streak` (tall thin cells → vertical fiber look).
-   **Height grain (optional, `--grain` / `Sketch.HeightGrain`)** — one
-   height window of the terrain (per-seed: 15–30% of the folded noise
-   range, centered anywhere within it) gets the grain boosted 2.5–5.5×,
-   with soft edges. Because it keys off the same noise value as the color
-   bands, the textured band aligns with the visible terraces and appears
-   at that elevation across the whole image — like scree at one altitude.
-   (A spatial-region version was tried first and rejected: the user wants
-   height-dependent, not location-dependent.) Draws live on a dedicated
-   RNG stream; the composition is pixel-identical with the flag off.
+   **Terrace grain (optional, `--grain` / `Sketch.TerraceGrain`)** — a
+   random ~45% of the *wide* terraces (width ≥ 2.5× the minimum) get the
+   grain boosted 2.5–5.5×; narrow terraces never grain. The boost belongs
+   to the terrace level, so the same stratum is rough wherever it appears
+   in the image, filling exactly to its contour boundary. Evolution:
+   spatial-region grain → height-window grain → per-terrace grain (user
+   feedback 2026-07-22). Assignment is seeded by `GrainSeed` /
+   `--grain-seed` (default = terrace seed) so grain layouts can vary on a
+   fixed image; draws live on a dedicated RNG stream so the composition
+   is pixel-identical with the flag off.
 
 ## Per-seed randomization ("art director" draws)
 

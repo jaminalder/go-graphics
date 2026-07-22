@@ -83,7 +83,8 @@ func runRender(args []string) error {
 	format := fs.String("format", "png", "output format: png|jpg")
 	outDir := fs.String("out", "out", "output directory")
 	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
-	grain := fs.Bool("grain", false, "tapestry only: boost grain strongly within one height band of the terrain")
+	grain := fs.Bool("grain", false, "tapestry only: boost grain strongly on some of the wide terraces")
+	grainSeed := fs.Uint64("grain-seed", 0, "tapestry only: seed for the grain assignment (0 = terrace seed, implies --grain); vary for different grain layouts on the same image")
 	terraceSeed := fs.Uint64("terrace-seed", 0, "tapestry only: seed for the terrace layout (0 = main seed); vary for different terracings of the same composition")
 	relief := fs.Bool("relief", false, "tapestry only: 3D relief shading (hillshade + paper-cut edges)")
 	reliefPreset := fs.String("relief-preset", "", "tapestry only: named relief look (implies --relief): "+strings.Join(tapestry.ReliefPresetNames(), "|"))
@@ -120,13 +121,17 @@ func runRender(args []string) error {
 		ts.DisableStripes = true
 		fileName += "-nostripes"
 	}
-	if *grain {
+	if *grain || *grainSeed != 0 {
 		ts, ok := s.(*tapestry.Sketch)
 		if !ok {
-			return fmt.Errorf("--grain only applies to the tapestry sketch")
+			return fmt.Errorf("--grain/--grain-seed only apply to the tapestry sketch")
 		}
-		ts.HeightGrain = true
+		ts.TerraceGrain = true
+		ts.GrainSeed = *grainSeed
 		fileName += "-grain"
+		if *grainSeed != 0 {
+			fileName += fmt.Sprintf("-g%d", *grainSeed)
+		}
 	}
 	if *terraceSeed != 0 {
 		ts, ok := s.(*tapestry.Sketch)

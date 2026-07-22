@@ -157,11 +157,11 @@ func TestDisableStripes(t *testing.T) {
 	}
 }
 
-func TestHeightGrain(t *testing.T) {
+func TestTerraceGrain(t *testing.T) {
 	plain := renderNRGBA(t, testCtx(t, 42))
 
 	s := New()
-	s.HeightGrain = true
+	s.TerraceGrain = true
 	img, err := s.Render(testCtx(t, 42))
 	if err != nil {
 		t.Fatal(err)
@@ -169,10 +169,10 @@ func TestHeightGrain(t *testing.T) {
 	grained := img.(*image.NRGBA)
 
 	if bytes.Equal(plain.Pix, grained.Pix) {
-		t.Error("height grain changed nothing")
+		t.Error("terrace grain changed nothing")
 	}
 	// Grain draws use their own stream, so the base composition must
-	// survive: most pixels sit outside the height window and within it the
+	// survive: most terraces are unboosted and within boosted ones the
 	// change is only an amplitude boost of the same grain values — a large
 	// share of pixels must be byte-identical.
 	same := 0
@@ -182,22 +182,42 @@ func TestHeightGrain(t *testing.T) {
 			same++
 		}
 	}
-	if total := len(plain.Pix) / 4; same < total/3 {
+	if total := len(plain.Pix) / 4; same < total/4 {
 		t.Errorf("only %d/%d pixels unchanged — grain draws leaked into the base composition", same, total)
 	}
 
-	// The height window must lie inside the mapped range across seeds.
+	// Only wide terraces may be boosted, with bounded strength.
 	for seed := uint64(0); seed < 100; seed++ {
 		p := s.plan(testCtx(t, seed))
-		if p.hgLo >= p.hgHi || p.hgLo < -p.span || p.hgHi > p.span {
-			t.Fatalf("seed %d: height window [%v, %v] outside ±%v", seed, p.hgLo, p.hgHi, p.span)
+		wMin := 1.0 / float64(p.bands)
+		for b, boosts := range p.grainBoost {
+			if boosts == nil {
+				continue
+			}
+			for i, boost := range boosts {
+				if boost == 0 {
+					continue
+				}
+				if w := p.terraceWidths[b][i]; w < 2.5*wMin {
+					t.Fatalf("seed %d: narrow terrace (band %d level %d, width %v) boosted", seed, b, i, w)
+				}
+				if boost < 2.5 || boost > 5.5 {
+					t.Fatalf("seed %d: boost %v out of range", seed, boost)
+				}
+			}
 		}
-		if width := p.hgHi - p.hgLo; width < 0.15*2*p.span-1e-9 || width > 0.30*2*p.span+1e-9 {
-			t.Fatalf("seed %d: window width %v out of range", seed, width)
-		}
-		if p.hgBoost < 2.5 || p.hgBoost > 5.5 {
-			t.Fatalf("seed %d: boost %v out of range", seed, p.hgBoost)
-		}
+	}
+
+	// A different grain seed relays out the grain on the same image.
+	s2 := New()
+	s2.TerraceGrain = true
+	s2.GrainSeed = 99
+	img2, err := s2.Render(testCtx(t, 42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(grained.Pix, img2.(*image.NRGBA).Pix) {
+		t.Error("different grain seeds produced identical grain layouts")
 	}
 }
 

@@ -28,8 +28,8 @@ import (
 const (
 	streamStripes = 3
 	streamParams  = 4
-	streamGrain   = 7 // height-grain draws; separate stream so the
-	// base composition is identical with and without HeightGrain
+	streamGrain   = 7 // terrace-grain draws; separate stream so the
+	// base composition is identical with and without TerraceGrain
 	streamTerrace = 8 // terrace widths + level shuffles; seeded from
 	// TerraceSeed so layouts can vary on a fixed composition
 )
@@ -55,17 +55,22 @@ type Sketch struct {
 	// ReliefParams tunes the relief pass; ignored unless Relief is set.
 	ReliefParams ReliefParams
 
-	// HeightGrain boosts the grain strongly within one height range of the
-	// terrain (a per-seed window of 15–30% of the noise value range), so
-	// the same elevation band is textured across the whole image — like
-	// scree at a certain altitude. Uses its own RNG stream: the
+	// TerraceGrain boosts the grain strongly on a random subset (~45%) of
+	// the wide terraces (width ≥ 2.5× the minimum), so certain flat
+	// levels read as rough strata between polished ones, image-wide.
+	// Narrow terraces never grain. Uses its own RNG stream: the
 	// composition is identical with and without it, only grain differs.
-	HeightGrain bool
+	TerraceGrain bool
 
 	// TerraceSeed seeds the terrace layout (level widths and color
 	// shuffles). 0 means "use the context seed". Varying it produces
 	// different terracings of the same composition.
 	TerraceSeed uint64
+
+	// GrainSeed seeds the terrace-grain assignment (which wide terraces
+	// grain, and how strongly). 0 means "use the terrace seed". Varying
+	// it produces different grain layouts on the same image.
+	GrainSeed uint64
 }
 
 // ReliefParams are the lighting/shading knobs of the relief pass.
@@ -175,13 +180,12 @@ type plan struct {
 	stripes  []stripe
 	grainAmt float64
 
-	// Height grain (only set when Sketch.HeightGrain): folded noise values
-	// inside [hgLo, hgHi] get the grain amplified by up to 1+hgBoost,
-	// ramping over hgBlend at both window edges.
-	hgLo    float64
-	hgHi    float64
-	hgBlend float64
-	hgBoost float64
+	// Terrace grain (only set when Sketch.TerraceGrain): per band, per
+	// terrace level, the grain amplification (0 = untouched). Only wide
+	// terraces ever get a non-zero boost. terraceWidths keeps the raw
+	// (pre-normalization) level widths for the assignment and for tests.
+	terraceWidths [5][]float64
+	grainBoost    [5][]float64
 }
 
 // fold reflects n back into [-span, span] (triangle wave). Without it,
@@ -244,10 +248,8 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 			gy = int64(v * s.GrainRes / s.StreakRatio)
 		}
 		amt := p.grainAmt * st.grainMul
-		if s.HeightGrain {
-			w := smoothstep(p.hgLo-p.hgBlend, p.hgLo+p.hgBlend, n) *
-				(1 - smoothstep(p.hgHi-p.hgBlend, p.hgHi+p.hgBlend, n))
-			amt *= 1 + w*p.hgBoost
+		if boosts := p.grainBoost[band]; boosts != nil {
+			amt *= 1 + boosts[idx]
 		}
 		g := (noise.Hash01(ctx.Seed, gx, gy) - 0.5) * amt
 		return palette.Color{R: c.R + g, G: c.G + g, B: c.B + g}.Clamp()
@@ -310,8 +312,8 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 	}
 	trng := rand.New(rand.NewPCG(tseed, streamTerrace))
 	tspread := 1.5 + trng.Float64()*2.5
-	build := func(g gradient.Gradient, shuffle bool) gradient.Terraced {
-		wMin := 1.0 / float64(bands)
+	wMin := 1.0 / float64(bands)
+	build := func(slot int, g gradient.Gradient, shuffle bool) gradient.Terraced {
 		var widths []float64
 		for total := 0.0; total < 1 || len(widths) < 2; {
 			w := wMin * (1 + trng.ExpFloat64()*tspread)
@@ -322,34 +324,43 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		if shuffle {
 			colors = colors.Shuffled(trng)
 		}
+		p.terraceWidths[slot] = widths
 		return gradient.NewTerraced(colors, widths)
 	}
 	p.grads = [5]gradient.Terraced{
-		build(gradient.HSLBetween(darkA, lightA), true),                  // deep basin: family A, full depth
-		build(gradient.HSLBetween(lighter(darkA, lightA), lightA), true), // basin: family A, light register
-		build(gradient.HSLBetween(light0, cloudPartner), false),          // smooth cloud
-		build(gradient.HSLBetween(lighter(darkB, lightB), lightB), true), // peak: family B, light register
-		build(gradient.HSLBetween(darkB, lightB), true),                  // high peak: family B, full depth
+		build(0, gradient.HSLBetween(darkA, lightA), true),                  // deep basin: family A, full depth
+		build(1, gradient.HSLBetween(lighter(darkA, lightA), lightA), true), // basin: family A, light register
+		build(2, gradient.HSLBetween(light0, cloudPartner), false),          // smooth cloud
+		build(3, gradient.HSLBetween(lighter(darkB, lightB), lightB), true), // peak: family B, light register
+		build(4, gradient.HSLBetween(darkB, lightB), true),                  // high peak: family B, full depth
 	}
 
 	p.stripes = s.planStripes(ctx)
 
-	if s.HeightGrain {
-		rg := ctx.RNG(streamGrain)
-		width := (0.15 + rg.Float64()*0.15) * 2 * span // 15–30% of the value range
-		center := (rg.Float64()*2 - 1) * (span - width/2)
-		p.hgLo = center - width/2
-		p.hgHi = center + width/2
-		p.hgBlend = 0.04
-		p.hgBoost = 2.5 + rg.Float64()*3.0
+	// Terrace grain: only terraces at least 2.5× the minimum width are
+	// candidates; ~45% of them get a strong boost. Positional — the boost
+	// belongs to the level, wherever that elevation occurs in the image.
+	if s.TerraceGrain {
+		gseed := s.GrainSeed
+		if gseed == 0 {
+			gseed = tseed
+		}
+		grng := rand.New(rand.NewPCG(gseed, streamGrain))
+		for b := range p.grads {
+			boosts := make([]float64, len(p.terraceWidths[b]))
+			any := false
+			for i, w := range p.terraceWidths[b] {
+				if w >= 2.5*wMin && grng.Float64() < 0.45 {
+					boosts[i] = 2.5 + grng.Float64()*3
+					any = true
+				}
+			}
+			if any {
+				p.grainBoost[b] = boosts
+			}
+		}
 	}
 	return p
-}
-
-// smoothstep is the standard cubic step from 0 (x≤lo) to 1 (x≥hi).
-func smoothstep(lo, hi, x float64) float64 {
-	t := math.Min(1, math.Max(0, (x-lo)/(hi-lo)))
-	return t * t * (3 - 2*t)
 }
 
 // hueDist is the angular hue distance between two colors in degrees.
