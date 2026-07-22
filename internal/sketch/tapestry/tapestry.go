@@ -219,17 +219,21 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 func (s *Sketch) plan(ctx sketch.Context) plan {
 	prm := ctx.RNG(streamParams)
 
-	// Palette roles by luminance. Every gradient endpoint is an actual
-	// palette color — no invented colors — and interpolation happens in
-	// HSL space, so blends stay in the palette's family.
+	// Palette roles by luminance. The two darkest colors anchor two hill
+	// families; each family's light partner is the remaining palette color
+	// nearest in hue, so one hill reads as exactly two colors (plus their
+	// shades) — no third hue appears along the HSL arc.
 	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
 	sort.SliceStable(byLum, func(i, j int) bool {
 		return byLum[i].Luminance() < byLum[j].Luminance()
 	})
 	nL := len(byLum)
-	dark0, dark1 := byLum[0], byLum[1]
-	mid := byLum[min(2, nL-2)]
-	light1, light0 := byLum[nL-2], byLum[nL-1]
+	light0 := byLum[nL-1]
+
+	darkA, darkB := byLum[0], byLum[1]
+	partners := append([]palette.Color(nil), byLum[2:]...)
+	lightA := takeNearestHue(&partners, darkA)
+	lightB := takeNearestHue(&partners, darkB)
 
 	t1 := 0.08 + prm.Float64()*0.06 // cloud band half-width
 	t2 := 0.28 + prm.Float64()*0.10 // deep-band cutoffs
@@ -245,26 +249,64 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		grainAmt: 0.03 + prm.Float64()*0.03,
 	}
 
-	// One colorway per value band: basins get the deep and warm-dark
-	// registers, clouds stay smooth and light, peaks get the mid-light and
-	// dark-accent registers. The cloud's second anchor varies per seed.
-	cloudPartner := mid
+	// Which family colors the basins vs the peaks varies per seed. The
+	// outer band shows the family in full depth; the inner band is a
+	// lighter register of the same two colors. The cloud stays smooth
+	// between the lightest color and its nearest-hue companion.
 	if prm.Float64() < 0.5 {
-		cloudPartner = light1
+		darkA, lightA, darkB, lightB = darkB, lightB, darkA, lightA
 	}
+	cloudPartner := nearestHue(light0, byLum[nL-3:nL-1])
 	sample := func(c1, c2 palette.Color) gradient.Discrete {
 		return gradient.Sample(gradient.HSLBetween(c1, c2), bands)
 	}
+	lighter := func(d, l palette.Color) palette.Color { return palette.LerpHSL(d, l, 0.45) }
 	p.grads = [5]gradient.Discrete{
-		sample(dark0, mid).Shuffled(ctx.RNG(streamShuffleB0)),
-		sample(dark1, light0).Shuffled(ctx.RNG(streamShuffleB1)),
-		sample(light0, cloudPartner), // smooth cloud
-		sample(mid, light0).Shuffled(ctx.RNG(streamShuffleB3)),
-		sample(dark0, light1).Shuffled(ctx.RNG(streamShuffleB4)),
+		sample(darkA, lightA).Shuffled(ctx.RNG(streamShuffleB0)),                  // deep basin: family A, full depth
+		sample(lighter(darkA, lightA), lightA).Shuffled(ctx.RNG(streamShuffleB1)), // basin: family A, light register
+		sample(light0, cloudPartner),                                              // smooth cloud
+		sample(lighter(darkB, lightB), lightB).Shuffled(ctx.RNG(streamShuffleB3)), // peak: family B, light register
+		sample(darkB, lightB).Shuffled(ctx.RNG(streamShuffleB4)),                  // high peak: family B, full depth
 	}
 
 	p.stripes = s.planStripes(ctx)
 	return p
+}
+
+// hueDist is the angular hue distance between two colors in degrees.
+// Near-gray colors match any hue.
+func hueDist(a, b palette.Color) float64 {
+	ha, sa, _ := a.HSL()
+	hb, sb, _ := b.HSL()
+	if sa < 0.1 || sb < 0.1 {
+		return 0
+	}
+	d := math.Abs(ha - hb)
+	return math.Min(d, 360-d)
+}
+
+// nearestHue returns the candidate closest in hue to c.
+func nearestHue(c palette.Color, candidates []palette.Color) palette.Color {
+	best := candidates[0]
+	for _, cand := range candidates[1:] {
+		if hueDist(c, cand) < hueDist(c, best) {
+			best = cand
+		}
+	}
+	return best
+}
+
+// takeNearestHue removes and returns the candidate closest in hue to c.
+func takeNearestHue(candidates *[]palette.Color, c palette.Color) palette.Color {
+	bestI := 0
+	for i, cand := range (*candidates)[1:] {
+		if hueDist(c, cand) < hueDist(c, (*candidates)[bestI]) {
+			bestI = i + 1
+		}
+	}
+	best := (*candidates)[bestI]
+	*candidates = append((*candidates)[:bestI], (*candidates)[bestI+1:]...)
+	return best
 }
 
 // planStripes covers [0, aspect] with random-width stripes.
