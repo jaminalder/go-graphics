@@ -84,6 +84,7 @@ func runRender(args []string) error {
 	outDir := fs.String("out", "out", "output directory")
 	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
 	relief := fs.Bool("relief", false, "tapestry only: 3D relief shading (hillshade + paper-cut edges)")
+	reliefPreset := fs.String("relief-preset", "", "tapestry only: named relief look (implies --relief): "+strings.Join(tapestry.ReliefPresetNames(), "|"))
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -93,13 +94,21 @@ func runRender(args []string) error {
 		return fmt.Errorf("unknown sketch %q (try: staticart list)", name)
 	}
 	fileName := s.Name()
-	if *relief {
+	if *relief || *reliefPreset != "" {
 		ts, ok := s.(*tapestry.Sketch)
 		if !ok {
-			return fmt.Errorf("--relief only applies to the tapestry sketch")
+			return fmt.Errorf("--relief/--relief-preset only apply to the tapestry sketch")
 		}
 		ts.Relief = true
 		fileName += "-relief"
+		if *reliefPreset != "" && *reliefPreset != "baseline" {
+			params, ok := tapestry.ReliefPreset(*reliefPreset)
+			if !ok {
+				return fmt.Errorf("unknown relief preset %q (have %v)", *reliefPreset, tapestry.ReliefPresetNames())
+			}
+			ts.ReliefParams = params
+			fileName += "-" + *reliefPreset
+		}
 	}
 	if *noStripes {
 		ts, ok := s.(*tapestry.Sketch)

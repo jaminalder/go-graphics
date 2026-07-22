@@ -145,6 +145,25 @@ func TestRelief(t *testing.T) {
 	}
 }
 
+func TestReliefPresets(t *testing.T) {
+	base, ok := ReliefPreset("baseline")
+	if !ok || base != DefaultReliefParams() {
+		t.Error("baseline preset must equal DefaultReliefParams")
+	}
+	names := ReliefPresetNames()
+	if len(names) != 10 {
+		t.Errorf("expected 10 presets, got %d", len(names))
+	}
+	for _, n := range names {
+		if _, ok := ReliefPreset(n); !ok {
+			t.Errorf("preset %q not resolvable", n)
+		}
+	}
+	if _, ok := ReliefPreset("nope"); ok {
+		t.Error("unknown preset should not resolve")
+	}
+}
+
 func TestGolden(t *testing.T) {
 	got := renderNRGBA(t, testCtx(t, 42))
 	golden := filepath.Join("testdata", "tapestry_seed42_64.png")
