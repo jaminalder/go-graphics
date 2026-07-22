@@ -7,8 +7,10 @@ stripes, large tinted regions, and grain texture.
 ## Layers (applied per pixel, in order)
 
 1. **Contour base** — as sketch 001: fBm noise → three-band gradient
-   coloring, outer bands shuffled, middle smooth. More octaves (3) for finer
-   ring detail than sketch 001.
+   coloring, outer bands shuffled, middle smooth. Deliberately chunky rings
+   (few bands, moderate frequency): user feedback 2026-07-22 was that the
+   gap between finest ripples and biggest shadows read as too large, so the
+   smallest structures were made bigger and the regions smaller/more complex.
 2. **Region tint** — a second, low-frequency fBm field; where it exceeds a
    threshold the base color is **multiply-blended** with a saturated,
    lightened version of the palette's darkest color (smoothstepped near the
@@ -31,11 +33,11 @@ aesthetics; the tunable struct fields hold the *ranges*, not the values:
 
 | Draw | Range | Purpose |
 |---|---|---|
-| Contour frequency | 4.5 – 8.5 | feature scale variation |
-| Bands per gradient | 35 – 70 | ring density |
+| Contour frequency | 4.0 – 6.0 | feature scale variation |
+| Bands per gradient | 20 – 40 | ring density |
 | Band thresholds ±T | 0.10 – 0.18 | ring-area vs cloud-area balance |
 | Noise mapping range | ±0.55 – ±0.70 | how much of each gradient shows |
-| Region frequency | 1.2 – 2.2 | size of tinted areas |
+| Region frequency | 2.2 – 3.2, 2 fBm octaves | size and edge complexity of tinted areas |
 | Region threshold / strength | 0.10 – 0.25 / 0.50 – 0.85 | tint coverage and depth (multiply) |
 | Stripe widths | thin 0.003 – 0.010 (45%), wide 0.02 – 0.09 | warp rhythm |
 | Stripe effect | tint 60% / lighten 12% / darken 13% / none 15%, amount 0.05 – 0.30 | color variety without mud |

@@ -57,13 +57,13 @@ func TestPlanBounds(t *testing.T) {
 	s := New()
 	for seed := uint64(0); seed < 200; seed++ {
 		p := s.plan(testCtx(t, seed))
-		if p.freq < 4.5 || p.freq > 8.5 {
+		if p.freq < 4 || p.freq > 6 {
 			t.Fatalf("seed %d: freq %v out of range", seed, p.freq)
 		}
 		if p.highThresh < 0.10 || p.highThresh > 0.18 || p.lowThresh != -p.highThresh {
 			t.Fatalf("seed %d: thresholds %v/%v out of range", seed, p.lowThresh, p.highThresh)
 		}
-		if n := len(p.gradLow); n < 35 || n > 70 {
+		if n := len(p.gradLow); n < 20 || n > 40 {
 			t.Fatalf("seed %d: %d bands out of range", seed, n)
 		}
 		if p.regionStrength < 0.50 || p.regionStrength > 0.85 {

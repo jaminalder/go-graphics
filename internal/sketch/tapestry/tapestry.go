@@ -47,7 +47,7 @@ type Sketch struct {
 func New() *Sketch {
 	return &Sketch{
 		Octaves:       2,
-		RegionOctaves: 1,
+		RegionOctaves: 2,
 		GrainRes:      1400,
 		StreakRatio:   6,
 	}
@@ -189,10 +189,10 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 
 	span := 0.55 + prm.Float64()*0.15 // noise mapped over ±span
 	thresh := 0.10 + prm.Float64()*0.08
-	bands := 35 + prm.IntN(36)
+	bands := 20 + prm.IntN(21)
 
 	p := plan{
-		freq:       4.5 + prm.Float64()*4,
+		freq:       4 + prm.Float64()*2,
 		lowThresh:  -thresh,
 		highThresh: thresh,
 		noiseMin:   -span,
@@ -204,7 +204,7 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		gradHigh: gradient.Sample(gradient.CosineBetween(cool, warm), bands).
 			Shuffled(ctx.RNG(streamShuffleHigh)),
 
-		regionFreq:     1.2 + prm.Float64(),
+		regionFreq:     2.2 + prm.Float64(),
 		regionThresh:   0.10 + prm.Float64()*0.15,
 		regionStrength: 0.50 + prm.Float64()*0.35,
 		regionTint:     darkest.Saturate(0.7).Lighten(0.3),
