@@ -10,11 +10,12 @@ vector work will use [tdewolff/canvas](https://github.com/tdewolff/canvas).
 Color palettes are grounded in artist palettes from
 [ColorLisa](https://colorlisa.com/).
 
-**Status:** three sketches — `contour` (shuffled-gradient noise, a port of
+**Status:** four sketches — `contour` (shuffled-gradient noise, a port of
 staticart's sketch_7), `tapestry` (terraced contour terrain with relief
-shading and per-terrace effects), and `circles` (packed circles with
-patterned fills). All 133 ColorLisa palettes are built in
-(`staticart palettes` lists them; `staticart list` shows the sketches).
+shading and per-terrace effects), `circles` (packed circles with patterned
+fills), and `drift` (hand-painted dots along a flow field, built on the
+stamp-based `paint` brush package). All 133 ColorLisa palettes are built
+in (`staticart palettes`; `staticart list` shows the sketches).
 
 ## Quick start
 

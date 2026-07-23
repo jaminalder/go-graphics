@@ -13,6 +13,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/jaminalder/go-graphics/internal/geom"
 	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
@@ -63,21 +64,21 @@ const (
 
 // circleSpec is one circle of the scene: geometry plus fill recipe.
 type circleSpec struct {
-	cx, cy, r float64
-	kind      fillKind
-	angle     float64 // pattern rotation (stripes: direction)
-	scale     float64 // feature size, fraction of r
-	phase     float64
-	dotSize   float64 // fillDots: dot radius as fraction of half a cell
-	shades    []palette.Color
-	salt      uint64 // per-circle hash/Worley seed
+	geom.Circle
+	kind    fillKind
+	angle   float64 // pattern rotation (stripes: direction)
+	scale   float64 // feature size, fraction of r
+	phase   float64
+	dotSize float64 // fillDots: dot radius as fraction of half a cell
+	shades  []palette.Color
+	salt    uint64 // per-circle hash/Worley seed
 }
 
 // plan is the full scene.
 type plan struct {
 	bg      palette.Color
 	circles []circleSpec
-	grid    *grid
+	index   *geom.Index
 }
 
 // Render implements sketch.Sketch.
@@ -85,7 +86,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	p := s.plan(ctx)
 
 	img := sketch.Raster(ctx, func(u, v float64) palette.Color {
-		idx := p.grid.at(u, v, p.circles)
+		idx := p.index.At(u, v)
 		if idx < 0 {
 			return p.bg
 		}
@@ -98,10 +99,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 // inside the circle.
 func (c *circleSpec) eval(u, v float64) palette.Color {
 	// Circle-local frame: translate, rotate by -angle, normalize by r.
-	dx, dy := u-c.cx, v-c.cy
+	dx, dy := u-c.X, v-c.Y
 	sin, cos := math.Sin(-c.angle), math.Cos(-c.angle)
-	px := (dx*cos - dy*sin) / c.r
-	py := (dx*sin + dy*cos) / c.r
+	px := (dx*cos - dy*sin) / c.R
+	py := (dx*sin + dy*cos) / c.R
 
 	n := len(c.shades)
 	shadeAt := func(i, j int64) palette.Color {
@@ -140,7 +141,11 @@ func (c *circleSpec) eval(u, v float64) palette.Color {
 // seed's image — breaks goldens deliberately, never silently).
 func (s *Sketch) plan(ctx sketch.Context) plan {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
-	circles := s.pack(ctx.RNG(streamLayout), aspect)
+	index := s.pack(ctx.RNG(streamLayout), aspect)
+	circles := make([]circleSpec, len(index.Circles()))
+	for i, c := range index.Circles() {
+		circles[i].Circle = c
+	}
 
 	// Palette roles: the lightest color recedes into the background; all
 	// colors (including the lightest) can anchor circles.
@@ -179,12 +184,12 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 		// Floor the feature size in absolute canvas units: small circles
 		// get a few bold elements instead of sub-pixel confetti.
 		const minFeature = 0.008
-		if c.scale*c.r < minFeature {
-			c.scale = math.Min(minFeature/c.r, 1)
+		if c.scale*c.R < minFeature {
+			c.scale = math.Min(minFeature/c.R, 1)
 		}
 	}
 
-	return plan{bg: bg, circles: circles, grid: newGrid(circles, s.MaxR)}
+	return plan{bg: bg, circles: circles, index: index}
 }
 
 // shadeLadder builds count shades of base as an HSL lightness ladder,

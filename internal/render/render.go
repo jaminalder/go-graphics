@@ -117,6 +117,25 @@ func rasterLoop(w, h, samples int, f PixelFunc, put func(x, y int, c palette.Col
 	wg.Wait()
 }
 
+// ImageFromColors quantizes a w×h float color buffer (row-major) to a
+// dithered 8-bit image — the same output treatment as RasterSS, for
+// renderers that build their own buffer (e.g. paint.Canvas).
+func ImageFromColors(w, h int, pix []palette.Color) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			c := pix[y*w+x]
+			d := ign(x, y)
+			i := img.PixOffset(x, y)
+			img.Pix[i] = quant8(c.R, d)
+			img.Pix[i+1] = quant8(c.G, d)
+			img.Pix[i+2] = quant8(c.B, d)
+			img.Pix[i+3] = 255
+		}
+	}
+	return img
+}
+
 // ign is interleaved gradient noise in [0,1) — a cheap, deterministic,
 // well-distributed dither pattern.
 func ign(x, y int) float64 {

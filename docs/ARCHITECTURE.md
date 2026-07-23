@@ -47,13 +47,16 @@ internal/
   mathx/                  Clamp01, Remap, Smoothstep         → (stdlib only)
   palette/                Color type, manipulation, data     → mathx
   gradient/               Gradient implementations           → palette, mathx
+  geom/                   circles + spatial index            → (stdlib only)
   noise/                  Perlin, fBm, Worley, Hash01        → (stdlib only)
+  paint/                  stamp canvas, wobbly paths, disc
+                          marks (rings/scribble/gouache)     → palette, render, mathx
   render/                 pixel loop (AA, dither), profiles,
                           encoding + metadata                → palette
   sketch/                 Sketch/Configurable, Context,
                           registry, Raster helper            → palette, render
     sketchtest/           shared test helpers (goldens etc.) → sketch
-    contour/, tapestry/, circles/   the sketches             → all of the above
+    contour/, tapestry/, circles/, drift/   the sketches     → all of the above
 docs/                     this file, sketch specs, idea backlog, reference data
 out/                      rendered images (gitignored)
 ```
@@ -66,7 +69,7 @@ cmd → sketch (registry) → {gradient, noise, render} → palette → mathx �
 
 Rules:
 
-- `mathx` and `noise` are leaf packages: stdlib imports only.
+- `mathx`, `geom`, and `noise` are leaf packages: stdlib imports only.
 - Sketches live in subpackages of `internal/sketch`; `cmd` discovers them
   only through the registry. Sketch-specific CLI options are owned by the
   sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
@@ -128,6 +131,12 @@ cmd/staticart
 
 Per-pixel work must be pure (no shared mutable state) so the row-parallel loop
 is race-free by construction.
+
+**Second rendering model:** `paint.Canvas` (used by stroke-based sketches
+like drift) is stamp-based and sequential — soft dabs blended source-over,
+anti-aliasing from the dab edges (Context.AA unused), same dithered
+quantization on output. Compositions stay resolution-independent; stroke
+texture varies subtly with resolution, which is part of the medium.
 
 ### Size profiles
 

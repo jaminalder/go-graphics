@@ -59,10 +59,12 @@ PNG** to look at it. For sketch 001 compare against the target image at
 ```
 cmd/staticart/          CLI (generic wiring only — no sketch specifics)
 internal/mathx/         Clamp01 / Remap / Smoothstep (leaf)
+internal/geom/          circles + spatial collision/containment index (leaf)
 internal/palette/       Color type + ops, ColorLisa palette data
 internal/gradient/      cosine / HSL / discrete / terraced gradients
 internal/noise/         Perlin + fBm, Worley cell noise, Hash01 (leaf)
 internal/render/        pixel loop (AA, dither, 16-bit), profiles, encode+metadata
+internal/paint/         stamp-based brush canvas + disc marks (sequential model)
 internal/sketch/        Sketch + Configurable interfaces, Context, registry
 internal/sketch/sketchtest/  shared test helpers (goldens, determinism)
 internal/sketch/<x>/    one package per sketch + its testdata/ goldens

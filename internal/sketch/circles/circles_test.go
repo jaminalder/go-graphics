@@ -34,16 +34,16 @@ func TestPacking(t *testing.T) {
 		}
 		for i := range p.circles {
 			a := &p.circles[i]
-			if a.r < s.MinR-1e-12 || a.r > s.MaxR+1e-12 {
-				t.Fatalf("seed %d: radius %v out of range", seed, a.r)
+			if a.R < s.MinR-1e-12 || a.R > s.MaxR+1e-12 {
+				t.Fatalf("seed %d: radius %v out of range", seed, a.R)
 			}
-			if a.cx-a.r < 0 || a.cx+a.r > 1 || a.cy-a.r < 0 || a.cy+a.r > 1 {
+			if a.X-a.R < 0 || a.X+a.R > 1 || a.Y-a.R < 0 || a.Y+a.R > 1 {
 				t.Fatalf("seed %d: circle %d leaves the canvas", seed, i)
 			}
 			for j := i + 1; j < len(p.circles); j++ {
 				b := &p.circles[j]
-				dx, dy := a.cx-b.cx, a.cy-b.cy
-				if math.Sqrt(dx*dx+dy*dy) < a.r+b.r+s.Gap-1e-9 {
+				dx, dy := a.X-b.X, a.Y-b.Y
+				if math.Sqrt(dx*dx+dy*dy) < a.R+b.R+s.Gap-1e-9 {
 					t.Fatalf("seed %d: circles %d and %d overlap", seed, i, j)
 				}
 			}
@@ -65,7 +65,7 @@ func TestPlanBounds(t *testing.T) {
 			if c.scale <= 0 || c.scale > 1 {
 				t.Fatalf("seed %d: scale %v out of range", seed, c.scale)
 			}
-			if feature := c.scale * c.r; feature < 0.0079 && c.scale < 1 {
+			if feature := c.scale * c.R; feature < 0.0079 && c.scale < 1 {
 				t.Fatalf("seed %d: feature size %v below floor", seed, feature)
 			}
 			if c.kind == fillDots && (c.dotSize < 0.55 || c.dotSize > 0.8) {
@@ -84,12 +84,12 @@ func TestGridMatchesBruteForce(t *testing.T) {
 	for i := range 500 {
 		u := float64(i%25) / 24
 		v := float64(i/25) / 19.96
-		got := p.grid.at(u, v, p.circles)
+		got := p.index.At(u, v)
 		want := -1
 		for j := range p.circles {
 			c := &p.circles[j]
-			dx, dy := u-c.cx, v-c.cy
-			if dx*dx+dy*dy <= c.r*c.r {
+			dx, dy := u-c.X, v-c.Y
+			if dx*dx+dy*dy <= c.R*c.R {
 				want = j
 				break
 			}
