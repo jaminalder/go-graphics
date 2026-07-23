@@ -65,10 +65,20 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println(`usage:
-  staticart list
-  staticart palettes
-  staticart render <sketch> [--profile preview|web|print] [--width N --height N]
-                   [--seed N] [--palette slug] [--format png|jpg] [--out dir]`)
+  staticart list                      list sketches
+  staticart palettes                  list palette slugs
+  staticart render <sketch> [flags]   render a sketch
+
+common render flags:
+  --profile preview|web|print   size profile (or --width N --height N)
+  --seed N                      composition seed
+  --palette slug                see: staticart palettes
+  --aa N                        anti-aliasing (default 2; use 3 for print)
+  --deep                        16-bit PNG master (png only)
+  --format png|jpg  --out dir
+
+sketch-specific flags (e.g. tapestry's --relief, --crackle, --terrace-seed)
+are listed by: staticart render <sketch> --help`)
 }
 
 func runRender(args []string) error {
@@ -84,83 +94,29 @@ func runRender(args []string) error {
 	seed := fs.Uint64("seed", 42, "random seed (same seed → same image)")
 	aa := fs.Int("aa", 2, "anti-aliasing: supersamples per axis (1 = off; use 3 for print)")
 	deep := fs.Bool("deep", false, "render a 16-bit PNG master (archival/print; png only)")
-	smooth := fs.Float64("smooth", 0, "tapestry only: fBm persistence override, e.g. 0.35 for smoother terrace lines (0 = default 0.5)")
 	paletteName := fs.String("palette", "kandinsky-soft-pressure", "palette slug (see: staticart palettes)")
 	format := fs.String("format", "png", "output format: png|jpg")
 	outDir := fs.String("out", "out", "output directory")
-	noStripes := fs.Bool("no-stripes", false, "tapestry only: render without the vertical stripe layer")
-	grain := fs.Bool("grain", false, "tapestry only: boost grain strongly on some of the wide terraces")
-	crackle := fs.Bool("crackle", false, "tapestry only: crack network on some of the wide terraces")
-	grainSeed := fs.Uint64("grain-seed", 0, "tapestry only: seed for the grain assignment (0 = terrace seed, implies --grain); vary for different grain layouts on the same image")
-	terraceSeed := fs.Uint64("terrace-seed", 0, "tapestry only: seed for the terrace layout (0 = main seed); vary for different terracings of the same composition")
-	relief := fs.Bool("relief", false, "tapestry only: 3D relief shading (hillshade + paper-cut edges)")
-	reliefPreset := fs.String("relief-preset", "", "tapestry only: named relief look (implies --relief): "+strings.Join(tapestry.ReliefPresetNames(), "|"))
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
 
 	s, ok := registry().Get(name)
 	if !ok {
 		return fmt.Errorf("unknown sketch %q (try: staticart list)", name)
 	}
+	// Sketch-specific options are owned by the sketch itself.
+	if c, ok := s.(sketch.Configurable); ok {
+		c.Flags(fs)
+	}
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
 	fileName := s.Name()
-	if *relief || *reliefPreset != "" {
-		ts, ok := s.(*tapestry.Sketch)
-		if !ok {
-			return fmt.Errorf("--relief/--relief-preset only apply to the tapestry sketch")
+	if c, ok := s.(sketch.Configurable); ok {
+		suffix, err := c.Configure()
+		if err != nil {
+			return err
 		}
-		ts.Relief = true
-		fileName += "-relief"
-		if *reliefPreset != "" && *reliefPreset != "baseline" {
-			params, ok := tapestry.ReliefPreset(*reliefPreset)
-			if !ok {
-				return fmt.Errorf("unknown relief preset %q (have %v)", *reliefPreset, tapestry.ReliefPresetNames())
-			}
-			ts.ReliefParams = params
-			fileName += "-" + *reliefPreset
-		}
-	}
-	if *noStripes {
-		ts, ok := s.(*tapestry.Sketch)
-		if !ok {
-			return fmt.Errorf("--no-stripes only applies to the tapestry sketch")
-		}
-		ts.DisableStripes = true
-		fileName += "-nostripes"
-	}
-	if *grain || *crackle || *grainSeed != 0 {
-		ts, ok := s.(*tapestry.Sketch)
-		if !ok {
-			return fmt.Errorf("--grain/--crackle/--grain-seed only apply to the tapestry sketch")
-		}
-		ts.GrainSeed = *grainSeed
-		if *crackle {
-			ts.TerraceCrackle = true
-			fileName += "-crackle"
-		}
-		if *grain || (*grainSeed != 0 && !*crackle) {
-			ts.TerraceGrain = true
-			fileName += "-grain"
-		}
-		if *grainSeed != 0 {
-			fileName += fmt.Sprintf("-g%d", *grainSeed)
-		}
-	}
-	if *terraceSeed != 0 {
-		ts, ok := s.(*tapestry.Sketch)
-		if !ok {
-			return fmt.Errorf("--terrace-seed only applies to the tapestry sketch")
-		}
-		ts.TerraceSeed = *terraceSeed
-		fileName += fmt.Sprintf("-t%d", *terraceSeed)
-	}
-	if *smooth != 0 {
-		ts, ok := s.(*tapestry.Sketch)
-		if !ok {
-			return fmt.Errorf("--smooth only applies to the tapestry sketch")
-		}
-		ts.Persistence = *smooth
-		fileName += fmt.Sprintf("-smooth%v", *smooth)
+		fileName += suffix
 	}
 	pal, ok := palette.ByName(*paletteName)
 	if !ok {

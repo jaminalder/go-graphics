@@ -7,13 +7,12 @@ import "math"
 type grid struct {
 	cell       float64
 	cols, rows int
-	minU, minV float64
 	cells      [][]int32 // circle indices per cell, by bounding box
 }
 
 // newGrid buckets circles into cells sized by the largest radius.
 func newGrid(circles []circleSpec, maxR float64) *grid {
-	g := &grid{cell: math.Max(maxR, 0.02), minU: 0, minV: 0}
+	g := &grid{cell: math.Max(maxR, 0.02)}
 	maxU, maxV := 1.0, 1.0
 	for i := range circles {
 		maxU = math.Max(maxU, circles[i].cx+circles[i].r)

@@ -13,6 +13,7 @@ import (
 	"image"
 
 	"github.com/jaminalder/go-graphics/internal/gradient"
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -79,17 +80,12 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		n := field.FBM(u*s.Frequency, v*s.Frequency, s.Octaves) * s.Gain
 		switch {
 		case n < s.LowThreshold:
-			return gradLow.At(remap(n, s.NoiseMin, s.LowThreshold))
+			return gradLow.At(mathx.Remap(n, s.NoiseMin, s.LowThreshold))
 		case n < s.HighThreshold:
-			return gradMid.At(remap(n, s.LowThreshold, s.HighThreshold))
+			return gradMid.At(mathx.Remap(n, s.LowThreshold, s.HighThreshold))
 		default:
-			return gradHigh.At(remap(n, s.HighThreshold, s.NoiseMax))
+			return gradHigh.At(mathx.Remap(n, s.HighThreshold, s.NoiseMax))
 		}
 	})
 	return img, nil
-}
-
-// remap maps x from [lo, hi] to [0,1]; Discrete.At clamps the result.
-func remap(x, lo, hi float64) float64 {
-	return (x - lo) / (hi - lo)
 }

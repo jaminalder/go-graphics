@@ -84,9 +84,9 @@ aesthetics; the tunable struct fields hold the *ranges*, not the values:
 | Grain amount | 0.03 – 0.06 | overall texture strength |
 
 **Palette roles are assigned by luminance**, not position, so any ColorLisa
-palette works: lightest color → smooth middle gradient anchor, darkest →
-region tint, two random picks of the remaining three → the shuffled gradient
-anchors. This is the main aesthetic guardrail.
+palette works: the two darkest colors anchor the two hill families (each
+paired with its nearest-hue light partner), the lightest colors carry the
+cloud band. This is the main aesthetic guardrail.
 
 ## Line quality
 
@@ -104,9 +104,10 @@ should be smoother):
 
 ## Determinism & resolution notes
 
-- RNG streams: 1 shuffle-low, 2 shuffle-high, 3 stripe layout, 4 parameter
-  draws. Region noise uses a seed derived from Context.Seed so it is
-  independent of the contour field.
+- RNG streams: 3 stripe layout, 4 parameter draws, 7 grain assignment,
+  8 terrace layout (seeded by TerraceSeed), 9 crackle assignment (seeded
+  by GrainSeed). Dedicated streams keep every optional effect
+  composition-neutral.
 - Stripes are generated to cover [0, aspect]; a non-square canvas draws more
   (or fewer) stripes but the same seed at the same aspect is identical.
 - Grain lattices are fixed-resolution in normalized coordinates, so grain is
@@ -116,11 +117,12 @@ should be smoother):
 
 ## Acceptance checklist (visual)
 
-- [ ] Contour-ring regions and smooth clouds still read clearly under the
-      overlays.
-- [ ] Stripes: mixed widths, no two adjacent stripes with jarring identical
-      effects; thin dark lines present but not dominant.
-- [ ] Large tinted regions with rings showing through the tint.
-- [ ] Visible grain; some stripes with vertical streak texture.
+- [ ] Every hill/basin reads as one two-color family; color boundaries are
+      contour lines (nothing reads as an overlay).
+- [ ] Irregular terracing: tight ring clusters between wide flat levels;
+      no flat single-color caps on summits (fold).
+- [ ] With --relief: sculpted, materially convincing; with --crackle /
+      --grain: effects confined to single wide terraces.
+- [ ] With stripes on: mixed widths, thin lines present but not dominant.
 - [ ] 10 different seeds → clearly different but consistently presentable
       images across several palettes.

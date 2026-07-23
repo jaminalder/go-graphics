@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"flag"
 	"image"
-	"image/png"
 	"math"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
+	"github.com/jaminalder/go-graphics/internal/sketch/sketchtest"
 )
 
 var update = flag.Bool("update", false, "regenerate golden files")
@@ -27,23 +25,11 @@ func testCtx(t *testing.T, seed uint64) sketch.Context {
 
 func renderNRGBA(t *testing.T, ctx sketch.Context) *image.NRGBA {
 	t.Helper()
-	img, err := New().Render(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return img.(*image.NRGBA)
+	return sketchtest.RenderNRGBA(t, New(), ctx)
 }
 
 func TestDeterminism(t *testing.T) {
-	a := renderNRGBA(t, testCtx(t, 42))
-	b := renderNRGBA(t, testCtx(t, 42))
-	if !bytes.Equal(a.Pix, b.Pix) {
-		t.Error("same seed produced different images")
-	}
-	c := renderNRGBA(t, testCtx(t, 43))
-	if bytes.Equal(a.Pix, c.Pix) {
-		t.Error("different seeds produced identical images")
-	}
+	sketchtest.AssertDeterministic(t, New(), testCtx(t, 42), testCtx(t, 43))
 }
 
 func TestRejectsTooSmallPalette(t *testing.T) {
@@ -316,41 +302,5 @@ func TestReliefPresets(t *testing.T) {
 
 func TestGolden(t *testing.T) {
 	got := renderNRGBA(t, testCtx(t, 42))
-	golden := filepath.Join("testdata", "tapestry_seed42_64.png")
-
-	if *update {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			t.Fatal(err)
-		}
-		f, err := os.Create(golden)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		if err := png.Encode(f, got); err != nil {
-			t.Fatal(err)
-		}
-		t.Log("golden regenerated — eyeball it before committing")
-		return
-	}
-
-	f, err := os.Open(golden)
-	if err != nil {
-		t.Fatalf("missing golden (run with -update): %v", err)
-	}
-	defer f.Close()
-	want, err := png.Decode(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b := want.Bounds()
-	wantN := image.NewNRGBA(b)
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			wantN.Set(x, y, want.At(x, y))
-		}
-	}
-	if !bytes.Equal(got.Pix, wantN.Pix) {
-		t.Error("render differs from golden (intentional change? re-run with -update and eyeball)")
-	}
+	sketchtest.Golden(t, got, "testdata/tapestry_seed42_64.png", *update)
 }

@@ -3,6 +3,7 @@
 package sketch
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"math/rand/v2"
@@ -59,6 +60,17 @@ type Sketch interface {
 	Name() string     // CLI id, kebab-case
 	Describe() string // one line for `staticart list`
 	Render(ctx Context) (image.Image, error)
+}
+
+// Configurable is implemented by sketches with sketch-specific CLI
+// options. Flags registers them (called before parsing); Configure
+// validates and applies them afterwards, returning a filename suffix that
+// encodes the non-default choices (e.g. "-relief-deep-carve-nostripes").
+// Flag values must not alter behavior until Configure runs.
+type Configurable interface {
+	Sketch
+	Flags(fs *flag.FlagSet)
+	Configure() (suffix string, err error)
 }
 
 // Registry is an explicit, immutable-after-construction set of sketches.

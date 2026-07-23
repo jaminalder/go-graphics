@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint fmt vet check tidy clean preview
+.PHONY: help build test lint fmt vet check tidy golden clean preview
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -27,6 +27,9 @@ check: fmt vet lint test ## Format, vet, lint, and test — the pre-commit gate
 
 tidy: ## go mod tidy
 	go mod tidy
+
+golden: ## Regenerate all golden images (eyeball diffs before committing)
+	go test ./internal/... -run TestGolden -update
 
 clean: ## Remove build artifacts and rendered output
 	rm -rf bin out

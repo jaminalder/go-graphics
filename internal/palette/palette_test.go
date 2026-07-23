@@ -44,13 +44,3 @@ func TestColorWraps(t *testing.T) {
 		t.Error("Color(-1) should wrap to Color(4)")
 	}
 }
-
-func TestDesaturatedDoesNotMutate(t *testing.T) {
-	p, _ := ByName("monet-water-lilies")
-	before := p.Colors[0]
-	_ = p.Desaturated(1)
-	after, _ := ByName("monet-water-lilies")
-	if after.Colors[0] != before {
-		t.Error("Desaturated mutated the source palette data")
-	}
-}

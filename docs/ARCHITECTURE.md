@@ -42,32 +42,54 @@ The first sketch reproduces
 ## 3. Package layout & dependency rules
 
 ```
-cmd/staticart/            CLI: flag parsing + wiring only, no art logic
+cmd/staticart/            CLI: generic flag parsing + wiring only, no art logic
 internal/
-  palette/                Color type, manipulation, ColorLisa palette data
-  gradient/               Gradient implementations           → palette
-  noise/                  Perlin, fBm                        → (stdlib only)
-  render/                 pixel loop, profiles, encoding     → palette
-  sketch/                 Sketch interface, Context, registry→ palette, render
-    contour/              sketch 001                         → all of the above
-docs/                     this file, sketch specs, reference data
+  mathx/                  Clamp01, Remap, Smoothstep         → (stdlib only)
+  palette/                Color type, manipulation, data     → mathx
+  gradient/               Gradient implementations           → palette, mathx
+  noise/                  Perlin, fBm, Worley, Hash01        → (stdlib only)
+  render/                 pixel loop (AA, dither), profiles,
+                          encoding + metadata                → palette
+  sketch/                 Sketch/Configurable, Context,
+                          registry, Raster helper            → palette, render
+    sketchtest/           shared test helpers (goldens etc.) → sketch
+    contour/, tapestry/, circles/   the sketches             → all of the above
+docs/                     this file, sketch specs, idea backlog, reference data
 out/                      rendered images (gitignored)
 ```
 
 Dependency direction (arrows = "may import"):
 
 ```
-cmd → sketch (registry) → {gradient, noise, render} → palette → stdlib
+cmd → sketch (registry) → {gradient, noise, render} → palette → mathx → stdlib
 ```
 
 Rules:
 
-- `palette` and `noise` are leaf packages: stdlib imports only.
-- Sketches live in subpackages of `internal/sketch` and register themselves in
-  the registry; `cmd` discovers sketches only through the registry.
+- `mathx` and `noise` are leaf packages: stdlib imports only.
+- Sketches live in subpackages of `internal/sketch`; `cmd` discovers them
+  only through the registry. Sketch-specific CLI options are owned by the
+  sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
 - Nothing imports `cmd`. No package keeps global mutable state.
 - New third-party dependencies require a documented decision (§8). Current
   count: **zero**.
+
+### What changes where (knob taxonomy)
+
+When making variants of a sketch, changes fall into four tiers — keep each
+knob in its tier:
+
+1. **Seeds** (CLI, per render): composition (`--seed`) plus sketch-owned
+   sub-seeds (`--terrace-seed`, `--grain-seed`) that re-deal one aspect on
+   a fixed composition. Cheap exploration; embedded in the recipe.
+2. **Optional layers/effects** (CLI flags): `--relief`, `--crackle`,
+   `--no-stripes`, `--smooth`, … Toggles must not disturb the base
+   composition (dedicated RNG streams).
+3. **Aesthetic ranges** (code): the bounded per-seed draw ranges and
+   structural constants in each sketch. Changing them changes every seed —
+   do it deliberately, update the sketch spec, regenerate goldens.
+4. **Quality/output** (CLI, composition-neutral): `--aa`, `--deep`,
+   `--format`, profiles.
 
 ## 4. Core invariants
 
@@ -93,13 +115,15 @@ These are load-bearing; breaking them is a bug even if output "looks fine".
 
 ```
 Sketch.Render(ctx)
-  └─ builds its gradients/fields from ctx.Palette + ctx.RNG (seed)
-  └─ render.Raster(w, h, func(u, v float64) palette.Color)
-       └─ parallel over rows (one goroutine per CPU, row-chunked)
-       └─ writes *image.NRGBA
+  └─ builds its plan/scene from ctx.Palette + ctx.RNG (seed)
+  └─ sketch.Raster(ctx, func(u, v float64) palette.Color)
+       └─ render.RasterSS / RasterDeep: parallel rows, ctx.AA supersamples
+          per pixel averaged in linear light, dithered 8-bit (or 16-bit
+          with ctx.Deep)
 cmd/staticart
-  └─ render.WritePNG / render.WriteJPEG(quality 95)
-  └─ filename: <sketch>_<palette>_<seed>_<WxH>.<ext> in --out dir
+  └─ render.WritePNGMeta / WriteJPEGMeta: sRGB tag, 300 DPI, full render
+     recipe + code revision embedded (render.Meta)
+  └─ filename: <sketch><option-suffix>_<palette>_<seed>_<WxH>.<ext>
 ```
 
 Per-pixel work must be pure (no shared mutable state) so the row-parallel loop
@@ -124,6 +148,8 @@ type Context struct {
     Width, Height int
     Seed          uint64
     Palette       palette.Palette
+    AA            int  // supersampling per axis; composition-neutral
+    Deep          bool // 16-bit output
 }
 
 // RNG returns a generator derived from (Seed, stream). Sketches use distinct
@@ -136,6 +162,10 @@ type Sketch interface {
     Describe() string    // one line for `staticart list`
     Render(ctx Context) (image.Image, error)
 }
+
+// Optional: sketches with CLI options implement Configurable —
+// Flags(fs) registers them, Configure() applies them and returns the
+// output-filename suffix. cmd never type-asserts concrete sketches.
 ```
 
 - Sketch-specific tunables are fields on the sketch struct with defaults in a
@@ -154,9 +184,10 @@ type Sketch interface {
 - **Determinism tests**: render a sketch twice at 64×64 with the same seed,
   require byte-identical pixels; different seeds must differ.
 - **Golden-image tests**: 64×64 PNG per sketch committed under
-  `internal/sketch/<name>/testdata/`; compare pixel-exact. Regenerate
-  deliberately with `go test ./... -run Golden -update` when a sketch
-  intentionally changes, and eyeball the new golden before committing.
+  `internal/sketch/<name>/testdata/`; compare pixel-exact (helpers in
+  `internal/sketch/sketchtest`). Regenerate deliberately with
+  `make golden` when a sketch intentionally changes, and eyeball the new
+  goldens before committing. Goldens render at AA 1.
 - **Visual verification is part of done**: render a preview and *look at it*
   (agents: `Read` the PNG). Tests prove determinism, not beauty.
 

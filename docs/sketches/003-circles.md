@@ -55,6 +55,11 @@ geometric sketch justifies an `internal/geom` package.
 | Dot cell | 0.18 – 0.35 × r, dot radius 0.55 – 0.8 of cell | raster density |
 | Voronoi cell | 0.15 – 0.3 × r | tile size |
 
+Guardrails learned from the first renders: the feature size is floored at
+0.008 canvas units so small circles show a few bold elements instead of
+sub-pixel confetti, and the shade ladder's lightness is capped at 0.85 so
+even the palest circle keeps a visible edge against the background.
+
 ## Reuse
 
 `sketch.Raster` (AA, linear averaging, dither, 16-bit), palette HSL

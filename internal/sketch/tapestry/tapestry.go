@@ -18,6 +18,7 @@ import (
 	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/gradient"
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -77,6 +78,9 @@ type Sketch struct {
 	// the same image.
 	GrainSeed uint64
 
+	// opts holds raw CLI flag values until Configure applies them.
+	opts cliOptions
+
 	// TerraceCrackle draws a Voronoi crack network (dried mud, ceramic
 	// crazing) on a random subset (~45%) of the wide terraces — the same
 	// selection rule as TerraceGrain, as an alternative surface finish.
@@ -130,7 +134,7 @@ func (s *Sketch) Name() string { return "tapestry" }
 
 // Describe implements sketch.Sketch.
 func (s *Sketch) Describe() string {
-	return "contour noise layered with vertical stripes, region tints, and grain"
+	return "terraced contour terrain with colorway hills, relief shading, and strata effects"
 }
 
 // Stripe blend modes. Colored stripes multiply (dye-like hue shift that
@@ -246,7 +250,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// ring and its color register. bandFrac feeds relief shading.
 		n := fold(field.FBMP(u*p.freq, v*p.freq, s.Octaves, s.Persistence), p.span)
 		band, lo, hi := p.bandOf(n)
-		idx, bandFrac := p.grads[band].Locate(remap(n, lo, hi))
+		idx, bandFrac := p.grads[band].Locate(mathx.Remap(n, lo, hi))
 		c := p.grads[band].Band(idx)
 
 		// Layer 3: vertical stripe.
@@ -266,15 +270,8 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		if boosts := p.crackleBoost[band]; boosts != nil && boosts[idx] > 0 {
 			levelSalt := uint64(band)<<32 | uint64(idx) //nolint:gosec // small non-negative ints
 			f1, f2 := noise.Worley(ctx.Seed^crackleSeedSalt^levelSalt, u*p.crackleRes, v*p.crackleRes)
-			if m := 1 - smoothstep(0.03, 0.13, f2-f1); m > 0 {
-				h, sat, l := c.HSL()
-				const contrast = 0.14
-				if l < 0.5 {
-					l += contrast
-				} else {
-					l -= contrast
-				}
-				c = palette.Lerp(c, palette.FromHSL(h, sat, l), boosts[idx]*m)
+			if m := 1 - mathx.Smoothstep(0.03, 0.13, f2-f1); m > 0 {
+				c = palette.Lerp(c, c.ContrastShade(0.14), boosts[idx]*m)
 			}
 		}
 
@@ -412,12 +409,6 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 			func(r *rand.Rand) float64 { return 0.5 + r.Float64()*0.4 })
 	}
 	return p
-}
-
-// smoothstep is the standard cubic step from 0 (x≤lo) to 1 (x≥hi).
-func smoothstep(lo, hi, x float64) float64 {
-	t := math.Min(1, math.Max(0, (x-lo)/(hi-lo)))
-	return t * t * (3 - 2*t)
 }
 
 // hueDist is the angular hue distance between two colors in degrees.
@@ -562,9 +553,4 @@ func (s *Sketch) shadeRelief(field *noise.Perlin, p plan, u, v, bandFrac float64
 		G: c.G*shade + spec,
 		B: c.B*shade + spec,
 	}.Clamp()
-}
-
-// remap maps x from [lo, hi] to [0,1]; Discrete.At clamps the result.
-func remap(x, lo, hi float64) float64 {
-	return (x - lo) / (hi - lo)
 }

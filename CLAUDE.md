@@ -50,19 +50,22 @@ PNG** to look at it. For sketch 001 compare against the target image at
    conversion. Palettes originate from the ColorLisa data and keep
    artist/artwork provenance.
 4. **Dependency direction**: `cmd → sketch → {gradient, noise, render} →
-   palette → stdlib`. `palette` and `noise` import stdlib only. No art logic
-   in `cmd`.
+   palette → mathx → stdlib`. `mathx` and `noise` import stdlib only. No
+   art logic and no sketch-specific code in `cmd` (sketch options live in
+   the sketch via `sketch.Configurable`).
 
 ## Layout
 
 ```
-cmd/staticart/        CLI (wiring only)
-internal/palette/     Color type + ops, ColorLisa palette data
-internal/gradient/    cosine / sampled / shuffled gradients
-internal/noise/       Perlin + fBm (in-repo, no deps)
-internal/render/      parallel pixel loop, size profiles, PNG/JPEG encode
-internal/sketch/      Sketch interface, Context, registry
-internal/sketch/<x>/  one package per sketch + its testdata/ goldens
+cmd/staticart/          CLI (generic wiring only — no sketch specifics)
+internal/mathx/         Clamp01 / Remap / Smoothstep (leaf)
+internal/palette/       Color type + ops, ColorLisa palette data
+internal/gradient/      cosine / HSL / discrete / terraced gradients
+internal/noise/         Perlin + fBm, Worley cell noise, Hash01 (leaf)
+internal/render/        pixel loop (AA, dither, 16-bit), profiles, encode+metadata
+internal/sketch/        Sketch + Configurable interfaces, Context, registry
+internal/sketch/sketchtest/  shared test helpers (goldens, determinism)
+internal/sketch/<x>/    one package per sketch + its testdata/ goldens
 ```
 
 ## How to add a sketch
@@ -71,9 +74,12 @@ internal/sketch/<x>/  one package per sketch + its testdata/ goldens
    checklist).
 2. Create `internal/sketch/<name>/` implementing the `sketch.Sketch`
    interface; tunables are struct fields with defaults in `New()`.
-3. Register it in the registry wiring used by `cmd`.
-4. Tests: determinism (64×64, same seed twice → identical) + golden PNG in
-   `testdata/` (regenerate with `-update`, eyeball before committing).
+3. Register it in the registry wiring used by `cmd`. Sketch-specific CLI
+   options: implement `sketch.Configurable` in the sketch package (see
+   tapestry's options.go) — never add sketch flags to `cmd`.
+4. Tests via `sketchtest`: determinism, plan-bounds over many seeds, and a
+   golden PNG in `testdata/` (regenerate with `make golden`, eyeball
+   before committing).
 5. Render previews, check against the spec's acceptance list, iterate.
 
 ## Engineering standards

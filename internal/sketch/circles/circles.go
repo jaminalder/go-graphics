@@ -13,6 +13,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -127,14 +128,8 @@ func (c *circleSpec) eval(u, v float64) palette.Color {
 		ci, cj, f1, f2 := noise.WorleyCell(c.salt, px/c.scale, py/c.scale)
 		col := shadeAt(ci, cj)
 		// Subtle tone-on-tone border, as in tapestry's crackle.
-		if m := 1 - smoothstep(0.04, 0.14, f2-f1); m > 0 {
-			h, sat, l := col.HSL()
-			if l < 0.5 {
-				l += 0.12
-			} else {
-				l -= 0.12
-			}
-			col = palette.Lerp(col, palette.FromHSL(h, sat, l), 0.7*m)
+		if m := 1 - mathx.Smoothstep(0.04, 0.14, f2-f1); m > 0 {
+			col = palette.Lerp(col, col.ContrastShade(0.12), 0.7*m)
 		}
 		return col
 	}
@@ -206,10 +201,4 @@ func shadeLadder(base palette.Color, count int) []palette.Color {
 		shades[i] = palette.FromHSL(h, s, lo+t*(hi-lo))
 	}
 	return shades
-}
-
-// smoothstep is the standard cubic step from 0 (x≤lo) to 1 (x≥hi).
-func smoothstep(lo, hi, x float64) float64 {
-	t := math.Min(1, math.Max(0, (x-lo)/(hi-lo)))
-	return t * t * (3 - 2*t)
 }

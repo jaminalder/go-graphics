@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"sort"
 
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/palette"
 )
 
@@ -39,7 +40,7 @@ func CosineBetween(c1, c2 palette.Color) Cosine {
 
 // At evaluates the gradient; t is clamped to [0,1] and the result to valid sRGB.
 func (g Cosine) At(t float64) palette.Color {
-	t = clamp01(t)
+	t = mathx.Clamp01(t)
 	eval := func(i int) float64 {
 		return g.A[i] + g.B[i]*math.Cos(2*math.Pi*(g.C[i]*t+g.D[i]))
 	}
@@ -58,7 +59,7 @@ func HSLBetween(c1, c2 palette.Color) SmoothHSL { return SmoothHSL{c1, c2} }
 
 // At implements Gradient.
 func (g SmoothHSL) At(t float64) palette.Color {
-	ease := (1 - math.Cos(math.Pi*clamp01(t))) / 2
+	ease := (1 - math.Cos(math.Pi*mathx.Clamp01(t))) / 2
 	return palette.LerpHSL(g.C1, g.C2, ease)
 }
 
@@ -88,7 +89,7 @@ func (d Discrete) At(t float64) palette.Color {
 // index and the fractional position within that band (0 = lower edge,
 // →1 = upper edge). Used by relief shading to find band boundaries.
 func Locate(t float64, n int) (idx int, frac float64) {
-	tb := clamp01(t) * float64(n)
+	tb := mathx.Clamp01(t) * float64(n)
 	idx = int(tb)
 	if idx >= n {
 		return n - 1, 1
@@ -143,7 +144,7 @@ func (tg Terraced) At(t float64) palette.Color {
 // Locate returns the terrace index for t (clamped to [0,1]) and the
 // fractional position within that terrace (0 = lower edge, →1 = upper).
 func (tg Terraced) Locate(t float64) (idx int, frac float64) {
-	t = clamp01(t)
+	t = mathx.Clamp01(t)
 	idx = sort.SearchFloat64s(tg.ends, t)
 	if idx >= len(tg.ends) {
 		idx = len(tg.ends) - 1
@@ -166,21 +167,3 @@ func (tg Terraced) Band(i int) palette.Color { return tg.colors[i] }
 
 // Len returns the number of terraces.
 func (tg Terraced) Len() int { return len(tg.colors) }
-
-// Permuted returns a copy reordered by perm (s[i] = d[perm[i]]). Applying
-// one permutation to several gradients keeps them band-aligned — band i is
-// "the same ring" in each. len(perm) must equal len(d).
-func (d Discrete) Permuted(perm []int) Discrete {
-	if len(perm) != len(d) {
-		panic("gradient: permutation length mismatch")
-	}
-	s := make(Discrete, len(d))
-	for i, p := range perm {
-		s[i] = d[p]
-	}
-	return s
-}
-
-func clamp01(v float64) float64 {
-	return math.Min(1, math.Max(0, v))
-}

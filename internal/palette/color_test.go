@@ -143,15 +143,18 @@ func TestDesaturate(t *testing.T) {
 	}
 }
 
-func TestSaturate(t *testing.T) {
-	c := MustHex("#8A6E5A") // muted brown
-	if got := c.Saturate(0); !almostEqual(got, c) {
-		t.Errorf("Saturate(0) changed color: %v -> %v", c, got)
+func TestContrastShade(t *testing.T) {
+	dark := MustHex("#2A2A40")
+	light := MustHex("#E8E0C8")
+	_, _, ld := dark.HSL()
+	_, _, ld2 := dark.ContrastShade(0.14).HSL()
+	if ld2 <= ld {
+		t.Errorf("dark color should lighten: %v -> %v", ld, ld2)
 	}
-	_, s0, _ := c.hsl()
-	_, s1, _ := c.Saturate(0.5).hsl()
-	if s1 <= s0 {
-		t.Errorf("Saturate(0.5) did not increase saturation: %v -> %v", s0, s1)
+	_, _, ll := light.HSL()
+	_, _, ll2 := light.ContrastShade(0.14).HSL()
+	if ll2 >= ll {
+		t.Errorf("light color should darken: %v -> %v", ll, ll2)
 	}
 }
 
