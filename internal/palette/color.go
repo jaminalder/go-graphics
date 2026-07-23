@@ -86,6 +86,24 @@ func (c Color) Lighten(amount float64) Color {
 	return fromHSL(h, s, l+(1-l)*clamp01(amount))
 }
 
+// SRGBToLinear converts one sRGB-encoded channel to linear light.
+func SRGBToLinear(v float64) float64 {
+	v = clamp01(v)
+	if v <= 0.04045 {
+		return v / 12.92
+	}
+	return math.Pow((v+0.055)/1.055, 2.4)
+}
+
+// LinearToSRGB converts one linear-light channel to sRGB encoding.
+func LinearToSRGB(v float64) float64 {
+	v = clamp01(v)
+	if v <= 0.0031308 {
+		return 12.92 * v
+	}
+	return 1.055*math.Pow(v, 1/2.4) - 0.055
+}
+
 // Luminance is the relative luminance approximation
 // 0.2126·R + 0.7152·G + 0.0722·B on the clamped color.
 func (c Color) Luminance() float64 {

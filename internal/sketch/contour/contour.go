@@ -15,7 +15,6 @@ import (
 	"github.com/jaminalder/go-graphics/internal/gradient"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
-	"github.com/jaminalder/go-graphics/internal/render"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 )
 
@@ -76,7 +75,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 
 	field := noise.New(ctx.Seed)
 
-	img := render.RasterSS(ctx.Width, ctx.Height, ctx.Samples(), func(u, v float64) palette.Color {
+	img := sketch.Raster(ctx, func(u, v float64) palette.Color {
 		n := field.FBM(u*s.Frequency, v*s.Frequency, s.Octaves) * s.Gain
 		switch {
 		case n < s.LowThreshold:

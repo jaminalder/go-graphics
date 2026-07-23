@@ -61,6 +61,19 @@ func TestLerp(t *testing.T) {
 	}
 }
 
+func TestSRGBTransferRoundTrip(t *testing.T) {
+	for _, v := range []float64{0, 0.001, 0.04, 0.2, 0.5, 0.7354, 1} {
+		back := LinearToSRGB(SRGBToLinear(v))
+		if math.Abs(back-v) > 1e-9 {
+			t.Errorf("round trip %v -> %v", v, back)
+		}
+	}
+	// 50% linear gray encodes to ~0.7354 sRGB.
+	if got := LinearToSRGB(0.5); math.Abs(got-0.7354) > 5e-4 {
+		t.Errorf("LinearToSRGB(0.5) = %v, want ≈0.7354", got)
+	}
+}
+
 func TestLuminance(t *testing.T) {
 	if got := (Color{1, 1, 1}).Luminance(); math.Abs(got-1) > 1e-9 {
 		t.Errorf("white luminance = %v, want 1", got)

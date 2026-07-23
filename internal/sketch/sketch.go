@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/render"
 )
 
 // Context carries everything a sketch may depend on. All randomness must
@@ -22,6 +23,9 @@ type Context struct {
 	// AA is the supersampling factor per axis (0 or 1 = off). Purely a
 	// quality setting: it never changes the composition.
 	AA int
+
+	// Deep renders to 16-bit (archival/print master, PNG only).
+	Deep bool
 }
 
 // Samples returns the effective supersampling factor (≥ 1).
@@ -37,6 +41,16 @@ func (c Context) Samples() int {
 // disturbs the values an existing stream produces.
 func (c Context) RNG(stream uint64) *rand.Rand {
 	return rand.New(rand.NewPCG(c.Seed, stream))
+}
+
+// Raster renders f according to the Context's quality settings (AA
+// supersampling, 8- vs 16-bit). Sketches should use this instead of
+// calling the render package directly.
+func Raster(ctx Context, f render.PixelFunc) image.Image {
+	if ctx.Deep {
+		return render.RasterDeep(ctx.Width, ctx.Height, ctx.Samples(), f)
+	}
+	return render.RasterSS(ctx.Width, ctx.Height, ctx.Samples(), f)
 }
 
 // Sketch is one artwork algorithm: a deterministic function of

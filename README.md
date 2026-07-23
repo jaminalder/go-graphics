@@ -35,7 +35,10 @@ go run ./cmd/staticart render contour --profile print --seed 42 \
 | `web` | 2000² px | web/social |
 | `print` | 6000² px | ≈ 50×50 cm at 300 DPI |
 
-Same seed ⇒ same composition at every size.
+Same seed ⇒ same composition at every size. **For final print renders use
+`--aa 3`** (9× supersampling; ~2–3× render time) and optionally `--deep`
+for a 16-bit PNG master. All files embed sRGB + 300 DPI metadata and the
+full render recipe (view with `strings file.png | grep staticart`).
 
 ## Project layout
 

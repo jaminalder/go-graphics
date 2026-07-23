@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
 	"runtime"
 	"sync"
@@ -28,13 +29,51 @@ func Raster(w, h int, f PixelFunc) *image.NRGBA {
 }
 
 // RasterSS is Raster with samples×samples supersampling per pixel
-// (anti-aliasing): band and crack boundaries lose their pixel staircase.
-// samples ≤ 1 means plain center sampling.
+// (anti-aliasing). Subsamples are averaged in linear light — averaging
+// sRGB-encoded values would render dark fringes along high-contrast
+// edges. Output is 8-bit with deterministic dithered quantization (IGN),
+// which prevents banding in slow gradients. samples ≤ 1 means plain
+// center sampling.
 func RasterSS(w, h, samples int, f PixelFunc) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	rasterLoop(w, h, samples, f, func(x, y int, c palette.Color) {
+		d := ign(x, y)
+		i := img.PixOffset(x, y)
+		img.Pix[i] = quant8(c.R, d)
+		img.Pix[i+1] = quant8(c.G, d)
+		img.Pix[i+2] = quant8(c.B, d)
+		img.Pix[i+3] = 255
+	})
+	return img
+}
+
+// RasterDeep is RasterSS with 16-bit output (no dithering needed) for
+// archival/print masters; png.Encode writes it as a 16-bit PNG.
+func RasterDeep(w, h, samples int, f PixelFunc) *image.NRGBA64 {
+	img := image.NewNRGBA64(image.Rect(0, 0, w, h))
+	rasterLoop(w, h, samples, f, func(x, y int, c palette.Color) {
+		i := img.PixOffset(x, y)
+		putU16 := func(off int, v float64) {
+			q := uint16(math.Round(math.Min(1, math.Max(0, v)) * 65535))
+			img.Pix[off] = uint8(q >> 8)
+			img.Pix[off+1] = uint8(q)
+		}
+		putU16(i, c.R)
+		putU16(i+2, c.G)
+		putU16(i+4, c.B)
+		img.Pix[i+6] = 255
+		img.Pix[i+7] = 255
+	})
+	return img
+}
+
+// rasterLoop runs the parallel sampling loop and hands each pixel's final
+// (still-float) color to put. With samples > 1 the subsample average is
+// computed in linear light.
+func rasterLoop(w, h, samples int, f PixelFunc, put func(x, y int, c palette.Color)) {
 	if samples < 1 {
 		samples = 1
 	}
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
 	scale := 1 / float64(h)
 	sub := 1 / float64(samples)
 	norm := 1 / float64(samples*samples)
@@ -48,31 +87,49 @@ func RasterSS(w, h, samples int, f PixelFunc) *image.NRGBA {
 		go func(y0, y1 int) {
 			defer wg.Done()
 			for y := y0; y < y1; y++ {
-				i := img.PixOffset(0, y)
 				for x := 0; x < w; x++ {
-					var acc palette.Color
+					if samples == 1 {
+						u := (float64(x) + 0.5) * scale
+						v := (float64(y) + 0.5) * scale
+						put(x, y, f(u, v))
+						continue
+					}
+					var lr, lg, lb float64
 					for sj := 0; sj < samples; sj++ {
 						v := (float64(y) + (float64(sj)+0.5)*sub) * scale
 						for si := 0; si < samples; si++ {
 							u := (float64(x) + (float64(si)+0.5)*sub) * scale
 							c := f(u, v)
-							acc.R += c.R
-							acc.G += c.G
-							acc.B += c.B
+							lr += palette.SRGBToLinear(c.R)
+							lg += palette.SRGBToLinear(c.G)
+							lb += palette.SRGBToLinear(c.B)
 						}
 					}
-					c := palette.Color{R: acc.R * norm, G: acc.G * norm, B: acc.B * norm}.NRGBA()
-					img.Pix[i] = c.R
-					img.Pix[i+1] = c.G
-					img.Pix[i+2] = c.B
-					img.Pix[i+3] = c.A
-					i += 4
+					put(x, y, palette.Color{
+						R: palette.LinearToSRGB(lr * norm),
+						G: palette.LinearToSRGB(lg * norm),
+						B: palette.LinearToSRGB(lb * norm),
+					})
 				}
 			}
 		}(start, end)
 	}
 	wg.Wait()
-	return img
+}
+
+// ign is interleaved gradient noise in [0,1) — a cheap, deterministic,
+// well-distributed dither pattern.
+func ign(x, y int) float64 {
+	return math.Mod(52.9829189*math.Mod(0.06711056*float64(x)+0.00583715*float64(y), 1), 1)
+}
+
+// quant8 quantizes v to 8 bits with dither offset d in [0,1).
+func quant8(v, d float64) uint8 {
+	q := math.Floor(math.Min(1, math.Max(0, v))*255 + d)
+	if q > 255 {
+		q = 255
+	}
+	return uint8(q)
 }
 
 // WritePNG encodes img to path as PNG.

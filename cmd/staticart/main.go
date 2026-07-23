@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
@@ -79,7 +80,8 @@ func runRender(args []string) error {
 	width := fs.Int("width", 0, "override width in px (requires --height)")
 	height := fs.Int("height", 0, "override height in px (requires --width)")
 	seed := fs.Uint64("seed", 42, "random seed (same seed → same image)")
-	aa := fs.Int("aa", 2, "anti-aliasing: supersamples per axis (1 = off)")
+	aa := fs.Int("aa", 2, "anti-aliasing: supersamples per axis (1 = off; use 3 for print)")
+	deep := fs.Bool("deep", false, "render a 16-bit PNG master (archival/print; png only)")
 	smooth := fs.Float64("smooth", 0, "tapestry only: fBm persistence override, e.g. 0.35 for smoother terrace lines (0 = default 0.5)")
 	paletteName := fs.String("palette", "kandinsky-soft-pressure", "palette slug (see: staticart palettes)")
 	format := fs.String("format", "png", "output format: png|jpg")
@@ -175,7 +177,11 @@ func runRender(args []string) error {
 		w, h = p.Width, p.Height
 	}
 
-	ctx := sketch.Context{Width: w, Height: h, Seed: *seed, Palette: pal, AA: *aa}
+	if *deep && *format != "png" {
+		return fmt.Errorf("--deep requires --format png")
+	}
+
+	ctx := sketch.Context{Width: w, Height: h, Seed: *seed, Palette: pal, AA: *aa, Deep: *deep}
 	img, err := s.Render(ctx)
 	if err != nil {
 		return err
@@ -186,11 +192,17 @@ func runRender(args []string) error {
 	}
 	file := fmt.Sprintf("%s_%s_%d_%dx%d.%s", fileName, pal.Slug, *seed, w, h, *format)
 	path := filepath.Join(*outDir, file)
+
+	meta := render.Meta{
+		DPI:      300,
+		Software: "staticart " + buildRevision(),
+		Comment:  recipe(name, fs),
+	}
 	switch *format {
 	case "png":
-		err = render.WritePNG(path, img)
+		err = render.WritePNGMeta(path, img, meta)
 	case "jpg", "jpeg":
-		err = render.WriteJPEG(path, img)
+		err = render.WriteJPEGMeta(path, img, meta)
 	default:
 		return fmt.Errorf("unknown format %q (png|jpg)", *format)
 	}
@@ -199,4 +211,34 @@ func runRender(args []string) error {
 	}
 	fmt.Println(path)
 	return nil
+}
+
+// recipe reconstructs the full canonical render command — every flag at
+// its effective value — so an image file stays reproducible after any
+// rename (embedded via render.Meta).
+func recipe(sketchName string, fs *flag.FlagSet) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "staticart render %s", sketchName)
+	always := map[string]bool{"seed": true, "palette": true, "profile": true, "aa": true}
+	fs.VisitAll(func(f *flag.Flag) {
+		if f.Name == "out" {
+			return // output location is not part of the artwork
+		}
+		if f.Value.String() != f.DefValue || always[f.Name] {
+			fmt.Fprintf(&b, " --%s %s", f.Name, f.Value.String())
+		}
+	})
+	return b.String()
+}
+
+// buildRevision returns the VCS revision baked into the binary, if any.
+func buildRevision() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" && len(s.Value) >= 12 {
+				return s.Value[:12]
+			}
+		}
+	}
+	return "dev"
 }

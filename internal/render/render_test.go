@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -11,18 +12,22 @@ import (
 )
 
 func TestRasterCoordinates(t *testing.T) {
+	near := func(got uint8, want int) bool {
+		d := int(got) - want
+		return d >= -1 && d <= 1 // dithered quantization may shift by 1
+	}
 	// 4 wide × 2 high: v spans [0,1] over height, u spans [0,2] over width.
 	img := Raster(4, 2, func(u, v float64) palette.Color {
 		return palette.Color{R: u / 2, G: v}
 	})
 	// Pixel (0,0) center: u=0.25, v=0.25 → R=0.125·255≈32, G=64.
 	c := img.NRGBAAt(0, 0)
-	if c.R != 32 || c.G != 64 {
+	if !near(c.R, 32) || !near(c.G, 64) {
 		t.Errorf("pixel (0,0) = %v, want R≈32 G≈64", c)
 	}
 	// Pixel (3,1) center: u=1.75, v=0.75 → R=0.875·255≈223, G=191.
 	c = img.NRGBAAt(3, 1)
-	if c.R != 223 || c.G != 191 {
+	if !near(c.R, 223) || !near(c.G, 191) {
 		t.Errorf("pixel (3,1) = %v, want R≈223 G≈191", c)
 	}
 }
@@ -46,7 +51,7 @@ func TestRasterSS(t *testing.T) {
 	ss := RasterSS(16, 16, 3, f)
 	for i := 0; i < len(plain.Pix); i++ {
 		d := int(plain.Pix[i]) - int(ss.Pix[i])
-		if d < -1 || d > 1 {
+		if d < -2 || d > 2 {
 			t.Fatalf("pixel byte %d differs by more than rounding: %d vs %d", i, plain.Pix[i], ss.Pix[i])
 		}
 	}
@@ -90,6 +95,81 @@ func TestWritePNGRoundTrip(t *testing.T) {
 	}
 	if decoded.Bounds() != img.Bounds() {
 		t.Errorf("bounds changed: %v vs %v", decoded.Bounds(), img.Bounds())
+	}
+}
+
+func TestLinearAveraging(t *testing.T) {
+	// A pixel whose subsamples are half black / half white must average in
+	// linear light: sRGB(0.5 linear) ≈ 0.735 → ~187, not the sRGB-space
+	// average 128.
+	f := func(u, v float64) palette.Color {
+		if v < 0.5 {
+			return palette.Color{R: 1, G: 1, B: 1}
+		}
+		return palette.Color{}
+	}
+	img := RasterSS(1, 1, 2, f) // 1×1 canvas: subsamples straddle v=0.5
+	got := img.NRGBAAt(0, 0).R
+	if got < 183 || got > 191 {
+		t.Errorf("half black/white pixel = %d, want ≈187 (linear-light average)", got)
+	}
+}
+
+func TestRasterDeep(t *testing.T) {
+	f := func(u, v float64) palette.Color { return palette.Color{R: v, G: 0.5, B: 0.25} }
+	a := RasterDeep(8, 8, 2, f)
+	b := RasterDeep(8, 8, 2, f)
+	if !bytes.Equal(a.Pix, b.Pix) {
+		t.Error("deep render not deterministic")
+	}
+	// 16-bit must resolve steps that 8-bit cannot: a v-ramp over 8 rows in
+	// [0,1] has distinct 16-bit values per row.
+	prev := a.NRGBA64At(0, 0).R
+	for y := 1; y < 8; y++ {
+		cur := a.NRGBA64At(0, y).R
+		if cur == prev {
+			t.Fatalf("rows %d and %d have identical 16-bit values", y-1, y)
+		}
+		prev = cur
+	}
+}
+
+func TestWriteMeta(t *testing.T) {
+	img := Raster(8, 8, func(u, v float64) palette.Color { return palette.Color{R: u, G: v} })
+	m := Meta{DPI: 300, Software: "staticart test", Comment: "staticart render tapestry --seed 1"}
+
+	pngPath := filepath.Join(t.TempDir(), "m.png")
+	if err := WritePNGMeta(pngPath, img, m); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(pngPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"sRGB", "pHYs", "Software\x00staticart test", "Comment\x00staticart render"} {
+		if !bytes.Contains(raw, []byte(want)) {
+			t.Errorf("PNG missing %q", want)
+		}
+	}
+	if _, err := png.Decode(bytes.NewReader(raw)); err != nil {
+		t.Errorf("PNG with metadata no longer decodes: %v", err)
+	}
+
+	jpgPath := filepath.Join(t.TempDir(), "m.jpg")
+	if err := WriteJPEGMeta(jpgPath, img, m); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(jpgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"JFIF", "staticart render"} {
+		if !bytes.Contains(raw, []byte(want)) {
+			t.Errorf("JPEG missing %q", want)
+		}
+	}
+	if _, err := jpeg.Decode(bytes.NewReader(raw)); err != nil {
+		t.Errorf("JPEG with metadata no longer decodes: %v", err)
 	}
 }
 

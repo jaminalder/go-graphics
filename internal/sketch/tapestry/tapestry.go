@@ -20,7 +20,6 @@ import (
 	"github.com/jaminalder/go-graphics/internal/gradient"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
-	"github.com/jaminalder/go-graphics/internal/render"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 )
 
@@ -241,7 +240,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	p := s.plan(ctx)
 	field := noise.New(ctx.Seed)
 
-	img := render.RasterSS(ctx.Width, ctx.Height, ctx.Samples(), func(u, v float64) palette.Color {
+	img := sketch.Raster(ctx, func(u, v float64) palette.Color {
 		// Layers 1+2: contour banding with terrain-owned colorways —
 		// which value band this pixel's noise falls in decides both the
 		// ring and its color register. bandFrac feeds relief shading.
