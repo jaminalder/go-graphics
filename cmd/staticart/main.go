@@ -19,6 +19,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/circles"
 	"github.com/jaminalder/go-graphics/internal/sketch/contour"
 	"github.com/jaminalder/go-graphics/internal/sketch/drift"
+	"github.com/jaminalder/go-graphics/internal/sketch/rounds"
 	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
 )
 
@@ -27,6 +28,7 @@ func registry() *sketch.Registry {
 		circles.New(),
 		contour.New(),
 		drift.New(),
+		rounds.New(),
 		tapestry.New(),
 	)
 }

@@ -68,12 +68,13 @@ func Loop(rng *rand.Rand, cx, cy, r, wobble float64) []Pt {
 	return pts
 }
 
-// FillDisc paints a near-solid disc with a softly irregular edge by
-// stroking a tight spiral with a wide brush.
-func FillDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, col palette.Color, alpha float64) {
+// FillDisc paints a near-solid disc by stroking a tight spiral with a
+// wide brush; wobble (canvas units) sets the edge irregularity — 0 gives
+// a machine-perfect disc.
+func FillDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, col palette.Color, alpha, wobble float64) {
 	w := r * 0.55
 	turns := math.Max((r-w/2)/(w*0.45), 1)
-	path := Spiral(rng, cx, cy, 0, r-w/2, turns, r*0.03)
+	path := Spiral(rng, cx, cy, 0, r-w/2, turns, wobble)
 	c.Dab(cx, cy, w*0.6, col, alpha)
 	c.Stroke(path, w, col, alpha)
 }
@@ -84,7 +85,7 @@ func FillDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, col palette.Color, a
 func RingsDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, ink, under palette.Color) {
 	ox := (rng.Float64() - 0.5) * 0.18 * r
 	oy := (rng.Float64() - 0.5) * 0.18 * r
-	FillDisc(c, rng, cx+ox, cy+oy, r*0.97, under, 0.95)
+	FillDisc(c, rng, cx+ox, cy+oy, r*0.97, under, 0.95, r*0.97*0.03)
 
 	spacing := r / (5.5 + rng.Float64()*3.5)
 	turns := (r*0.92 - r*0.15) / spacing
@@ -98,7 +99,7 @@ func RingsDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, ink, under palette.
 func ScribbleDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, ink, under palette.Color) {
 	ox := (rng.Float64() - 0.5) * 0.14 * r
 	oy := (rng.Float64() - 0.5) * 0.14 * r
-	FillDisc(c, rng, cx+ox, cy+oy, r*0.95, under, 0.9)
+	FillDisc(c, rng, cx+ox, cy+oy, r*0.95, under, 0.9, r*0.95*0.03)
 
 	loops := 9 + rng.IntN(6)
 	for i := range loops {
@@ -117,6 +118,6 @@ func ScribbleDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, ink, under palet
 func GouacheDisc(c *Canvas, rng *rand.Rand, cx, cy, r float64, col, shadow palette.Color) {
 	ox := (rng.Float64() - 0.5) * 0.22 * r
 	oy := (rng.Float64() - 0.5) * 0.22 * r
-	FillDisc(c, rng, cx+ox, cy+oy, r*0.96, shadow, 0.85)
-	FillDisc(c, rng, cx, cy, r*0.94, col, 0.96)
+	FillDisc(c, rng, cx+ox, cy+oy, r*0.96, shadow, 0.85, r*0.96*0.03)
+	FillDisc(c, rng, cx, cy, r*0.94, col, 0.96, r*0.94*0.03)
 }
