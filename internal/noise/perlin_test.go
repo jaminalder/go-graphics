@@ -66,6 +66,18 @@ func TestFBMOctaveSum(t *testing.T) {
 	}
 }
 
+func TestFBMPersistence(t *testing.T) {
+	p := New(11)
+	x, y := 0.37, 1.91
+	if p.FBMP(x, y, 2, 0.5) != p.FBM(x, y, 2) {
+		t.Error("FBMP with persistence 0.5 should equal FBM")
+	}
+	want := p.At(x, y) + p.At(2*x, 2*y)*0.3 + p.At(4*x, 4*y)*0.09
+	if got := p.FBMP(x, y, 2, 0.3); math.Abs(got-want) > 1e-12 {
+		t.Errorf("FBMP(persistence 0.3) = %v, want %v", got, want)
+	}
+}
+
 func TestContinuity(t *testing.T) {
 	// Noise must not jump across cell boundaries.
 	p := New(5)

@@ -18,6 +18,18 @@ type Context struct {
 	Width, Height int
 	Seed          uint64
 	Palette       palette.Palette
+
+	// AA is the supersampling factor per axis (0 or 1 = off). Purely a
+	// quality setting: it never changes the composition.
+	AA int
+}
+
+// Samples returns the effective supersampling factor (≥ 1).
+func (c Context) Samples() int {
+	if c.AA < 1 {
+		return 1
+	}
+	return c.AA
 }
 
 // RNG returns a generator derived from the seed and a caller-chosen stream

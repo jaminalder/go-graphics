@@ -88,6 +88,20 @@ palette works: lightest color → smooth middle gradient anchor, darkest →
 region tint, two random picks of the remaining three → the shuffled gradient
 anchors. This is the main aesthetic guardrail.
 
+## Line quality
+
+Two independent controls (2026-07-23, after review that terrace lines
+should be smoother):
+
+- **Anti-aliasing** — `Context.AA` supersampling (CLI `--aa`, default 2):
+  removes the pixel staircase on every boundary. Pure quality setting,
+  composition-identical; golden tests render at AA 1.
+- **Persistence** — `Sketch.Persistence` (CLI `--smooth`, default 0.5):
+  damps the high-frequency fBm octaves. Lower values (≈0.35) remove the
+  small-scale crinkle from the contour *geometry* — hills stay in place,
+  coastlines calm down. Note this changes band membership slightly, so it
+  is an opt-in look variation, not a pure quality setting.
+
 ## Determinism & resolution notes
 
 - RNG streams: 1 shuffle-low, 2 shuffle-high, 3 stripe layout, 4 parameter

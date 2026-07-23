@@ -38,6 +38,39 @@ func TestRasterDeterministicUnderParallelism(t *testing.T) {
 	}
 }
 
+func TestRasterSS(t *testing.T) {
+	// On a linear ramp, supersampling averages to the same value as
+	// center sampling — AA must not shift smooth content.
+	f := func(u, v float64) palette.Color { return palette.Color{R: u / 2, G: v, B: 0.25} }
+	plain := Raster(16, 16, f)
+	ss := RasterSS(16, 16, 3, f)
+	for i := 0; i < len(plain.Pix); i++ {
+		d := int(plain.Pix[i]) - int(ss.Pix[i])
+		if d < -1 || d > 1 {
+			t.Fatalf("pixel byte %d differs by more than rounding: %d vs %d", i, plain.Pix[i], ss.Pix[i])
+		}
+	}
+
+	// On a hard edge, supersampling must produce intermediate values.
+	step := func(u, v float64) palette.Color {
+		if u > 1.03 { // splits pixel x=16's subsamples at h=16
+			return palette.Color{R: 1, G: 1, B: 1}
+		}
+		return palette.Color{}
+	}
+	ssEdge := RasterSS(32, 16, 4, step)
+	found := false
+	for x := 0; x < 32 && !found; x++ {
+		px := ssEdge.NRGBAAt(x, 8).R
+		if px > 20 && px < 235 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("no anti-aliased intermediate pixels found along the edge")
+	}
+}
+
 func TestWritePNGRoundTrip(t *testing.T) {
 	img := Raster(8, 8, func(u, v float64) palette.Color {
 		return palette.Color{R: u, G: v, B: 0.5}

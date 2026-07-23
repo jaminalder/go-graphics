@@ -76,7 +76,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 
 	field := noise.New(ctx.Seed)
 
-	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
+	img := render.RasterSS(ctx.Width, ctx.Height, ctx.Samples(), func(u, v float64) palette.Color {
 		n := field.FBM(u*s.Frequency, v*s.Frequency, s.Octaves) * s.Gain
 		switch {
 		case n < s.LowThreshold:

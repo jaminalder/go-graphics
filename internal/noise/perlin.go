@@ -67,12 +67,19 @@ func (p *Perlin) At(x, y float64) float64 {
 // At(x·2^o, y·2^o) / 2^o. maxOctave 0 is a single octave. The caller applies
 // the base frequency to x and y beforehand (cycles per canvas unit).
 func (p *Perlin) FBM(x, y float64, maxOctave int) float64 {
+	return p.FBMP(x, y, maxOctave, 0.5)
+}
+
+// FBMP is FBM with an explicit persistence: octave o contributes
+// At(x·2^o, y·2^o) · persistence^o. Lower persistence damps the
+// high-frequency octaves — same macro shapes, smoother contour lines.
+func (p *Perlin) FBMP(x, y float64, maxOctave int, persistence float64) float64 {
 	sum := 0.0
 	freq, amp := 1.0, 1.0
 	for o := 0; o <= maxOctave; o++ {
 		sum += p.At(x*freq, y*freq) * amp
 		freq *= 2
-		amp /= 2
+		amp *= persistence
 	}
 	return sum
 }

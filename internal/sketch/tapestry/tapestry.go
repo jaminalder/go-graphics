@@ -42,6 +42,7 @@ const crackleSeedSalt = 0x63726b // "crk"
 // Render (see the spec); these fields bound or fix that variation.
 type Sketch struct {
 	Octaves     int     // contour fBm max octave index
+	Persistence float64 // fBm octave amplitude falloff; lower = smoother terrace lines
 	GrainRes    float64 // grain lattice cells per canvas unit
 	StreakRatio float64 // streak-grain cell elongation (y cells = GrainRes/StreakRatio)
 
@@ -118,6 +119,7 @@ const reliefEps = 0.0005
 func New() *Sketch {
 	return &Sketch{
 		Octaves:      2,
+		Persistence:  0.5,
 		GrainRes:     1400,
 		StreakRatio:  6,
 		ReliefParams: DefaultReliefParams(),
@@ -239,11 +241,11 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	p := s.plan(ctx)
 	field := noise.New(ctx.Seed)
 
-	img := render.Raster(ctx.Width, ctx.Height, func(u, v float64) palette.Color {
+	img := render.RasterSS(ctx.Width, ctx.Height, ctx.Samples(), func(u, v float64) palette.Color {
 		// Layers 1+2: contour banding with terrain-owned colorways —
 		// which value band this pixel's noise falls in decides both the
 		// ring and its color register. bandFrac feeds relief shading.
-		n := fold(field.FBM(u*p.freq, v*p.freq, s.Octaves), p.span)
+		n := fold(field.FBMP(u*p.freq, v*p.freq, s.Octaves, s.Persistence), p.span)
 		band, lo, hi := p.bandOf(n)
 		idx, bandFrac := p.grads[band].Locate(remap(n, lo, hi))
 		c := p.grads[band].Band(idx)
@@ -528,7 +530,7 @@ func (p *plan) stripeAt(u float64) stripe {
 // independent like everything else.
 func (s *Sketch) shadeRelief(field *noise.Perlin, p plan, u, v, bandFrac float64, c palette.Color) palette.Color {
 	rp := s.ReliefParams
-	h := func(x, y float64) float64 { return field.FBM(x*p.freq, y*p.freq, s.Octaves) }
+	h := func(x, y float64) float64 { return field.FBMP(x*p.freq, y*p.freq, s.Octaves, s.Persistence) }
 	hx := (h(u+reliefEps, v) - h(u-reliefEps, v)) / (2 * reliefEps)
 	hy := (h(u, v+reliefEps) - h(u, v-reliefEps)) / (2 * reliefEps)
 

@@ -79,6 +79,8 @@ func runRender(args []string) error {
 	width := fs.Int("width", 0, "override width in px (requires --height)")
 	height := fs.Int("height", 0, "override height in px (requires --width)")
 	seed := fs.Uint64("seed", 42, "random seed (same seed → same image)")
+	aa := fs.Int("aa", 2, "anti-aliasing: supersamples per axis (1 = off)")
+	smooth := fs.Float64("smooth", 0, "tapestry only: fBm persistence override, e.g. 0.35 for smoother terrace lines (0 = default 0.5)")
 	paletteName := fs.String("palette", "kandinsky-soft-pressure", "palette slug (see: staticart palettes)")
 	format := fs.String("format", "png", "output format: png|jpg")
 	outDir := fs.String("out", "out", "output directory")
@@ -148,6 +150,14 @@ func runRender(args []string) error {
 		ts.TerraceSeed = *terraceSeed
 		fileName += fmt.Sprintf("-t%d", *terraceSeed)
 	}
+	if *smooth != 0 {
+		ts, ok := s.(*tapestry.Sketch)
+		if !ok {
+			return fmt.Errorf("--smooth only applies to the tapestry sketch")
+		}
+		ts.Persistence = *smooth
+		fileName += fmt.Sprintf("-smooth%v", *smooth)
+	}
 	pal, ok := palette.ByName(*paletteName)
 	if !ok {
 		return fmt.Errorf("unknown palette %q (try: staticart palettes)", *paletteName)
@@ -165,7 +175,7 @@ func runRender(args []string) error {
 		w, h = p.Width, p.Height
 	}
 
-	ctx := sketch.Context{Width: w, Height: h, Seed: *seed, Palette: pal}
+	ctx := sketch.Context{Width: w, Height: h, Seed: *seed, Palette: pal, AA: *aa}
 	img, err := s.Render(ctx)
 	if err != nil {
 		return err

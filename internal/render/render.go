@@ -24,8 +24,20 @@ type PixelFunc func(u, v float64) palette.Color
 // uniform, so v spans [0,1] and u spans [0, w/h]. Rows are rendered in
 // parallel; output is deterministic because f is pure.
 func Raster(w, h int, f PixelFunc) *image.NRGBA {
+	return RasterSS(w, h, 1, f)
+}
+
+// RasterSS is Raster with samples×samples supersampling per pixel
+// (anti-aliasing): band and crack boundaries lose their pixel staircase.
+// samples ≤ 1 means plain center sampling.
+func RasterSS(w, h, samples int, f PixelFunc) *image.NRGBA {
+	if samples < 1 {
+		samples = 1
+	}
 	img := image.NewNRGBA(image.Rect(0, 0, w, h))
 	scale := 1 / float64(h)
+	sub := 1 / float64(samples)
+	norm := 1 / float64(samples*samples)
 
 	var wg sync.WaitGroup
 	workers := runtime.GOMAXPROCS(0)
@@ -36,11 +48,20 @@ func Raster(w, h int, f PixelFunc) *image.NRGBA {
 		go func(y0, y1 int) {
 			defer wg.Done()
 			for y := y0; y < y1; y++ {
-				v := (float64(y) + 0.5) * scale
 				i := img.PixOffset(0, y)
 				for x := 0; x < w; x++ {
-					u := (float64(x) + 0.5) * scale
-					c := f(u, v).NRGBA()
+					var acc palette.Color
+					for sj := 0; sj < samples; sj++ {
+						v := (float64(y) + (float64(sj)+0.5)*sub) * scale
+						for si := 0; si < samples; si++ {
+							u := (float64(x) + (float64(si)+0.5)*sub) * scale
+							c := f(u, v)
+							acc.R += c.R
+							acc.G += c.G
+							acc.B += c.B
+						}
+					}
+					c := palette.Color{R: acc.R * norm, G: acc.G * norm, B: acc.B * norm}.NRGBA()
 					img.Pix[i] = c.R
 					img.Pix[i+1] = c.G
 					img.Pix[i+2] = c.B
