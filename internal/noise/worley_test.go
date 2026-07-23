@@ -30,6 +30,33 @@ func TestWorleyOrderingAndRange(t *testing.T) {
 	}
 }
 
+func TestWorleyCellIdentity(t *testing.T) {
+	// Near a feature point, the nearest cell is that point's cell.
+	seed := uint64(5)
+	for i := int64(-3); i <= 3; i++ {
+		for j := int64(-3); j <= 3; j++ {
+			px := float64(i) + Hash01(seed^worleySaltX, i, j)
+			py := float64(j) + Hash01(seed^worleySaltY, i, j)
+			cx, cy, f1, _ := WorleyCell(seed, px, py)
+			if cx != i || cy != j {
+				t.Fatalf("at feature point of cell (%d,%d): got cell (%d,%d)", i, j, cx, cy)
+			}
+			if f1 > 1e-12 {
+				t.Fatalf("f1 at feature point = %v, want 0", f1)
+			}
+		}
+	}
+	// Cell identity varies across space.
+	seen := map[[2]int64]bool{}
+	for i := range 50 {
+		cx, cy, _, _ := WorleyCell(seed, float64(i)*0.9, float64(i)*0.7)
+		seen[[2]int64{cx, cy}] = true
+	}
+	if len(seen) < 20 {
+		t.Errorf("expected many distinct cells, got %d", len(seen))
+	}
+}
+
 func TestWorleyBordersExist(t *testing.T) {
 	// Somewhere on a dense sample grid the border metric f2-f1 must come
 	// close to zero (cell boundaries exist).

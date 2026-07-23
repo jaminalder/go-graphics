@@ -14,6 +14,13 @@ const (
 // to the nearest and second-nearest points. The cell borders — where
 // f2−f1 approaches 0 — form a crack network.
 func Worley(seed uint64, x, y float64) (f1, f2 float64) {
+	_, _, f1, f2 = WorleyCell(seed, x, y)
+	return f1, f2
+}
+
+// WorleyCell is Worley plus the identity (integer cell coordinates) of the
+// nearest feature point, for coloring Voronoi tiles individually.
+func WorleyCell(seed uint64, x, y float64) (cellX, cellY int64, f1, f2 float64) {
 	cx, cy := int64(math.Floor(x)), int64(math.Floor(y))
 	f1, f2 = math.MaxFloat64, math.MaxFloat64
 	for j := cy - 1; j <= cy+1; j++ {
@@ -25,10 +32,11 @@ func Worley(seed uint64, x, y float64) (f1, f2 float64) {
 			switch {
 			case d < f1:
 				f1, f2 = d, f1
+				cellX, cellY = i, j
 			case d < f2:
 				f2 = d
 			}
 		}
 	}
-	return f1, f2
+	return cellX, cellY, f1, f2
 }
