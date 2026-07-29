@@ -11,6 +11,7 @@ import (
 
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/render"
+	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
 // Context carries everything a sketch may depend on. All randomness must
@@ -71,6 +72,22 @@ type Configurable interface {
 	Sketch
 	Flags(fs *flag.FlagSet)
 	Configure() (suffix string, err error)
+}
+
+// Traited is implemented by sketches whose output space is described by a
+// trait schema (see internal/trait): a seed resolves to a set of discrete,
+// weighted, orthogonal choices before any continuous parameter is drawn.
+// cmd uses it to report the traits of a seed, to record them in the
+// rendered file's metadata, and to name the file after the ones that define
+// its identity. Deriving traits must be cheap — it happens before rendering.
+type Traited interface {
+	Sketch
+	// Schema is the sketch's output space.
+	Schema() trait.Schema
+	// Traits resolves the seed, with any CLI overrides applied.
+	Traits(ctx Context) trait.Set
+	// TraitSuffix is the output-filename fragment for a resolved set.
+	TraitSuffix(set trait.Set) string
 }
 
 // Registry is an explicit, immutable-after-construction set of sketches.

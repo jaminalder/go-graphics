@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint fmt vet check tidy golden clean preview
+.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -36,3 +36,6 @@ clean: ## Remove build artifacts and rendered output
 # Example render targets (available once cmd/staticart exists):
 preview: ## Render the contour sketch at preview size into out/
 	go run ./cmd/staticart render contour --profile preview --out out
+
+preview-qql: ## Render the qql sketch at its native 4:5 preview size into out/
+	go run ./cmd/staticart render qql --profile preview-tall --out out

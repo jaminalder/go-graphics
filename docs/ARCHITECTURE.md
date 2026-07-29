@@ -37,6 +37,8 @@ The first sketch reproduces
 | `Gradient` | A function `t ∈ [0,1] → Color`. Implementations: cosine (Iñigo Quílez form), discrete sampled, shuffled-discrete, multi-band. | `internal/gradient` |
 | Noise / field | Deterministic scalar fields `f(x, y) → float64`, e.g. Perlin + fBm octaves. Seedable, no global state. | `internal/noise` |
 | `Sketch` | One artwork algorithm: deterministic function of (params, seed, size) → `image.Image`. | `internal/sketch`, one subpackage per sketch |
+| `Swatch` | A colour with room to move: an HSB base plus a per-channel spread and a clamp box it may never leave. Drawing from one repeatedly gives a family; stepping from the previous draw walks that family. | `internal/palette` |
+| Trait / output space | A sketch's space of outcomes as orthogonal, weighted, discrete dimensions derived from the seed and overridable per render. The idea behind QQL; the machinery is sketch-agnostic. | `internal/trait` |
 | Render | Pixel-loop execution (parallel), size profiles, PNG/JPEG encoding. | `internal/render` |
 
 ## 3. Package layout & dependency rules
@@ -49,27 +51,31 @@ internal/
   gradient/               Gradient implementations           → palette, mathx
   geom/                   circles + spatial index            → (stdlib only)
   noise/                  Perlin, fBm, Worley, Hash01        → (stdlib only)
-  paint/                  stamp canvas, wobbly paths, disc
-                          marks (rings/scribble/gouache)     → palette, render, mathx
+  trait/                  weighted output-space dimensions,
+                          seed derivation, CLI overrides     → (stdlib only)
+  paint/                  stamp canvas, wobbly paths, rings,
+                          disc marks, watercolour washes     → palette, render, mathx
   render/                 pixel loop (AA, dither), profiles,
                           encoding + metadata                → palette
-  sketch/                 Sketch/Configurable, Context,
-                          registry, Raster helper            → palette, render
+  sketch/                 Sketch/Configurable/Traited,
+                          Context, registry, Raster helper   → palette, render, trait
     sketchtest/           shared test helpers (goldens etc.) → sketch
-    contour/, tapestry/, circles/, drift/   the sketches     → all of the above
+    contour/, tapestry/, circles/, drift/, rounds/,
+    shoal/, qql/                            the sketches     → all of the above
 docs/                     this file, sketch specs, idea backlog, reference data
+tools/                    code generators (palette data)
 out/                      rendered images (gitignored)
 ```
 
 Dependency direction (arrows = "may import"):
 
 ```
-cmd → sketch (registry) → {gradient, noise, render} → palette → mathx → stdlib
+cmd → sketch (registry) → {gradient, noise, render, trait} → palette → mathx → stdlib
 ```
 
 Rules:
 
-- `mathx`, `geom`, and `noise` are leaf packages: stdlib imports only.
+- `mathx`, `geom`, `noise`, and `trait` are leaf packages: stdlib imports only.
 - Sketches live in subpackages of `internal/sketch`; `cmd` discovers them
   only through the registry. Sketch-specific CLI options are owned by the
   sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
@@ -82,6 +88,10 @@ Rules:
 When making variants of a sketch, changes fall into four tiers — keep each
 knob in its tier:
 
+0. **Traits** (CLI, per render): for sketches with a `trait.Schema`, the
+   discrete orthogonal choices a seed resolves to (`--structure shadows`).
+   Pinning one leaves every other dimension exactly as that seed drew it,
+   so this is the cheapest way to steer without losing a composition.
 1. **Seeds** (CLI, per render): composition (`--seed`) plus sketch-owned
    sub-seeds (`--terrace-seed`, `--grain-seed`) that re-deal one aspect on
    a fixed composition. Cheap exploration; embedded in the recipe.
@@ -175,11 +185,28 @@ type Sketch interface {
 // Optional: sketches with CLI options implement Configurable —
 // Flags(fs) registers them, Configure() applies them and returns the
 // output-filename suffix. cmd never type-asserts concrete sketches.
+
+// Optional: sketches whose output space is a trait.Schema implement
+// Traited — Schema(), Traits(ctx) and TraitSuffix(set). cmd uses it for
+// `staticart traits <sketch>`, for the trait part of the filename, and to
+// record the resolved set in the file's metadata. Deriving must be cheap:
+// it happens before rendering.
+type Traited interface {
+    Sketch
+    Schema() trait.Schema
+    Traits(ctx Context) trait.Set
+    TraitSuffix(set trait.Set) string
+}
 ```
 
 - Sketch-specific tunables are fields on the sketch struct with defaults in a
   `New()` constructor — not a generic params map. Add CLI flags per sketch
   only when actually needed for exploration.
+- Sketches whose interesting choices are *discrete and orthogonal* should
+  declare a `trait.Schema` instead of hand-rolling flags: it gives seed
+  derivation, per-dimension overrides, filename and metadata plumbing, and
+  the `traits` command for free. `qql` is the first user; see
+  [sketches/007-qql.md](sketches/007-qql.md).
 - Each sketch subpackage registers itself via `sketch.Register(New())` from
   the registry wiring in `cmd` (explicit imports, no `init()` magic beyond a
   single registration call).
@@ -219,6 +246,10 @@ type Sketch interface {
 | 13 | Watercolour composites as absorption in linear light, with a back-scattering floor | `paint.Wash` stacks transmittances (`T = exp(−n·α)`) rather than interpolating toward the new colour, which is why two pigments crossing give a believable third instead of whichever was painted second. Absorption is radiometric, so it happens in linear light; multiplying sRGB darkens at the wrong rate and turns crossings to mud. Pure absorption marches to black, so a fraction of the pigment's own masstone is scattered back (`R = R·T + Rf·(1−T)`) — the difference between glazed layers staying luminous and palette-mixed ones going dead. |
 | 14 | Wash detail is shared by every deposit; only broad wobble varies | A pool is ~40 near-transparent deposits (≈4% each, matching Hobbs). The fine harmonics of the outline are computed **once** and shared: detail that differs per deposit averages out across the stack into a fuzzy halo, which is the classic tell of procedural watercolour. Deposits differ only in low-frequency wobble and in how far they reach, which spreads the boundary into a soft band without blurring it away. Amplitudes fall as 1/k^1.4 — shallower serrates the outline into a starburst. |
 | 15 | Pools are painted one at a time, not interleaved | The usual recipe interleaves layers between blobs so neither ends up wholly on top. Absorption commutes exactly, and the scattering floor breaks that by only a couple of levels out of 255 (`TestWashOrderBarelyMatters`), so interleaving would buy nothing visible and pools stay independent. |
+| 16 | QQL is ported natively, not entropy-exactly | `qqlrs` reproduces the original JavaScript bit for bit — murmur2 seeding, a PCG variant with a JS bit-drop anomaly, table sin/cos, a Newton sqrt, a cached gaussian deviate, deliberate unused draws. All of it exists to make *minted* seeds reproduce, which this project has no use for, and porting it would mean a foreign RNG, a foreign seed type and a foreign coordinate model sitting outside every invariant here. Sketch 007 copies the weight tables, spec formulas and layouts verbatim and runs them on `ctx.RNG(stream)`, `uint64` seeds and canvas units. A seed is not a minted piece; the vocabulary and the distributions are (user decision 2026-07-29, spec: sketches/007-qql.md). |
+| 17 | Traits live in `internal/trait`, and their weights are honoured | An output space of orthogonal, weighted, discrete dimensions is QQL's central idea and the thing worth keeping — so it is a stdlib-only leaf package rather than sketch-private, ready for tapestry and the watercolour work to declare a schema. `qqlrs` derives traits by masking seed bits and **discards the declared weights**, an artifact of the on-chain mint: it makes flow fields uniform where the table says spirals should be four times as common as explosive ones. Drawing by weight restores the quality-floor-with-outliers shape the essays argue for. One table needed a real number: `Turbulence::None` carries weight 0 yet the bit mechanism produced it ~50% of the time, so it is given weight 2 (≈33%) — common enough to keep QQL's clean fields, damped so `low` stays the default. |
+| 18 | Ring bands are analytic annuli, not stroked polygons | QQL strokes each of a band's many concentric rounds as a tessellated polygon; with zero third-party dependencies that would mean writing a path stroker, and a dab train (`Canvas.Stroke`) costs roughly 7× more pixel work per ring. `paint.Ring` solves each row's spans directly, which is what makes 100k+ ring-dots affordable at print size. The cost is the polygon faceting that makes `qqlrs`' smallest dots visibly octagonal at `--min-circle-steps 8`; it is invisible below a few hundred pixels. The band-level jitter that gives the motif its worked edge is kept in full — that, not the faceting, is where the texture comes from. |
+| 19 | `geom.Index` gained explicit bounds and an explicit cell size | Circle packing with an overscan needs both: the old constructor covered `[0,max]` and *silently dropped* a circle whose cell range was entirely negative, and it sized cells by the largest radius — fine when radii are uniform, quadratic when they span two orders of magnitude as QQL's do. Cell size is now documented as a performance knob only (`TestCellSizeDoesNotChangeResults` pins that), and circles outside the bounds are pinned to the nearest edge cells, which costs extra distance checks but never hides a neighbour from a circle inside the bounds. |
 
 ## 9. Roadmap
 
@@ -227,4 +258,15 @@ type Sketch interface {
 2. Palette library: full ColorLisa dataset + manipulation ops.
 3. More noise-family sketches (turbulence, domain warping).
 4. First vector sketch → introduce `tdewolff/canvas`.
-5. Possible later: fractals, tilings, SVG export, gallery index generator.
+5. **Give the other sketches an output space.** `internal/trait` was built
+   for sketch 007 but is sketch-agnostic: tapestry and the watercolour work
+   should declare a `trait.Schema` for the choices that are genuinely
+   discrete and orthogonal (relief preset, terrace character, wash
+   behaviour), and inherit derivation, overrides and inspection. Expect the
+   sampling vocabulary in `sketch/qql/sample.go` — weighted choice,
+   gaussians, `winnow` — to be promoted to a shared leaf at that point.
+6. **Exploration tooling for curation.** The essays are about the output
+   space, not the single render: batch seed rendering and a contact sheet
+   would make sweeping and curating practical. Deliberately deferred until
+   there is a sense of what the spaces look like.
+7. Possible later: fractals, tilings, SVG export, gallery index generator.

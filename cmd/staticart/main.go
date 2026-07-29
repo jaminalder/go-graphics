@@ -19,6 +19,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/circles"
 	"github.com/jaminalder/go-graphics/internal/sketch/contour"
 	"github.com/jaminalder/go-graphics/internal/sketch/drift"
+	"github.com/jaminalder/go-graphics/internal/sketch/qql"
 	"github.com/jaminalder/go-graphics/internal/sketch/rounds"
 	"github.com/jaminalder/go-graphics/internal/sketch/shoal"
 	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
@@ -29,6 +30,7 @@ func registry() *sketch.Registry {
 		circles.New(),
 		contour.New(),
 		drift.New(),
+		qql.New(),
 		rounds.New(),
 		shoal.New(),
 		tapestry.New(),
@@ -61,6 +63,8 @@ func run(args []string) error {
 		return nil
 	case "render":
 		return runRender(args[1:])
+	case "traits":
+		return runTraits(args[1:])
 	case "-h", "--help", "help":
 		usage()
 		return nil
@@ -74,6 +78,7 @@ func usage() {
   staticart list                      list sketches
   staticart palettes                  list palette slugs
   staticart render <sketch> [flags]   render a sketch
+  staticart traits <sketch> [flags]   show the traits a seed resolves to
 
 common render flags:
   --profile preview|web|print   size profile (or --width N --height N)
@@ -146,6 +151,16 @@ func runRender(args []string) error {
 	}
 
 	ctx := sketch.Context{Width: w, Height: h, Seed: *seed, Palette: pal, AA: *aa, Deep: *deep}
+
+	// A trait-driven sketch names itself partly after what the seed drew, so
+	// a file stays identifiable without consulting its metadata.
+	comment := recipe(name, fs)
+	if t, ok := s.(sketch.Traited); ok {
+		set := t.Traits(ctx)
+		fileName += t.TraitSuffix(set)
+		comment += "\ntraits: " + t.Schema().Format(set)
+	}
+
 	img, err := s.Render(ctx)
 	if err != nil {
 		return err
@@ -160,7 +175,7 @@ func runRender(args []string) error {
 	meta := render.Meta{
 		DPI:      300,
 		Software: "staticart " + buildRevision(),
-		Comment:  recipe(name, fs),
+		Comment:  comment,
 	}
 	switch *format {
 	case "png":
@@ -174,6 +189,53 @@ func runRender(args []string) error {
 		return err
 	}
 	fmt.Println(path)
+	return nil
+}
+
+// runTraits reports the point in a sketch's output space that a seed
+// resolves to, with the rarity of each choice — the view you need to
+// explore the space rather than one image at a time.
+func runTraits(args []string) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("traits needs a sketch name (try: staticart list)")
+	}
+	name := args[0]
+	s, ok := registry().Get(name)
+	if !ok {
+		return fmt.Errorf("unknown sketch %q (try: staticart list)", name)
+	}
+	t, ok := s.(sketch.Traited)
+	if !ok {
+		return fmt.Errorf("sketch %q has no traits", name)
+	}
+
+	fs := flag.NewFlagSet("traits", flag.ContinueOnError)
+	seed := fs.Uint64("seed", 42, "random seed (same seed → same traits)")
+	if c, ok := s.(sketch.Configurable); ok {
+		c.Flags(fs)
+	}
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if c, ok := s.(sketch.Configurable); ok {
+		if _, err := c.Configure(); err != nil {
+			return err
+		}
+	}
+
+	set := t.Traits(sketch.Context{Width: 1, Height: 1, Seed: *seed})
+	for _, d := range t.Schema() {
+		v := set.Get(d.Name)
+		rarity := ""
+		if total := d.TotalWeight(); total > 0 {
+			if w := d.Weight(v); w > 0 {
+				rarity = fmt.Sprintf("(%g/%g)", w, total)
+			} else {
+				rarity = "(pinned)"
+			}
+		}
+		fmt.Printf("%-16s %-14s %s\n", d.Name, v, rarity)
+	}
 	return nil
 }
 
