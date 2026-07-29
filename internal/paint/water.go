@@ -37,6 +37,7 @@ type Wash struct {
 	Edge       float64 // extra pigment drawn back to the rim as it dried
 	Grain      float64 // granulation strength; 0 is a perfectly flat wash
 	GrainScale float64 // paper tooth size, canvas units
+	Mottle     float64 // uneven pooling of pigment within one wash
 	Scatter    float64 // light scattered back off the pigment, 0..1
 	Seed       uint64  // granulation lattice seed
 }
@@ -48,8 +49,9 @@ func DefaultWash(seed uint64) Wash {
 		Layers:     40,
 		Ragged:     0.22,
 		Edge:       1.2,
-		Grain:      0.42,
-		GrainScale: 0.011,
+		Grain:      0.18,
+		GrainScale: 0.0038,
+		Mottle:     0.45,
 		Scatter:    0.14,
 		Seed:       seed,
 	}
@@ -76,6 +78,7 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 	// things that makes procedural watercolour read as procedural.
 	soft := softnessRing(rng)
 	base := w.outline(rng, &soft)
+	waves := mottleWaves(rng, pr)
 
 	layers := make([]washRing, w.Layers)
 	var envelope washRing
@@ -122,6 +125,11 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 	fg := w.Scatter * palette.SRGBToLinear(col.G)
 	fb := w.Scatter * palette.SRGBToLinear(col.B)
 
+	// The tooth is a property of the paper, so it keeps an absolute size
+	// however large the wash is — but never so fine that it aliases into
+	// noise at preview resolutions.
+	cell := math.Max(w.GrainScale*c.scale, 2.5)
+
 	x0 := max(int(px-outer-1), 0)
 	x1 := min(int(px+outer+1), c.w-1)
 	y0 := max(int(py-outer-1), 0)
@@ -146,6 +154,9 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 			if n <= 0 {
 				continue
 			}
+			// How thickly this pixel is covered, before the rim and the
+			// paper get their say.
+			cov := n / float64(w.Layers)
 			if w.Edge > 0 {
 				// A ridge rather than a ramp. Coverage is already falling
 				// away at the boundary, so a rim that simply climbs toward
@@ -161,16 +172,19 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 				rim := w.Edge * (1 - 0.8*sampleRing(&soft, idx))
 				n *= 1 + rim*math.Exp(-12*(t-0.3)*(t-0.3))
 			}
+			// Both of these modulate how much pigment settled, not the
+			// final colour, so they read as pigment sitting in the paper
+			// rather than as a texture laid over the top.
+			if w.Mottle > 0 {
+				n *= 1 + w.Mottle*mottleAt(&waves, dx, dy)
+			}
 			if w.Grain > 0 {
-				// Tooth modulates how much pigment settled, not the final
-				// colour, so granulation reads as pigment sitting in the
-				// paper rather than as a texture laid over the top. Two
-				// scales: the fine tooth, and a coarser mottle for the way
-				// pigment pools unevenly across a wash.
-				gx, gy := float64(x)/c.scale, float64(y)/c.scale
-				g := grain(w.Seed, gx, gy, w.GrainScale)
-				m := grain(w.Seed^0x9e37, gx, gy, w.GrainScale*4.5)
-				n *= 1 + w.Grain*(2*g-1) + 0.55*w.Grain*(2*m-1)
+				// Granulation is settled pigment, so it needs pigment to
+				// be there: ungated it covers bare paper and dense wash
+				// alike at the same strength, which reads as film grain
+				// over the top of the picture rather than as grains in it.
+				g := w.Grain * math.Pow(mathx.Clamp01(cov), 0.8)
+				n *= 1 + g*(2*tooth(w.Seed, float64(x), float64(y), cell)-1)
 			}
 			if n <= 0.01 {
 				continue
@@ -327,20 +341,66 @@ func sampleRing(t *washRing, idx float64) float64 {
 	return t[i] + (t[(i+1)&(washAngles-1)]-t[i])*f
 }
 
-// grain is smooth value noise on a lattice of the given cell size in
-// canvas units — the paper's tooth. Working in canvas units rather than
-// pixels keeps the tooth the same size relative to the picture at every
-// render resolution.
-func grain(seed uint64, x, y, cell float64) float64 {
-	fx, fy := x/cell, y/cell
-	ix, iy := math.Floor(fx), math.Floor(fy)
-	tx, ty := fx-ix, fy-iy
-	sx := tx * tx * (3 - 2*tx)
-	sy := ty * ty * (3 - 2*ty)
-	i, j := int64(ix), int64(iy)
-	a := noise.Hash01(seed, i, j)
-	b := noise.Hash01(seed, i+1, j)
-	c := noise.Hash01(seed, i, j+1)
-	d := noise.Hash01(seed, i+1, j+1)
-	return (a+(b-a)*sx)*(1-sy) + (c+(d-c)*sx)*sy
+// tooth is the paper's grain: cell noise, whose feature points are
+// scattered rather than sitting on a lattice.
+//
+// Square-lattice value noise was what this used first, and on a large
+// wash its maxima line up into visible rows and columns — the interior
+// reads as a grid of soft pixels rather than as paper. Any noise whose
+// extrema are pinned to a lattice has this problem; it is invisible only
+// while the cells stay near pixel size.
+func tooth(seed uint64, px, py, cell float64) float64 {
+	// Two octaves at incommensurate scales. One octave puts exactly one
+	// feature in every cell, so the pits keep a quasi-regular spacing and
+	// read as a mesh laid over the wash; overlaying a second breaks that
+	// up into the irregular pitting real paper has.
+	f1, _ := noise.Worley(seed, px/cell, py/cell)
+	g1, _ := noise.Worley(seed^0x5bf0, px/(cell*2.37), py/(cell*2.37))
+	return mathx.Clamp01(0.62*f1/0.9 + 0.38*g1/0.9)
+}
+
+// mottleTerms is how many plane waves build the pooling field.
+const mottleTerms = 5
+
+// mottleWave is one plane wave of the pigment-pooling field.
+type mottleWave struct{ kx, ky, phase, amp float64 }
+
+// mottleWaves builds the low-frequency unevenness inside a single wash
+// from a few plane waves at random headings. Their wavelengths are set
+// from the pool's own radius, so a large wash and a small one show the
+// same amount of pooling instead of the large one coming out as a slab
+// of flat colour. Being a sum of sines rather than lattice noise, it has
+// no preferred direction and nothing to line up.
+func mottleWaves(rng *rand.Rand, pr float64) [mottleTerms]mottleWave {
+	var out [mottleTerms]mottleWave
+	norm := 0.0
+	for i := range out {
+		// Wavelengths spread widely rather than clustering. A handful of
+		// waves at similar periods interfere into visible parallel
+		// banding; spreading them turns the same budget into blotches.
+		lambda := pr * 1.45 * math.Pow(0.72, float64(i))
+		th := rng.Float64() * 2 * math.Pi
+		k := 2 * math.Pi / math.Max(lambda, 1e-6)
+		amp := math.Pow(0.78, float64(i))
+		out[i] = mottleWave{
+			kx:    k * math.Cos(th),
+			ky:    k * math.Sin(th),
+			phase: rng.Float64() * 2 * math.Pi,
+			amp:   amp,
+		}
+		norm += amp
+	}
+	for i := range out {
+		out[i].amp /= norm
+	}
+	return out
+}
+
+// mottleAt evaluates the pooling field at an offset from the pool centre.
+func mottleAt(w *[mottleTerms]mottleWave, dx, dy float64) float64 {
+	v := 0.0
+	for _, m := range w {
+		v += m.amp * math.Sin(m.kx*dx+m.ky*dy+m.phase)
+	}
+	return v
 }

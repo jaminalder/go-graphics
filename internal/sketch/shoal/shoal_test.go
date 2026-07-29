@@ -123,6 +123,7 @@ func TestFieldAndGradeChangeOutput(t *testing.T) {
 		{"patches", func(s *Sketch) { s.Grade = GradePatches }},
 		{"ribbon", func(s *Sketch) { s.Mark = MarkRibbon }},
 		{"mixed", func(s *Sketch) { s.Mark = MarkMixed }},
+		{"wash", func(s *Sketch) { s.Mark = MarkWash }},
 		{"dark", func(s *Sketch) { s.Ground = GroundDark }},
 		{"mono", func(s *Sketch) { s.Mono = true }},
 		{"overlap", func(s *Sketch) { s.Overlap = 0.5 }},

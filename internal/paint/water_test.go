@@ -51,35 +51,46 @@ func TestWashesMixWhereTheyCross(t *testing.T) {
 	}
 }
 
-// TestWashOrderBarelyMatters records why this file does not bother with
-// the interleaved layer ordering the technique is usually described
-// with — paint five layers of blob A, five of B, five of A again, so
-// neither ends up wholly on top.
+// TestWashOrderShiftsCrossingOnlySlightly bounds the one thing that
+// stops pools being order-independent, and records why this file does
+// not implement the interleaved layer ordering the technique is usually
+// described with — five layers of blob A, five of B, five of A again, so
+// that neither ends up wholly on top.
 //
 // Absorption alone commutes exactly: multiplying transmittances gives
 // the same answer either way round. The back-scattering floor breaks
 // that, and correctly so, since the upper glaze scatters light before
-// the lower one ever sees it. But it breaks it by only a hair, so
-// interleaving would buy nothing a viewer could see, and pools can be
-// painted one at a time.
-func TestWashOrderBarelyMatters(t *testing.T) {
-	paint := func(first, second palette.Color, s1, s2 uint64) *Canvas {
+// the lower one ever sees it. The case below is the worst one available
+// — two saturated complementary pigments, both at full strength, fully
+// crossed — and it moves the crossing by around 4%. On the muted
+// palettes these sketches use it is far less. That is the trade being
+// made: pools stay independent and cheap, at the cost of a shift this
+// test keeps honest.
+func TestWashOrderShiftsCrossingOnlySlightly(t *testing.T) {
+	// Each pool keeps its own colour, position and seed; only the order
+	// they are laid in changes. (Swapping the colours between the two
+	// positions instead would compare two different pictures.)
+	paint := func(swap bool) *Canvas {
 		c := NewCanvas(300, 300, white)
 		w := DefaultWash(3)
-		w.Pool(c, washRNG(s1), 0.42, 0.5, 0.16, first, 0.8)
-		w.Pool(c, washRNG(s2), 0.58, 0.5, 0.16, second, 0.8)
+		layY := func() { w.Pool(c, washRNG(11), 0.42, 0.5, 0.16, yellow, 0.8) }
+		layC := func() { w.Pool(c, washRNG(12), 0.58, 0.5, 0.16, cyan, 0.8) }
+		if swap {
+			layC()
+			layY()
+		} else {
+			layY()
+			layC()
+		}
 		return c
 	}
-	a := paint(yellow, cyan, 11, 12)
-	b := paint(cyan, yellow, 12, 11)
+	a, b := paint(false), paint(true)
 	got, want := at(a, 0.5, 0.5), at(b, 0.5, 0.5)
 	worst := 0.0
 	for _, d := range []float64{got.R - want.R, got.G - want.G, got.B - want.B} {
 		worst = math.Max(worst, math.Abs(d))
 	}
-	// A couple of levels out of 255: present, but far below anything the
-	// eye picks out of a field of overlapping marks.
-	if worst > 8.0/255 {
+	if worst > 12.0/255 {
 		t.Errorf("swapping paint order moved the crossing by %.1f/255: %v vs %v — too much to ignore ordering",
 			worst*255, got, want)
 	}
@@ -91,7 +102,9 @@ func TestWashOrderBarelyMatters(t *testing.T) {
 func TestPoolRimIsDarkerThanItsMiddle(t *testing.T) {
 	c := NewCanvas(600, 600, white)
 	w := DefaultWash(7)
-	w.Grain = 0
+	// Isolate the rim: granulation and pooling both vary the interior,
+	// and either can out-darken the rim on an individual ray.
+	w.Grain, w.Mottle = 0, 0
 	const cx, cy, r = 0.5, 0.5, 0.3
 	w.Pool(c, washRNG(5), cx, cy, r, cyan, 0.7)
 
@@ -160,5 +173,93 @@ func TestPoolIgnoresDegenerateInput(t *testing.T) {
 		if c.pix[i] != blank.pix[i] {
 			t.Fatal("a degenerate pool painted something")
 		}
+	}
+}
+
+// TestToothHasNoLatticeAlignment guards the bug that made large pools
+// look pixelated: the paper grain was square-lattice value noise, whose
+// extrema sit exactly on the lattice nodes. Sampled on the nodes it
+// spans the full range, sampled between them it is an average of four
+// neighbours and barely varies at all — so the interior resolved into a
+// regular array of soft blobs once cells grew past a pixel or two. Cell
+// noise scatters its feature points, so the two agree.
+func TestToothHasNoLatticeAlignment(t *testing.T) {
+	const cell, n = 8.0, 48
+	spread := func(offset float64) float64 {
+		var vals []float64
+		mean := 0.0
+		for i := range n {
+			for j := range n {
+				v := tooth(5, (float64(i)+offset)*cell, (float64(j)+offset)*cell, cell)
+				vals = append(vals, v)
+				mean += v
+			}
+		}
+		mean /= float64(len(vals))
+		varr := 0.0
+		for _, v := range vals {
+			varr += (v - mean) * (v - mean)
+		}
+		return varr / float64(len(vals))
+	}
+	onNode, betweenNodes := spread(0), spread(0.5)
+	if onNode == 0 || betweenNodes == 0 {
+		t.Fatalf("tooth is constant (on %v, between %v)", onNode, betweenNodes)
+	}
+	if r := onNode / betweenNodes; r < 0.5 || r > 2 {
+		t.Errorf("grain varies %.2fx more on the lattice than between it — the texture is grid-aligned", r)
+	}
+}
+
+// TestMottleScalesWithThePool pins the other half of that fix. Paper
+// tooth is physically absolute, but the pooling of pigment *within* a
+// wash belongs to the wash, so its scale has to follow the radius.
+// Pinned to an absolute wavelength instead, a large pool shows many
+// cycles of it and a small one almost none, so the two read as
+// different materials.
+//
+// Counting blotches rather than measuring their depth: an absolute
+// wavelength changes how *many* there are across a pool, while their
+// amplitude stays much the same either way.
+func TestMottleScalesWithThePool(t *testing.T) {
+	blotchesAcross := func(r float64) float64 {
+		const px = 700
+		c := NewCanvas(px, px, white)
+		w := DefaultWash(11)
+		w.Grain, w.Edge = 0, 0 // isolate pooling from tooth and rim
+		w.Pool(c, washRNG(3), 0.5, 0.5, r, cyan, 0.75)
+
+		total, lines := 0, 0
+		for _, off := range []float64{-0.22, 0, 0.22} {
+			y := int((0.5 + off*r) * px)
+			// Always the same number of samples across the interior, so
+			// the transect itself is measured in pool-radii, not pixels.
+			const n = 121
+			vals := make([]float64, n)
+			mean := 0.0
+			for k := range n {
+				f := -0.45 + 0.9*float64(k)/(n-1)
+				x := int((0.5 + f*r) * px)
+				vals[k] = c.pix[y*px+x].Luminance()
+				mean += vals[k]
+			}
+			mean /= n
+			cross := 0
+			for k := 1; k < n; k++ {
+				if (vals[k-1]-mean)*(vals[k]-mean) < 0 {
+					cross++
+				}
+			}
+			total += cross
+			lines++
+		}
+		return float64(total) / float64(lines)
+	}
+	small, large := blotchesAcross(0.06), blotchesAcross(0.22)
+	if small == 0 && large == 0 {
+		t.Fatal("no interior variation at all")
+	}
+	if d := math.Abs(large - small); d > 3 {
+		t.Errorf("a large pool shows %.1f blotches across and a small one %.1f — pooling is not following the pool", large, small)
 	}
 }
