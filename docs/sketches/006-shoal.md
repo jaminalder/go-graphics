@@ -92,6 +92,11 @@ and the answer changes the picture far more than any layout parameter.
   changes — but the brush is finally used the way it was built to be
   used, dragged along a path, so the flow itself becomes the subject and
   the bristle smear runs the length of it.
+- **`--mark wash`** paints each dot as a pool of watercolour instead of
+  opaque paint (`paint.Wash`). Pools are transparent, so where two cross
+  the pigments mix into a third colour rather than one hiding the other.
+  That only shows if the marks are allowed to touch, so pair it with
+  `--overlap` and a larger `--maxr` than the disc default.
 - **`--mark mixed`** makes the mark type a *spatial* variable: coarse
   chains become strokes, fine ones stay beads, so brushwork erupts out of
   a stippled field wherever the size field runs large. The split sits at
@@ -127,7 +132,7 @@ very differently from a square for all-over work.
 |---|---|---|
 | Field | `--field` | `flow` (default), `curl`, `ridge` |
 | Grading | `--grade` | `vortex` (default), `patches` |
-| Mark | `--mark` | `disc` (default), `ribbon`, `mixed` |
+| Mark | `--mark` | `disc` (default), `ribbon`, `mixed`, `wash` |
 | Ground | `--ground` | `light` (default), `dark` |
 | Single-hue inks | `--mono` | off |
 | Crowding | `--overlap` | 0 |

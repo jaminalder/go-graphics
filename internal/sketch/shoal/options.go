@@ -29,7 +29,7 @@ var _ sketch.Configurable = (*Sketch)(nil)
 func (s *Sketch) Flags(fs *flag.FlagSet) {
 	fs.StringVar(&s.opts.field, "field", "", "flow field: flow (default), curl, ridge")
 	fs.StringVar(&s.opts.grade, "grade", "", "size grading: vortex (default), patches")
-	fs.StringVar(&s.opts.mark, "mark", "", "what a chain paints as: disc (default), ribbon, mixed")
+	fs.StringVar(&s.opts.mark, "mark", "", "what a chain paints as: disc (default), ribbon, mixed, wash")
 	fs.StringVar(&s.opts.ground, "ground", "", "canvas ground: light (default), dark")
 	fs.Float64Var(&s.opts.detail, "detail", -1, "share of dots with concentric ring detail; default 0.09")
 	fs.Float64Var(&s.opts.open, "open", -1, "share of dots painted as rings not discs; default 0.05")
@@ -44,7 +44,7 @@ func (s *Sketch) Flags(fs *flag.FlagSet) {
 var (
 	fields  = map[string]Field{"curl": FieldCurl, "flow": FieldFlow, "ridge": FieldRidge}
 	grades  = map[string]Grade{"vortex": GradeVortex, "patches": GradePatches}
-	marks   = map[string]Mark{"disc": MarkDisc, "ribbon": MarkRibbon, "mixed": MarkMixed}
+	marks   = map[string]Mark{"disc": MarkDisc, "ribbon": MarkRibbon, "mixed": MarkMixed, "wash": MarkWash}
 	grounds = map[string]Ground{"light": GroundLight, "dark": GroundDark}
 )
 
@@ -69,7 +69,7 @@ func (s *Sketch) Configure() (string, error) {
 	if v := s.opts.mark; v != "" {
 		m, ok := marks[v]
 		if !ok {
-			return "", fmt.Errorf("--mark must be disc, ribbon or mixed")
+			return "", fmt.Errorf("--mark must be disc, ribbon, mixed or wash")
 		}
 		s.Mark, tag = m, append(tag, v)
 	}

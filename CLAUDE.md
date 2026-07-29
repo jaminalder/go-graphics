@@ -66,7 +66,7 @@ internal/palette/       Color type + ops, ColorLisa palette data
 internal/gradient/      cosine / HSL / discrete / terraced gradients
 internal/noise/         Perlin + fBm, Worley cell noise, Hash01 (leaf)
 internal/render/        pixel loop (AA, dither, 16-bit), profiles, encode+metadata
-internal/paint/         stamp-based brush canvas + disc marks (sequential model)
+internal/paint/         stamp-based brush canvas, bristle brush, watercolour washes
 internal/sketch/        Sketch + Configurable interfaces, Context, registry
 internal/sketch/sketchtest/  shared test helpers (goldens, determinism)
 internal/sketch/<x>/    one package per sketch + its testdata/ goldens

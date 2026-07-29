@@ -32,6 +32,7 @@ const (
 	saltField = 0x666c64 // "fld"
 	saltSize  = 0x73697a // "siz"
 	saltColor = 0x636f6c // "col"
+	saltPaper = 0x706170 // "pap"
 )
 
 // Field selects how a flow direction is read out of the noise.
@@ -65,6 +66,11 @@ const (
 	// MarkMixed paints the coarse chains as ribbons and the fine ones as
 	// beads, so scale and mark type reinforce each other.
 	MarkMixed
+	// MarkWash paints each dot as a pool of watercolour instead of opaque
+	// paint. Pools are transparent, so where two of them cross the
+	// colours mix rather than one hiding the other — which only shows if
+	// the marks are allowed to touch, so pair it with --overlap.
+	MarkWash
 )
 
 // Ground selects the colour the canvas starts from.
@@ -179,8 +185,9 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	dots := newPlanner(s, ctx, aspect, inks, ink).run()
 
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, ground)
+	wash := paint.DefaultWash(ctx.Seed ^ saltPaper)
 	for _, run := range s.runs(dots) {
-		s.paintRun(cv, brng, run)
+		s.paintRun(cv, brng, wash, run)
 	}
 	return cv.Image(), nil
 }
@@ -243,7 +250,15 @@ func meanR(run []dot) float64 {
 
 // paintRun lays one run, either as separate discs or as a single stroke
 // down its length.
-func (s *Sketch) paintRun(cv *paint.Canvas, rng *rand.Rand, run []dot) {
+func (s *Sketch) paintRun(cv *paint.Canvas, rng *rand.Rand, wash paint.Wash, run []dot) {
+	if s.Mark == MarkWash {
+		for _, d := range run {
+			// Pools are laid at partial strength so a crossing reads as
+			// two pigments through one another rather than as a repaint.
+			wash.Pool(cv, rng, d.X, d.Y, d.R, d.main, 0.7+0.18*rng.Float64())
+		}
+		return
+	}
 	ribbon := s.Mark == MarkRibbon
 	if s.Mark == MarkMixed {
 		// Coarse chains become strokes, fine ones stay beads: the two
