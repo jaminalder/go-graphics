@@ -1,40 +1,53 @@
-# golangci-lint v1 config (local install is v1.64.x)
-run:
-  timeout: 3m
-
+# golangci-lint v2 config (local install is v2.12.x).
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    # Defaults
+    - copyloopvar
     - errcheck
+    - gocritic
     - govet
     - ineffassign
-    - staticcheck
-    - unused
-    # Formatting
-    - gofumpt
-    - goimports
-    # Extras (kept modest on purpose)
     - misspell
+    - nolintlint
     - revive
-    - gocritic
-    - copyloopvar
+    - staticcheck
     - unconvert
     - unparam
-    - nolintlint
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/jaminalder/go-graphics
-  revive:
+    - unused
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        arguments: ["checkPrivateReceivers"]
-
-issues:
-  exclude-rules:
-    # Test helpers may ignore errors and skip doc comments.
-    - path: _test\.go
-      linters:
-        - errcheck
-        - revive
+      - linters:
+          - errcheck
+          - revive
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jaminalder/go-graphics
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

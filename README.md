@@ -19,7 +19,7 @@ in (`staticart palettes`; `staticart list` shows the sketches).
 
 ## Quick start
 
-Requires Go ≥ 1.26 and (for linting) golangci-lint + gofumpt.
+Requires Go ≥ 1.26.5 and, for `make fmt`/`make lint`, golangci-lint ≥ 2.12.
 
 ```sh
 make help                 # list targets

@@ -10,7 +10,7 @@ unless a documented decision says otherwise.
 ```sh
 make check      # fmt + vet + lint + test — MUST pass before any commit
 make test       # go test ./...
-make lint       # golangci-lint (v1.64 local; config .golangci.yml)
+make lint       # golangci-lint (v2.12 local; config .golangci.yml)
 make preview    # render sketch "contour" at preview size into out/
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list

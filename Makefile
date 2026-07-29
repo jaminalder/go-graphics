@@ -16,9 +16,8 @@ test: ## Run all tests
 lint: ## Run golangci-lint
 	golangci-lint run
 
-fmt: ## Format code (gofumpt via golangci-lint formatters)
-	gofumpt -w .
-	goimports -local github.com/jaminalder/go-graphics -w .
+fmt: ## Format code (gofumpt + goimports via golangci-lint formatters)
+	golangci-lint fmt
 
 vet: ## Run go vet
 	go vet ./...
