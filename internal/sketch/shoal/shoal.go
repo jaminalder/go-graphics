@@ -49,6 +49,36 @@ const (
 	FieldRidge
 )
 
+// Mark selects what is actually painted along a chain.
+type Mark uint8
+
+const (
+	// MarkDisc paints each placed dot as its own filled disc: the chain
+	// reads as a row of beads.
+	MarkDisc Mark = iota
+	// MarkRibbon paints the whole chain as one continuous brush stroke
+	// through its dot centres. The placement is unchanged — the packing
+	// still decides where paint may go — but the brush is used the way it
+	// was built to be used, dragged along a path, so the flow itself
+	// becomes the subject and the bristle smear runs the length of it.
+	MarkRibbon
+	// MarkMixed paints the coarse chains as ribbons and the fine ones as
+	// beads, so scale and mark type reinforce each other.
+	MarkMixed
+)
+
+// Ground selects the colour the canvas starts from.
+type Ground uint8
+
+const (
+	// GroundLight washes the palette's lightest colour out to a warm
+	// off-white.
+	GroundLight Ground = iota
+	// GroundDark sinks the darkest colour further down, so the marks read
+	// as lit rather than printed.
+	GroundDark
+)
+
 // Grade selects how dot radius varies over the canvas.
 type Grade uint8
 
@@ -79,8 +109,12 @@ type Sketch struct {
 	Open       float64 // share of dots painted as rings rather than discs
 	Confetti   float64 // share of chains whose colour ignores the field
 	ColorFlip  float64 // chance a chain changes colour at each dot
+	Overlap    float64 // how far marks may crowd into each other, ×radius
+	Mono       bool    // build the ink set from one hue plus an accent
 	Field      Field
 	Grade      Grade
+	Mark       Mark
+	Ground     Ground
 
 	opts cliOptions
 }
@@ -118,11 +152,14 @@ func (s *Sketch) Describe() string {
 	return "all-over field of brush-painted dots strung along a noise flow field"
 }
 
-// dot is one placed, coloured dot of the scene.
+// dot is one placed, coloured dot of the scene. chain groups the dots
+// that were walked from one seed, which is what lets the painter treat a
+// run of them as a single stroke.
 type dot struct {
 	geom.Circle
 	main   palette.Color
 	ink    palette.Color
+	chain  int
 	ringed bool
 	open   bool
 }
@@ -136,30 +173,135 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	sort.SliceStable(byLum, func(i, j int) bool {
 		return byLum[i].Luminance() < byLum[j].Luminance()
 	})
-	ground := byLum[len(byLum)-1].Lighten(0.62).Desaturate(0.45)
-	inks := dotColors(byLum)
+	brng := ctx.RNG(streamPaint)
+	ground, inks, ink := s.palette(byLum, brng)
 
-	dots := newPlanner(s, ctx, aspect, inks, byLum[0]).run()
+	dots := newPlanner(s, ctx, aspect, inks, ink).run()
 
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, ground)
-	brng := ctx.RNG(streamPaint)
-	for _, d := range dots {
-		s.paintDot(cv, brng, d)
+	for _, run := range s.runs(dots) {
+		s.paintRun(cv, brng, run)
 	}
 	return cv.Image(), nil
 }
 
-// dotColors widens a five-colour palette into a set with enough range to
-// carry a whole field. Each palette colour contributes itself and a
-// lightened tint, which is what lets one hue appear as both a deep and a
-// pale dot the way a hand-mixed set of paints would.
-func dotColors(byLum []palette.Color) []palette.Color {
-	base := byLum[:len(byLum)-1] // lightest is the ground
-	out := make([]palette.Color, 0, len(base)*2)
-	for _, c := range base {
-		out = append(out, c, c.Lighten(0.3).Desaturate(0.12))
+// palette decides the ground, the ink set the marks draw from, and the
+// colour used for interior detail.
+func (s *Sketch) palette(byLum []palette.Color, rng *rand.Rand) (ground palette.Color, inks []palette.Color, ink palette.Color) {
+	lightest, darkest := byLum[len(byLum)-1], byLum[0]
+	if s.Ground == GroundDark {
+		// Sink the ground well below the darkest ink so the marks stay
+		// legible, and keep a little of its hue so it reads as a painted
+		// ground rather than as a hole.
+		ground = palette.FromHSL(hueOf(darkest), satOf(darkest)*0.55, 0.09)
+		inks = dotColors(byLum[1:], lightest)
+		ink = lightest
+		if s.Mono {
+			inks = monoColors(byLum, rng, true)
+		}
+		return ground, inks, ink
+	}
+	ground = lightest.Lighten(0.62).Desaturate(0.45)
+	inks = dotColors(byLum[:len(byLum)-1], darkest)
+	ink = darkest
+	if s.Mono {
+		inks = monoColors(byLum, rng, false)
+	}
+	return ground, inks, ink
+}
+
+func hueOf(c palette.Color) float64 { h, _, _ := c.HSL(); return h }
+func satOf(c palette.Color) float64 { _, s, _ := c.HSL(); return s }
+
+// runs groups the dots into stretches that share a chain and a colour —
+// the unit a ribbon is painted as. Runs are ordered coarsest first, so
+// where marks are allowed to overlap the small ones settle on top of the
+// large the way later touches of a brush do.
+func (s *Sketch) runs(dots []dot) [][]dot {
+	var out [][]dot
+	for i := 0; i < len(dots); {
+		j := i + 1
+		for j < len(dots) && dots[j].chain == dots[i].chain && dots[j].main == dots[i].main {
+			j++
+		}
+		out = append(out, dots[i:j])
+		i = j
+	}
+	if s.Overlap > 0 {
+		sort.SliceStable(out, func(a, b int) bool { return meanR(out[a]) > meanR(out[b]) })
 	}
 	return out
+}
+
+func meanR(run []dot) float64 {
+	t := 0.0
+	for _, d := range run {
+		t += d.R
+	}
+	return t / float64(len(run))
+}
+
+// paintRun lays one run, either as separate discs or as a single stroke
+// down its length.
+func (s *Sketch) paintRun(cv *paint.Canvas, rng *rand.Rand, run []dot) {
+	ribbon := s.Mark == MarkRibbon
+	if s.Mark == MarkMixed {
+		// Coarse chains become strokes, fine ones stay beads: the two
+		// mark types then reinforce the size hierarchy instead of
+		// fighting it. The split sits low in the range, not at its
+		// midpoint, because the size field is biased quadratically toward
+		// small — at the midpoint almost nothing qualifies and the mode
+		// collapses back to plain beads.
+		ribbon = meanR(run) > s.MinR+0.28*(s.MaxR-s.MinR)
+	}
+	if !ribbon || len(run) < 3 {
+		for _, d := range run {
+			s.paintDot(cv, rng, d)
+		}
+		return
+	}
+	pts := make([]paint.Pt, len(run))
+	for i, d := range run {
+		pts[i] = paint.Pt{X: d.X, Y: d.Y}
+	}
+	r := meanR(run)
+	t := mathx.Clamp01((r - s.MinR) / math.Max(s.MaxR-s.MinR, 1e-9))
+	b := paint.NewBrush(rng, r*1.75, 4+int(9*t), 0.2+0.25*rng.Float64()).
+		Grain(rng, r*(6+8*rng.Float64()))
+	b.Stroke(cv, pts, run[0].main, 0.96)
+}
+
+// dotColors widens a five-colour palette into a set with enough range to
+// carry a whole field. Each palette colour contributes itself and a
+// tone-on-tone companion, which is what lets one hue appear as both a
+// deep and a pale mark the way a hand-mixed set of paints would.
+func dotColors(base []palette.Color, ink palette.Color) []palette.Color {
+	out := make([]palette.Color, 0, len(base)*2+1)
+	for _, c := range base {
+		out = append(out, c, c.ContrastShade(0.22).Desaturate(0.1))
+	}
+	return append(out, ink)
+}
+
+// monoColors builds an ink set from a single hue: a ladder of tints and
+// shades of one palette colour, plus one rare accent from another. A
+// field painted this way stops being about which colour each mark is and
+// becomes about the structure, which is a different picture entirely
+// from the same layout in full palette.
+func monoColors(byLum []palette.Color, rng *rand.Rand, onDark bool) []palette.Color {
+	base := byLum[rng.IntN(len(byLum))]
+	accent := byLum[rng.IntN(len(byLum))]
+	h, sat, _ := base.HSL()
+	lo, hi := 0.24, 0.72
+	if onDark {
+		lo, hi = 0.34, 0.9
+	}
+	out := make([]palette.Color, 0, 7)
+	for i := range 6 {
+		l := lo + (hi-lo)*float64(i)/5
+		out = append(out, palette.FromHSL(h, sat*(0.45+0.5*float64(i)/5), l))
+	}
+	return append(out, accent)
 }
 
 // direction is the flow angle at (x, y) for the selected field.
@@ -203,6 +345,7 @@ type planner struct {
 	index          *geom.Index
 	aspect         float64
 	focusX, focusY float64
+	chain          int
 }
 
 // newPlanner sets up the layout state for one render.
@@ -256,6 +399,7 @@ func (p *planner) run() []dot {
 				p.index.Insert(d.Circle)
 			}
 			dots = append(dots, chain...)
+			p.chain++
 		}
 	}
 	return dots
@@ -285,7 +429,7 @@ func (p *planner) walk(chain []dot, x, y, dir float64, col palette.Color) []dot 
 	misses := 0
 	for step := 0; step < s.MaxSteps && misses < s.MaxMiss; step++ {
 		r := p.radiusAt(x, y)
-		gap := r * s.Gap
+		gap := r * (s.Gap - s.Overlap)
 		inside := x > s.Margin+r && x < p.aspect-s.Margin-r &&
 			y > s.Margin+r && y < 1-s.Margin-r
 		c := geom.Circle{X: x, Y: y, R: r}
@@ -300,6 +444,7 @@ func (p *planner) walk(chain []dot, x, y, dir float64, col palette.Color) []dot 
 			chain = append(chain, dot{
 				Circle: c,
 				main:   col,
+				chain:  p.chain,
 				ink:    p.darkest,
 				ringed: p.ringedAt(x, y, r),
 				open:   p.rng.Float64() < s.Open,
@@ -311,7 +456,7 @@ func (p *planner) walk(chain []dot, x, y, dir float64, col palette.Color) []dot 
 		angle := s.direction(p.fieldN, x, y)
 		// Advance by one dot plus the gap, so consecutive dots nearly
 		// touch and the chain reads as a thread rather than a scatter.
-		adv := 2*r + gap
+		adv := 2*r + math.Max(gap, 0)
 		x += dir * adv * math.Cos(angle)
 		y += dir * adv * math.Sin(angle)
 		if x < 0 || x > p.aspect || y < 0 || y > 1 {

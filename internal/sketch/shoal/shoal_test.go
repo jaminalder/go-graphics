@@ -34,7 +34,8 @@ func newTestPlanner(t *testing.T, s *Sketch, seed uint64) *planner {
 	sort.SliceStable(byLum, func(i, j int) bool {
 		return byLum[i].Luminance() < byLum[j].Luminance()
 	})
-	return newPlanner(s, ctx, 1, dotColors(byLum), byLum[0])
+	_, inks, ink := s.palette(byLum, ctx.RNG(streamPaint))
+	return newPlanner(s, ctx, 1, inks, ink)
 }
 
 // plan runs the layout for one seed and returns the dots.
@@ -120,6 +121,11 @@ func TestFieldAndGradeChangeOutput(t *testing.T) {
 		{"curl", func(s *Sketch) { s.Field = FieldCurl }},
 		{"ridge", func(s *Sketch) { s.Field = FieldRidge }},
 		{"patches", func(s *Sketch) { s.Grade = GradePatches }},
+		{"ribbon", func(s *Sketch) { s.Mark = MarkRibbon }},
+		{"mixed", func(s *Sketch) { s.Mark = MarkMixed }},
+		{"dark", func(s *Sketch) { s.Ground = GroundDark }},
+		{"mono", func(s *Sketch) { s.Mono = true }},
+		{"overlap", func(s *Sketch) { s.Overlap = 0.5 }},
 	} {
 		s := New()
 		tc.mut(s)
@@ -127,6 +133,47 @@ func TestFieldAndGradeChangeOutput(t *testing.T) {
 		if string(got.Pix) == string(base.Pix) {
 			t.Errorf("%s changed nothing", tc.name)
 		}
+	}
+}
+
+// TestOverlapLetsMarksCrowd checks that the knob does what it says: with
+// Overlap on, marks may run into each other, and the default keeps them
+// strictly apart (which TestPlanStaysInBoundsAndApart relies on).
+func TestOverlapLetsMarksCrowd(t *testing.T) {
+	s := New()
+	s.Overlap = 0.6
+	dots := plan(t, s, 5)
+	crowded := 0
+	for i := range dots {
+		for j := i + 1; j < len(dots); j++ {
+			a, b := dots[i], dots[j]
+			if math.Hypot(a.X-b.X, a.Y-b.Y) < a.R+b.R {
+				crowded++
+			}
+		}
+	}
+	if crowded == 0 {
+		t.Error("Overlap 0.6 produced no overlapping marks")
+	}
+}
+
+// TestRunsGroupByChainAndColour guards the unit a ribbon is painted as:
+// a run must never span two chains or two colours, or a stroke would jump
+// across the canvas between unrelated dots.
+func TestRunsGroupByChainAndColour(t *testing.T) {
+	s := New()
+	dots := plan(t, s, 5)
+	total := 0
+	for _, run := range s.runs(dots) {
+		total += len(run)
+		for _, d := range run {
+			if d.chain != run[0].chain || d.main != run[0].main {
+				t.Fatalf("run mixes chains or colours: %v vs %v", d, run[0])
+			}
+		}
+	}
+	if total != len(dots) {
+		t.Errorf("runs cover %d dots, want all %d", total, len(dots))
 	}
 }
 

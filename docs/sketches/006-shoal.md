@@ -80,16 +80,62 @@ and gated to `r > 2.2·MinR` — scattered evenly the detail reads as a
 rendering fault, and on the smallest dots the bands cannot resolve.
 `Open` (0.05) of dots are painted as rings rather than discs.
 
+## Mark, ground and layering
+
+Placement and painting are deliberately separate. The packing decides
+where paint may go; what is actually painted there is a second question,
+and the answer changes the picture far more than any layout parameter.
+
+- **`--mark disc`** paints each dot on its own: the chain reads as beads.
+- **`--mark ribbon`** paints a whole run as one brush stroke through its
+  dot centres. The layout is identical — only the interpretation
+  changes — but the brush is finally used the way it was built to be
+  used, dragged along a path, so the flow itself becomes the subject and
+  the bristle smear runs the length of it.
+- **`--mark mixed`** makes the mark type a *spatial* variable: coarse
+  chains become strokes, fine ones stay beads, so brushwork erupts out of
+  a stippled field wherever the size field runs large. The split sits at
+  28% of the radius range rather than the midpoint, because the size
+  field is biased quadratically toward small and a midpoint threshold
+  leaves almost nothing on the ribbon side.
+
+A run is a stretch of one chain sharing one colour — the unit a ribbon is
+painted as, so a stroke never jumps between chains or changes colour
+part way.
+
+**`--ground dark`** sinks the darkest palette colour to L≈0.09, keeping a
+little of its hue so it reads as painted ground rather than as a hole,
+and hands the marks the lightest colour. The same layout reads as lit
+rather than printed.
+
+**`--overlap`** relaxes the collision gap into negative territory so marks
+crowd into one another, and switches the painting order to coarsest
+first, so small marks settle on top of large the way later touches of a
+brush do.
+
+**`--mono`** replaces the palette with a ladder of tints and shades of one
+hue plus a single rare accent. The field stops being about which colour
+each mark is and becomes about the structure.
+
+**`--margin 0`** bleeds the field off every edge instead of framing it,
+and the `-tall` render profiles give a 4:5 portrait frame, which reads
+very differently from a square for all-over work.
+
 ## Tunables
 
 | Knob | Flag | Default |
 |---|---|---|
-| Field | `--field` | `curl`, `flow`, `ridge` |
-| Grading | `--grade` | `vortex`, `patches` |
+| Field | `--field` | `flow` (default), `curl`, `ridge` |
+| Grading | `--grade` | `vortex` (default), `patches` |
+| Mark | `--mark` | `disc` (default), `ribbon`, `mixed` |
+| Ground | `--ground` | `light` (default), `dark` |
+| Single-hue inks | `--mono` | off |
+| Crowding | `--overlap` | 0 |
 | Ring detail share | `--detail` | 0.09 |
 | Open (ring) dots | `--open` | 0.05 |
 | Colour off-field share | `--confetti` | 0.4 |
-| Largest dot radius | `--maxr` | 0.0135 |
+| Dot radius range | `--minr` / `--maxr` | 0.0035 / 0.0135 |
+| Framing | `--margin` | 0.045; 0 bleeds off the edge |
 
 ## Acceptance checklist
 
