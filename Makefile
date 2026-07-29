@@ -28,7 +28,7 @@ tidy: ## go mod tidy
 	go mod tidy
 
 golden: ## Regenerate all golden images (eyeball diffs before committing)
-	go test ./internal/... -run TestGolden -update
+	go test ./internal/sketch/... -run TestGolden -update
 
 clean: ## Remove build artifacts and rendered output
 	rm -rf bin out

@@ -58,14 +58,7 @@ func Spiral(rng *rand.Rand, cx, cy, r0, r1, turns, wobble float64) []Pt {
 // Loop returns a slightly-more-than-closed wobbly ring (1.1 turns, so the
 // stroke overlaps its own start like a drawn circle).
 func Loop(rng *rand.Rand, cx, cy, r, wobble float64) []Pt {
-	start := rng.Float64() * 2 * math.Pi
-	pts := Spiral(rng, cx, cy, r, r, 1.1, wobble)
-	sin, cos := math.Sin(start), math.Cos(start)
-	for i, p := range pts {
-		dx, dy := p.X-cx, p.Y-cy
-		pts[i] = Pt{X: cx + dx*cos - dy*sin, Y: cy + dx*sin + dy*cos}
-	}
-	return pts
+	return Ring(rng, cx, cy, r, 1.1, wobble)
 }
 
 // FillDisc paints a near-solid disc by stroking a tight spiral with a

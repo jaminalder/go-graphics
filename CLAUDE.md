@@ -16,6 +16,8 @@ go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --pa
 go run ./cmd/staticart list
 ```
 
+Sketches: contour, tapestry, circles, drift, rounds, shoal.
+
 Rendered files land in `out/` (gitignored), named
 `<sketch>_<palette>_<seed>_<WxH>.<ext>`.
 
