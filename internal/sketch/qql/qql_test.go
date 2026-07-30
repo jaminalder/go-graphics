@@ -53,8 +53,31 @@ func TestSchemaIsValid(t *testing.T) {
 	if err := schema.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if len(schema) != 12 {
-		t.Errorf("schema has %d dimensions, want QQL's 12", len(schema))
+	// QQL's own twelve dimensions come first and in the source's order;
+	// anything after them is this project's, not the original's.
+	qqlDims := []string{
+		dimFlowField, dimTurbulence, dimMargin, dimColorVariety, dimColorMode,
+		dimStructure, dimBullseye, dimRingThickness, dimRingSize, dimSizeVariety,
+		dimPalette, dimSpacing,
+	}
+	if len(schema) < len(qqlDims) {
+		t.Fatalf("schema has %d dimensions, want at least QQL's %d", len(schema), len(qqlDims))
+	}
+	for i, want := range qqlDims {
+		if schema[i].Name != want {
+			t.Errorf("dimension %d is %q, want %q — QQL's space must keep its order, "+
+				"or every existing seed moves to a different piece", i, schema[i].Name, want)
+		}
+	}
+	// Ours are appendices to that space, not part of it, so no seed may
+	// ever land on one: every value they add carries weight 0.
+	for _, d := range schema[len(qqlDims):] {
+		for _, v := range d.Values[1:] {
+			if v.Weight != 0 {
+				t.Errorf("dimension %q value %q has weight %v — a seed can land on it, "+
+					"which changes what QQL's output space is", d.Name, v.Name, v.Weight)
+			}
+		}
 	}
 	// The flat CLI namespace is shared with the generic render flags.
 	reserved := map[string]bool{

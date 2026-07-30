@@ -24,7 +24,7 @@ const minRadius = 0.0004
 // fraction of its radius.
 const eccentricity = 0.007
 
-func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackOffset, dots []dot, rng *rand.Rand) {
+func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackOffset, dots []dot, rng *rand.Rand, w *dotWash) {
 	zebra := tr.Is(dimColorMode, "zebra")
 
 	var splattered []dot
@@ -49,7 +49,7 @@ func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackO
 			shadow.primary = d.secondary
 			shadow.secondary = d.secondary
 			shadow.density = d.density * gauss(rng, 0.99, 0.03)
-			drawRingDot(cv, f, shadow, rng)
+			drawRingDot(cv, f, shadow, rng, w)
 		}
 
 		if !zebra {
@@ -57,7 +57,7 @@ func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackO
 			// colour only shows in the stacked shadow.
 			d.secondary = d.primary
 		}
-		drawRingDot(cv, f, d, rng)
+		drawRingDot(cv, f, d, rng, w)
 	}
 
 	for _, d := range splattered {
@@ -65,14 +65,18 @@ func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackO
 		col := c.Draw(rng)
 		d.primary, d.secondary = col, col
 		d.density = math.Max(0.17, d.density*0.7)
-		drawRingDot(cv, f, d, rng)
+		drawRingDot(cv, f, d, rng, w)
 	}
 }
 
 // drawRingDot lays the bands of one dot from the outside in, alternating
 // the two colours. Density decides how much of each band's share of the
 // radius is ink: a dense dot is nearly solid, a sparse one is a target.
-func drawRingDot(cv *paint.Canvas, f frame, d dot, rng *rand.Rand) {
+//
+// w is the watercolour medium, or nil for ink. Where the bands go is
+// settled identically either way — the medium only decides what they are
+// laid with.
+func drawRingDot(cv *paint.Canvas, f frame, d dot, rng *rand.Rand, w *dotWash) {
 	rings := d.drawnRings(f)
 	if rings < 1 {
 		return
@@ -118,6 +122,9 @@ func drawRingDot(cv *paint.Canvas, f frame, d dot, rng *rand.Rand) {
 			thickness = math.Min(thickness, f.w(0.04))
 		}
 
+		if w != nil && w.band(cv, cx, cy, r, thickness, col, rng) {
+			continue
+		}
 		drawMessyCircle(cv, f, cx, cy, r, thickness, varianceAdjust, col, rng)
 	}
 }

@@ -39,6 +39,7 @@ type Wash struct {
 	GrainScale float64 // paper tooth size, canvas units
 	Mottle     float64 // uneven pooling of pigment within one wash
 	Scatter    float64 // light scattered back off the pigment, 0..1
+	Body       float64 // opacity of the pigment itself, 0..1; 0 is a pure glaze
 	Seed       uint64  // granulation lattice seed
 }
 
@@ -128,6 +129,24 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 	}
 	waves := mottleWaves(rng, pr)
 
+	// How far a deposit is held back from its boundary, as a fraction of
+	// that boundary's own radius. The distance itself is a fraction of the
+	// *band's width*, not of the radius: on a narrow ring a tenth of the
+	// radius is wider than the whole band, so every deposit but the last
+	// would land inside-out and contribute nothing — the ring comes out a
+	// fraction of the strength it was asked for, and its rim with it. For
+	// a filled pool the band and the radius are the same thing, so this is
+	// the plain tenth it has always been.
+	width := pr
+	if hollow {
+		width = pr - pin
+	}
+	outerPull := washPull * width / pr
+	innerPull := 0.0
+	if hollow {
+		innerPull = washPull * width / pin
+	}
+
 	layers := make([]washBand, w.Layers)
 	var envelope washRing
 	innerEnv := infRing()
@@ -137,14 +156,14 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 		// Every deposit therefore covers the middle while only some reach
 		// the rim, which is what banks the pigment toward the centre.
 		stage := float64(l*3/w.Layers) / 2
-		layers[l].outer = w.deposit(rng, pr, stage, -1, &base, &soft)
+		layers[l].outer = w.deposit(rng, pr, stage, -1, outerPull, &base, &soft)
 		for i, v := range layers[l].outer {
 			envelope[i] = math.Max(envelope[i], v)
 		}
 		if hollow {
 			// The hole shrinks as the outer edge grows, so the band closes
 			// on its own middle from both sides and banks pigment there.
-			layers[l].inner = w.deposit(rng, pin, stage, +1, &hole, &holeSoft)
+			layers[l].inner = w.deposit(rng, pin, stage, +1, innerPull, &hole, &holeSoft)
 			for i, v := range layers[l].inner {
 				innerEnv[i] = math.Min(innerEnv[i], v)
 			}
@@ -181,15 +200,29 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 	ar := math.Log(transmit(col.R, perLayer))
 	ag := math.Log(transmit(col.G, perLayer))
 	ab := math.Log(transmit(col.B, perLayer))
+	// Body: pigment loaded thickly enough to hide what is under it rather
+	// than only tint it — gouache, or watercolour used as body colour.
+	// Scatter alone cannot do this. A pale pigment barely absorbs, so a
+	// stack of it transmits most of the ground however much it scatters,
+	// and a white mark on a dark ground stays a ghost; hiding has to come
+	// off the transmittance. At Body 1 a deposit passes only what alpha
+	// says it should, and the mark dries as flat pigment colour.
+	hide := math.Log(1 - w.Body*perLayer)
+	ar += hide
+	ag += hide
+	ab += hide
+
 	// Pigment does not only absorb: some light scatters back off the
 	// particles before reaching what is underneath. Without this floor a
 	// stack of washes marches to black and every crossing goes dead,
 	// which is exactly the complaint painters have about mixing on the
 	// palette instead of glazing. With it the stack asymptotes to the
-	// pigment's own masstone, which is what a thick layer really does.
-	fr := w.Scatter * palette.SRGBToLinear(col.R)
-	fg := w.Scatter * palette.SRGBToLinear(col.G)
-	fb := w.Scatter * palette.SRGBToLinear(col.B)
+	// pigment's own masstone, which is what a thick layer really does —
+	// and as the pigment gains body, that masstone is all there is.
+	floor := w.Scatter + (1-w.Scatter)*w.Body
+	fr := floor * palette.SRGBToLinear(col.R)
+	fg := floor * palette.SRGBToLinear(col.G)
+	fb := floor * palette.SRGBToLinear(col.B)
 
 	// The tooth is a property of the paper, so it keeps an absolute size
 	// however large the wash is — but never so fine that it aliases into
@@ -249,9 +282,14 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 				if hollow {
 					// The hole is a boundary the water retreated from too,
 					// so it carries its own rim, measured outward from it.
+					// The two are combined by taking the stronger, not by
+					// adding: a point in the band belongs to whichever edge
+					// the water left it at. Summed, a narrow ring — where
+					// both tails cover the whole width — is lifted by twice
+					// the rim everywhere and dries as a solid dark stripe.
 					ti := (d - sampleRing(&innerEnv, idx)) / band
 					rin := w.Edge * (1 - 0.8*sampleRing(&holeSoft, idx))
-					lift += rin * math.Exp(-12*(ti-0.3)*(ti-0.3))
+					lift = math.Max(lift, rin*math.Exp(-12*(ti-0.3)*(ti-0.3)))
 				}
 				n *= 1 + lift
 			}
@@ -369,12 +407,12 @@ func (w Wash) outline(rng *rand.Rand, soft *washRing) washRing {
 // how close to that radius it reaches; dir is -1 for a boundary the paint
 // grows outward to and +1 for one it retreats inward from, so a hole
 // closes over the same three stages that an edge opens out.
-func (w Wash) deposit(rng *rand.Rand, pr, stage, dir float64, base, soft *washRing) washRing {
+func (w Wash) deposit(rng *rand.Rand, pr, stage, dir, pull float64, base, soft *washRing) washRing {
 	// Deposits sit at very nearly the same size. Spreading their radii
 	// widely dissolves the boundary into an airbrushed gradient, and a
 	// wash with no boundary has no rim either — the two cues that
 	// separate watercolour from a soft blur both live at the edge.
-	scale := 1 + dir*0.1*(1-stage)*(0.5+0.5*rng.Float64())
+	scale := 1 + dir*pull*(1-stage)*(0.5+0.5*rng.Float64())
 
 	var amp, phase [4]float64
 	for k := range amp {
@@ -392,6 +430,10 @@ func (w Wash) deposit(rng *rand.Rand, pr, stage, dir float64, base, soft *washRi
 	}
 	return out
 }
+
+// washPull is how far the earliest deposits are held back from the
+// boundary, as a fraction of the band's width.
+const washPull = 0.1
 
 // washHarmonics is how many terms shape a pool's silhouette.
 const washHarmonics = 24

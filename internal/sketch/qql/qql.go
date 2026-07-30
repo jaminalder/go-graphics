@@ -41,6 +41,10 @@ const (
 	streamPaint  = 8
 )
 
+// saltPaper salts the granulation lattice of the wash medium, so the paper
+// texture is independent of everything the seed decides about the piece.
+const saltPaper = 0x706170 // "pap"
+
 // Sketch renders one QQL piece.
 type Sketch struct {
 	opts *trait.Options
@@ -86,7 +90,11 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		return nil, err
 	}
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, p.scheme.Background)
-	paintDots(cv, p.frame, p.traits, p.scheme, p.stack, p.dots, ctx.RNG(streamPaint))
+	var wash *dotWash
+	if p.traits.Is(dimMedium, mediumWash) {
+		wash = newDotWash(ctx.Seed^saltPaper, p.scheme.Background)
+	}
+	paintDots(cv, p.frame, p.traits, p.scheme, p.stack, p.dots, ctx.RNG(streamPaint), wash)
 	return cv.Image(), nil
 }
 

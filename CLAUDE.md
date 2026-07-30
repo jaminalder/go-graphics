@@ -22,6 +22,8 @@ go run ./cmd/staticart traits qql --seed N   # the output-space point a seed lan
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
+It also has `--medium wash` (watercolour instead of ink); it needs room, so
+pair it with `--ring-size large` and/or `--spacing sparse`.
 
 Rendered files land in `out/` (gitignored), named
 `<sketch>_<palette>_<seed>_<WxH>.<ext>`.

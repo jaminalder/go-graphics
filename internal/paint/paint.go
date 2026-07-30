@@ -37,6 +37,12 @@ func NewCanvas(w, h int, bg palette.Color) *Canvas {
 	return c
 }
 
+// Scale is the canvas resolution in pixels per canvas unit. Compositions
+// are written in canvas units and must stay resolution independent, so use
+// it only to decide what is worth drawing at all — how finely to subdivide
+// a mark, whether a detail can resolve — never to size one.
+func (c *Canvas) Scale() float64 { return c.scale }
+
 // Dab stamps a soft-edged disc of radius r at (u, v), blended source-over
 // with the given alpha.
 func (c *Canvas) Dab(u, v, r float64, col palette.Color, alpha float64) {

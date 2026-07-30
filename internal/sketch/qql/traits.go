@@ -18,7 +18,14 @@ const (
 	dimSizeVariety   = "size-variety"
 	dimPalette       = "qql-palette"
 	dimSpacing       = "spacing"
+	dimMedium        = "medium"
 )
+
+// mediumWash is the medium value that paints every band as a pool of
+// watercolour instead of a stack of opaque strokes. It carries weight 0,
+// so a seed never lands on it: QQL is an ink piece unless asked otherwise,
+// and the medium is a choice about the material, not a trait of the work.
+const mediumWash = "wash"
 
 // paletteExternal is the qql-palette value that hands colour duty to
 // whatever --palette names. It carries weight 0, so a seed never lands on
@@ -163,6 +170,20 @@ var schema = trait.Schema{
 			{Name: "dense", Weight: 2},
 			{Name: "medium", Weight: 1},
 			{Name: "sparse", Weight: 1},
+		},
+	},
+	// Appended last, and deliberately so: the twelve dimensions above are
+	// QQL's own output space, and inserting into it would move every
+	// existing seed onto a different piece. A thirteenth is safe at the
+	// end, and with the wash at weight 0 no seed's draw changes at all —
+	// the medium is reachable only by asking for it, and shows up in the
+	// filename when you do because it was overridden.
+	{
+		Name: dimMedium, Key: "md",
+		Doc: "what the bands are painted with",
+		Values: []trait.Value{
+			{Name: "ink", Weight: 1},
+			{Name: mediumWash, Weight: 0},
 		},
 	},
 }
