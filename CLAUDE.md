@@ -13,12 +13,13 @@ make test       # go test ./...
 make lint       # golangci-lint (v2.12 local; config .golangci.yml)
 make preview    # render sketch "contour" at preview size into out/
 make preview-qql # render sketch "qql" at its native 4:5 preview size
+make preview-pools # render sketch "pools" (watercolour circles)
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
 go run ./cmd/staticart traits qql --seed N   # the output-space point a seed lands on
 ```
 
-Sketches: contour, tapestry, circles, drift, rounds, shoal, qql.
+Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 

@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql
+.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -39,3 +39,6 @@ preview: ## Render the contour sketch at preview size into out/
 
 preview-qql: ## Render the qql sketch at its native 4:5 preview size into out/
 	go run ./cmd/staticart render qql --profile preview-tall --out out
+
+preview-pools: ## Render the pools sketch at preview size into out/
+	go run ./cmd/staticart render pools --profile preview --palette tchelitchew-hide-and-seek --out out

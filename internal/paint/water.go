@@ -60,16 +60,55 @@ func DefaultWash(seed uint64) Wash {
 // washRing is a radius table in pixels.
 type washRing [washAngles]float64
 
+// washBand is one deposit: the region between two radius tables. inner is
+// unused — and left zero — on a filled pool.
+type washBand struct{ outer, inner washRing }
+
+// infRing is the identity for taking a per-angle minimum.
+func infRing() washRing {
+	var r washRing
+	for i := range r {
+		r[i] = math.Inf(1)
+	}
+	return r
+}
+
 // Pool lays a pool of col centred at (u, v) with nominal radius r.
 // alpha is the strength the pool reaches where every deposit covers it.
 func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color, alpha float64) {
-	if w.Layers < 1 || r <= 0 || alpha <= 0 {
+	w.lay(c, rng, u, v, r, 0, col, alpha)
+}
+
+// Ring lays an annular pool: the band of the given thickness straddling
+// radius r, so it spans r ± thickness/2, with bare paper inside it.
+//
+// A ring is not a pool with a pool of ground painted over it. Both of its
+// boundaries are wet edges, so both dry with a rim, and the pigment banks
+// toward the middle of the band from each side — which is what a brushed
+// circle of water actually does, and what makes the hole read as paper
+// that was never painted rather than as something masked out afterwards.
+// A thickness of 2·r or more closes the hole and the ring becomes a pool.
+func (w Wash) Ring(c *Canvas, rng *rand.Rand, u, v, r, thickness float64, col palette.Color, alpha float64) {
+	if thickness <= 0 {
 		return
 	}
-	px, py, pr := u*c.scale, v*c.scale, r*c.scale
+	w.lay(c, rng, u, v, r+thickness/2, r-thickness/2, col, alpha)
+}
+
+// lay is the shared body of Pool and Ring: a stack of deposits between an
+// outer boundary and an optional inner one. rInner <= 0 means filled.
+func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col palette.Color, alpha float64) {
+	if w.Layers < 1 || rOuter <= 0 || alpha <= 0 {
+		return
+	}
+	px, py, pr := u*c.scale, v*c.scale, rOuter*c.scale
 	if pr < 0.4 {
 		return
 	}
+	// A hole only survives if it is worth more than a pixel; below that
+	// the ring is painted as the solid dot it would dry into anyway.
+	pin := rInner * c.scale
+	hollow := pin > 1
 
 	// Softness varies around the perimeter, as if parts of the paper
 	// were wetter than others: where it is high the edge frays and the
@@ -78,19 +117,37 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 	// things that makes procedural watercolour read as procedural.
 	soft := softnessRing(rng)
 	base := w.outline(rng, &soft)
+	// The hole gets its own outline and its own softness rather than a
+	// scaled copy of the outer one: the two boundaries were wetted by
+	// different strokes, and a ring whose inside echoes its outside reads
+	// as an extruded shape instead of as a band of paint.
+	var holeSoft, hole washRing
+	if hollow {
+		holeSoft = softnessRing(rng)
+		hole = w.outline(rng, &holeSoft)
+	}
 	waves := mottleWaves(rng, pr)
 
-	layers := make([]washRing, w.Layers)
+	layers := make([]washBand, w.Layers)
 	var envelope washRing
+	innerEnv := infRing()
 	for l := range layers {
 		// Deposits are refined in three groups: the early ones sit well
 		// inside the nominal radius and only the last group reaches it.
 		// Every deposit therefore covers the middle while only some reach
 		// the rim, which is what banks the pigment toward the centre.
 		stage := float64(l*3/w.Layers) / 2
-		layers[l] = w.deposit(rng, pr, stage, &base, &soft)
-		for i, v := range layers[l] {
+		layers[l].outer = w.deposit(rng, pr, stage, -1, &base, &soft)
+		for i, v := range layers[l].outer {
 			envelope[i] = math.Max(envelope[i], v)
+		}
+		if hollow {
+			// The hole shrinks as the outer edge grows, so the band closes
+			// on its own middle from both sides and banks pigment there.
+			layers[l].inner = w.deposit(rng, pin, stage, +1, &hole, &holeSoft)
+			for i, v := range layers[l].inner {
+				innerEnv[i] = math.Min(innerEnv[i], v)
+			}
 		}
 	}
 	outer := 0.0
@@ -106,6 +163,15 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 	// started, it stops reading as dried pigment and starts reading as a
 	// stroke drawn round the shape.
 	band := math.Max(outer*0.16, 2)
+	if hollow {
+		// On a narrow band the two rims would otherwise overlap into one
+		// uniformly dark stripe, which is a drawn circle, not a dried one.
+		inner := math.Inf(1)
+		for _, v := range innerEnv {
+			inner = math.Min(inner, v)
+		}
+		band = math.Max(math.Min(band, 0.35*(outer-inner)), 1.5)
+	}
 
 	// Per-deposit strength, set so a fully covered pool lands on alpha.
 	perLayer := 1 - math.Pow(1-mathx.Clamp01(alpha), 1/float64(w.Layers))
@@ -148,8 +214,17 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 			// n is how many deposits reached this pixel, with a sub-pixel
 			// ramp at each one's own edge so the pool anti-aliases itself.
 			n := 0.0
-			for l := range layers {
-				n += mathx.Clamp01(sampleRing(&layers[l], idx) - d + 0.5)
+			if hollow {
+				for l := range layers {
+					cov := math.Min(
+						mathx.Clamp01(sampleRing(&layers[l].outer, idx)-d+0.5),
+						mathx.Clamp01(d-sampleRing(&layers[l].inner, idx)+0.5))
+					n += cov
+				}
+			} else {
+				for l := range layers {
+					n += mathx.Clamp01(sampleRing(&layers[l].outer, idx) - d + 0.5)
+				}
 			}
 			if n <= 0 {
 				continue
@@ -170,7 +245,15 @@ func (w Wash) Pool(c *Canvas, rng *rand.Rand, u, v, r float64, col palette.Color
 				env := sampleRing(&envelope, idx)
 				t := (env - d) / band
 				rim := w.Edge * (1 - 0.8*sampleRing(&soft, idx))
-				n *= 1 + rim*math.Exp(-12*(t-0.3)*(t-0.3))
+				lift := rim * math.Exp(-12*(t-0.3)*(t-0.3))
+				if hollow {
+					// The hole is a boundary the water retreated from too,
+					// so it carries its own rim, measured outward from it.
+					ti := (d - sampleRing(&innerEnv, idx)) / band
+					rin := w.Edge * (1 - 0.8*sampleRing(&holeSoft, idx))
+					lift += rin * math.Exp(-12*(ti-0.3)*(ti-0.3))
+				}
+				n *= 1 + lift
 			}
 			// Both of these modulate how much pigment settled, not the
 			// final colour, so they read as pigment sitting in the paper
@@ -281,15 +364,17 @@ func (w Wash) outline(rng *rand.Rand, soft *washRing) washRing {
 }
 
 // deposit is one near-transparent laying-down of pigment: the shared
-// outline, pulled in by how early it went down and nudged by a little
-// low-frequency wobble of its own. stage in [0,1] sets how close to the
-// nominal radius it reaches.
-func (w Wash) deposit(rng *rand.Rand, pr, stage float64, base, soft *washRing) washRing {
+// outline, pulled off the nominal radius by how early it went down and
+// nudged by a little low-frequency wobble of its own. stage in [0,1] sets
+// how close to that radius it reaches; dir is -1 for a boundary the paint
+// grows outward to and +1 for one it retreats inward from, so a hole
+// closes over the same three stages that an edge opens out.
+func (w Wash) deposit(rng *rand.Rand, pr, stage, dir float64, base, soft *washRing) washRing {
 	// Deposits sit at very nearly the same size. Spreading their radii
 	// widely dissolves the boundary into an airbrushed gradient, and a
 	// wash with no boundary has no rim either — the two cues that
 	// separate watercolour from a soft blur both live at the edge.
-	scale := 1 - 0.1*(1-stage)*(0.5+0.5*rng.Float64())
+	scale := 1 + dir*0.1*(1-stage)*(0.5+0.5*rng.Float64())
 
 	var amp, phase [4]float64
 	for k := range amp {
