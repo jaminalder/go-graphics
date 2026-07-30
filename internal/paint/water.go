@@ -129,22 +129,27 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 	}
 	waves := mottleWaves(rng, pr)
 
-	// How far a deposit is held back from its boundary, as a fraction of
-	// that boundary's own radius. The distance itself is a fraction of the
-	// *band's width*, not of the radius: on a narrow ring a tenth of the
-	// radius is wider than the whole band, so every deposit but the last
-	// would land inside-out and contribute nothing — the ring comes out a
-	// fraction of the strength it was asked for, and its rim with it. For
-	// a filled pool the band and the radius are the same thing, so this is
-	// the plain tenth it has always been.
+	// How much a deposit may depart from its boundary — both the hold-back
+	// that banks pigment inward and the deposit's own wobble — expressed
+	// relative to that boundary's radius, because that is the unit the
+	// radius tables are in.
+	//
+	// Both distances belong to the *band's width*, not to the radius. A
+	// tenth of the radius is wider than a narrow ring altogether: the
+	// hold-back lands every deposit but the last inside-out so the ring
+	// dries at a fraction of the strength asked for, and the wobble
+	// scatters the boundary over more than the band is wide, which
+	// dissolves it into an airbrushed gradient with no edge and therefore
+	// no rim. For a filled pool the band and the radius are the same
+	// thing, so both are exactly what they have always been.
 	width := pr
 	if hollow {
 		width = pr - pin
 	}
-	outerPull := washPull * width / pr
-	innerPull := 0.0
+	outerNarrow := width / pr
+	innerNarrow := 0.0
 	if hollow {
-		innerPull = washPull * width / pin
+		innerNarrow = width / pin
 	}
 
 	layers := make([]washBand, w.Layers)
@@ -156,14 +161,14 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 		// Every deposit therefore covers the middle while only some reach
 		// the rim, which is what banks the pigment toward the centre.
 		stage := float64(l*3/w.Layers) / 2
-		layers[l].outer = w.deposit(rng, pr, stage, -1, outerPull, &base, &soft)
+		layers[l].outer = w.deposit(rng, pr, stage, -1, outerNarrow, &base, &soft)
 		for i, v := range layers[l].outer {
 			envelope[i] = math.Max(envelope[i], v)
 		}
 		if hollow {
 			// The hole shrinks as the outer edge grows, so the band closes
 			// on its own middle from both sides and banks pigment there.
-			layers[l].inner = w.deposit(rng, pin, stage, +1, innerPull, &hole, &holeSoft)
+			layers[l].inner = w.deposit(rng, pin, stage, +1, innerNarrow, &hole, &holeSoft)
 			for i, v := range layers[l].inner {
 				innerEnv[i] = math.Min(innerEnv[i], v)
 			}
@@ -406,17 +411,19 @@ func (w Wash) outline(rng *rand.Rand, soft *washRing) washRing {
 // nudged by a little low-frequency wobble of its own. stage in [0,1] sets
 // how close to that radius it reaches; dir is -1 for a boundary the paint
 // grows outward to and +1 for one it retreats inward from, so a hole
-// closes over the same three stages that an edge opens out.
-func (w Wash) deposit(rng *rand.Rand, pr, stage, dir, pull float64, base, soft *washRing) washRing {
+// closes over the same three stages that an edge opens out. narrow is the
+// band's width as a fraction of this boundary's radius, which is 1 for a
+// filled pool and scales every departure down on a ring.
+func (w Wash) deposit(rng *rand.Rand, pr, stage, dir, narrow float64, base, soft *washRing) washRing {
 	// Deposits sit at very nearly the same size. Spreading their radii
 	// widely dissolves the boundary into an airbrushed gradient, and a
 	// wash with no boundary has no rim either — the two cues that
 	// separate watercolour from a soft blur both live at the edge.
-	scale := 1 + dir*pull*(1-stage)*(0.5+0.5*rng.Float64())
+	scale := 1 + dir*washPull*narrow*(1-stage)*(0.5+0.5*rng.Float64())
 
 	var amp, phase [4]float64
 	for k := range amp {
-		amp[k] = w.Ragged * 0.3 * (0.3 + 0.7*rng.Float64()) / float64(k+1)
+		amp[k] = w.Ragged * 0.3 * narrow * (0.3 + 0.7*rng.Float64()) / float64(k+1)
 		phase[k] = rng.Float64() * 2 * math.Pi
 	}
 	var out washRing

@@ -37,12 +37,16 @@ const washMinBand = 1.8
 // piece desaturates to the ground's hue. This keeps the pigment reading as
 // the colour QQL chose, with the ground modulating it rather than
 // swallowing it.
-const washBody = 0.85
+const washBody = 0.9
 
-// washAlpha is how strong a band is where every deposit covers it. Below
-// 1 so a dot's stacked shadow and any splatter over it still read through
-// one another, and so the ground keeps a little say in every mark.
-const washAlpha = 0.9
+// washAlpha is how strong a band is where every deposit covers it, and it
+// is the setting the whole medium turns on. The rim, the granulation and
+// the pooling all work by varying how much pigment reached a pixel, so a
+// mark laid at full strength has nothing left to vary: it saturates, and
+// every one of them is crushed flat. Held here, the body of a band still
+// shows some ground and the rim can go all the way to the pigment, which
+// is the difference between a wash and a filled shape.
+const washAlpha = 0.75
 
 // washMaxLayers caps the deposit stack. A pool's softness comes from how
 // many near-transparent deposits happen to reach a pixel, so a large mark
@@ -62,6 +66,10 @@ func newDotWash(seed uint64, ground palette.Color) *dotWash {
 	// that is the one thing the whole output space is built around. The
 	// default 0.22 is a blob; this is a wet edge on a circle.
 	w.Ragged = 0.075
+	// A stronger rim than the default. QQL's bands are narrow relative to
+	// their radius, so the rim has little room to sit in and needs to be
+	// emphatic to read as one at all.
+	w.Edge = 2.2
 	return &dotWash{base: w, ground: ground}
 }
 
