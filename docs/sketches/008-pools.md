@@ -85,6 +85,7 @@ a believable third colour wherever two discs cross.
 | `Banded` | 0.3 | share filled with fine concentric rings |
 | `BandWidth` | 0.022 | ring pitch of a banded circle, canvas units |
 | `BandOverlap` | 0.4 | how far neighbouring rings cross, ×pitch |
+| `MaxBands` | 5 | most rings a banded circle may be built from |
 | `Alpha` | 0.74 | pool strength; below 1 so crossings stay readable |
 | `Pigments` | 4 | palette colours in play |
 | `Ground` | 0.5 | strength of the painted ground wash; 0 is bare paper |
@@ -117,16 +118,22 @@ way means the mark also darkens or lightens as it goes inward rather than
 doubling back.
 
 The pitch is a **width, not a count**, so a mark twice the radius gets twice
-the rings rather than rings twice as fat, and the ring texture weighs the
-same across the whole size ladder. At the default pitch the largest circle
-comes out with **5–10 bands** — wide enough that each is a ring of colour in
-its own right, with its own wet edge and rim, rather than a line in a
-woodcut. `TestBigCircleGetsFiveToTenBands` holds the pitch to that against
-the top of the size ladder, since the count is what the mark reads as.
+the rings rather than rings twice as fat and the ring texture weighs the
+same across the size ladder — up to `MaxBands`, where the rule inverts.
 
-The two dials are worth knowing: `--band-width 0.008` gives a fine grain of
-thirty-odd rings, `0.03` a bold half-dozen; `--band-overlap 0.2` leaves the
-seams open, `0.9` merges them into a graduated fill.
+That inversion is what the mark lives on. Past the cap a large disc would go
+on accumulating rings until it read as a *target*, and the thing that makes
+it — a ring wide enough to be a band of colour in its own right, with its own
+wet edge and rim — would be lost to a count. So the biggest discs keep the
+ring count and **widen the rings instead**, which is the trade a painter
+makes for the same reason. `TestBandPitchHoldsUntilTheCapBinds` covers both
+halves; `TestBigCircleKeepsFewWideRings` checks the top of the ladder comes
+out with few rings *and* that they are genuinely wider, not merely fewer.
+
+The dials: `--max-bands` is how busy a large disc may get; `--band-width
+0.008` gives a fine grain on the small ones, `0.03` a bold half-dozen;
+`--band-overlap 0.2` leaves the seams open, `0.9` merges them into a
+graduated fill.
 
 Prototype — a handful of big ones, some crossing:
 
@@ -143,13 +150,18 @@ specks in it. The frame fills when four things move together: the count up,
 the size ladder down, `Gap` in (negative, so discs cross), and `Margin`
 closed. The set in `out/discs` steps all four across five levels:
 
-| level | count | base | gap | margin |
-|---|---|---|---|---|
-| sparse | 6 | 0.115 | 0.12 | 0.055 |
-| open | 11 | 0.090 | 0.10 | 0.045 |
-| medium | 20 | 0.070 | 0.07 | 0.035 |
-| busy | 34 | 0.055 | 0.02 | 0.028 |
-| packed | 58 | 0.045 | −0.07 | 0.020 |
+| level | count | base | rungs × ratio | largest | gap | margin |
+|---|---|---|---|---|---|---|
+| open | 12 | 0.085 | 3 × 1.62 | 0.223 | 0.10 | 0.045 |
+| medium | 22 | 0.065 | 4 × 1.55 | 0.242 | 0.06 | 0.035 |
+| busy | 38 | 0.050 | 5 × 1.52 | 0.267 | 0.01 | 0.028 |
+| packed | 62 | 0.040 | 5 × 1.60 | 0.262 | −0.05 | 0.020 |
+
+Every level reaches a disc of around a quarter of the canvas, so a packed
+sheet carries a few genuinely large marks among the small ones. That is the
+size hierarchy doing the work: a packed field of one size is a texture, a
+packed field with three or four big ones in it is a composition — and the
+ring cap is what keeps those big ones a few wide bands rather than targets.
 
 ## Acceptance checklist
 

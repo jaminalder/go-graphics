@@ -45,9 +45,18 @@ type bandPlan struct {
 // gives each one a colour from the ramp.
 func (s *Sketch) planBands(rng *rand.Rand, r float64, ramp []palette.Color) bandPlan {
 	// Band count comes from a width in canvas units, not from a fixed
-	// number, so a large mark gets more rings rather than fatter ones and
-	// the ring texture stays the same weight across the size ladder.
-	n := max(int(math.Round(r/s.BandWidth)), 2)
+	// number, so a mark twice the radius gets twice the rings rather than
+	// rings twice as fat and the ring texture keeps its weight across the
+	// size ladder — up to a point.
+	//
+	// That point is MaxBands, and it is where the rule inverts. Past it a
+	// large disc would go on accumulating rings until it read as a target
+	// rather than as a few concentric washes, and the thing that makes the
+	// mark — a ring wide enough to be a band of colour in its own right,
+	// with its own wet edge and rim — would be lost to a count. So the
+	// biggest discs keep the ring count and widen the rings instead, which
+	// is the trade a painter makes for the same reason.
+	n := min(max(int(math.Round(r/s.BandWidth)), 2), max(s.MaxBands, 2))
 	step := r / float64(n)
 
 	// Anchors are consecutive entries of the luminance-ordered pigments,

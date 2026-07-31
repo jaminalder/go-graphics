@@ -73,47 +73,74 @@ func TestBandsOverlapTheirNeighbours(t *testing.T) {
 	}
 }
 
-// TestBandPitchHoldsAcrossSizes guards the reason the pitch is a width and
-// not a count: the ring texture has to weigh the same on a large mark as on
-// a small one, so a mark twice the radius gets twice the rings rather than
-// rings twice as fat.
+// TestBandPitchHoldsUntilTheCapBinds covers both halves of the sizing rule.
 //
-// The count is a rounded quotient, so the realised pitch cannot land on the
-// nominal one exactly — a disc has to come out whole. The bound below is
-// that rounding and nothing more, which is the strongest thing that is
-// actually true, and it is tightest where it matters: at a handful of wide
-// bands the quantisation is a quarter of a band, and at thirty fine ones it
-// vanishes.
-func TestBandPitchHoldsAcrossSizes(t *testing.T) {
+// Below MaxBands the pitch is a width, so a mark twice the radius gets
+// twice the rings rather than rings twice as fat and the ring texture keeps
+// its weight across the ladder. The count is a rounded quotient — a disc
+// has to come out whole — so the realised pitch cannot land on the nominal
+// one exactly, and the bound below is that rounding and nothing more.
+//
+// At the cap the rule inverts: the count stops and the rings widen instead,
+// which is what keeps a large disc a few concentric washes rather than a
+// target.
+func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
 	s := New()
 	rng := testCtx(t, 1).RNG(streamLayout)
 	_, _, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
 
-	for _, r := range []float64{0.05, 0.09, 0.15, 0.22, 0.4} {
+	// The pitch is only free between the two limits: below a couple of
+	// bands a disc still has to come out whole, and above the cap it is the
+	// cap that decides.
+	floored := 2 * s.BandWidth
+	capped := float64(s.MaxBands) * s.BandWidth
+	var lastPitch float64
+	for _, r := range []float64{0.05, 0.09, 0.15, 0.22, 0.35} {
 		p := s.planBands(rng, r, ramp)
 		n := len(p.mid)
 		step := p.mid[0] - p.mid[1] // consecutive centres are one pitch apart
-		if bound := 0.5 * s.BandWidth / float64(n); math.Abs(step-s.BandWidth) > bound+1e-9 {
-			t.Errorf("radius %v: %d bands at pitch %.5f, want %.5f ±%.5f",
-				r, n, step, s.BandWidth, bound)
+
+		if n > s.MaxBands {
+			t.Fatalf("radius %v got %d bands, over the cap of %d", r, n, s.MaxBands)
 		}
+		if r >= floored && r <= capped {
+			bound := 0.5 * s.BandWidth / float64(n)
+			if math.Abs(step-s.BandWidth) > bound+1e-9 {
+				t.Errorf("radius %v under the cap: %d bands at pitch %.5f, want %.5f ±%.5f",
+					r, n, step, s.BandWidth, bound)
+			}
+			continue
+		}
+		// Over the cap the rings must actually be getting wider, not just
+		// stopping at the nominal pitch and leaving the centre unpainted.
+		if step <= lastPitch {
+			t.Errorf("radius %v is over the cap but its pitch %.5f did not widen past %.5f",
+				r, step, lastPitch)
+		}
+		lastPitch = step
 	}
 }
 
-// TestBigCircleGetsFiveToTenBands pins the pitch against the size ladder.
-// The band count is what the mark reads as: a handful of wide rings is a
-// set of concentric glazes, thirty fine ones is a woodcut. The top of the
-// ladder is where the choice shows, so that is where it is measured.
-func TestBigCircleGetsFiveToTenBands(t *testing.T) {
+// TestBigCircleKeepsFewWideRings is the rule the mark lives or dies by. A
+// disc that goes on accumulating rings as it grows reads as a target; what
+// makes this mark is a ring wide enough to be a band of colour in its own
+// right, with its own wet edge and rim. So past a point the count stops and
+// the rings widen — measured at the top of the ladder, where it shows.
+func TestBigCircleKeepsFewWideRings(t *testing.T) {
 	s := New()
 	radii, _ := s.ladder()
 	big := radii[len(radii)-1]
 	rng := testCtx(t, 1).RNG(streamLayout)
 	_, _, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
 
-	n := len(s.planBands(rng, big, ramp).mid)
-	if n < 5 || n > 10 {
-		t.Errorf("the largest circle (r=%v) gets %d bands, want 5-10 at pitch %v", big, n, s.BandWidth)
+	p := s.planBands(rng, big, ramp)
+	if n := len(p.mid); n > s.MaxBands {
+		t.Errorf("the largest circle (r=%v) gets %d rings, over the cap of %d", big, n, s.MaxBands)
+	}
+	// And they are wider than the nominal pitch, not merely fewer.
+	if step := p.mid[0] - p.mid[1]; step < s.BandWidth {
+		t.Errorf("the largest circle's rings are %.4f wide, no wider than the %.4f pitch",
+			step, s.BandWidth)
 	}
 }
 

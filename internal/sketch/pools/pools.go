@@ -55,6 +55,7 @@ type Sketch struct {
 	Banded       float64 // share filled with fine concentric rings
 	BandWidth    float64 // ring pitch of a banded circle, canvas units
 	BandOverlap  float64 // how far neighbouring rings cross, ×pitch
+	MaxBands     int     // most rings a banded circle may be built from
 	Alpha        float64 // pool strength
 	Pigments     int     // palette colours in play
 	Ground       float64 // strength of the painted ground wash; 0 is bare paper
@@ -81,6 +82,7 @@ func New() *Sketch {
 		Banded:       0.3,
 		BandWidth:    0.022,
 		BandOverlap:  0.4,
+		MaxBands:     5,
 		Alpha:        0.74,
 		Pigments:     4,
 		Ground:       0.5,

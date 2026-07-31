@@ -12,6 +12,7 @@ type cliOptions struct {
 	count        int
 	pigments     int
 	rungs        int
+	maxBands     int
 	base         float64
 	ratio        float64
 	satellites   float64
@@ -44,6 +45,7 @@ var _ sketch.Configurable = (*Sketch)(nil)
 func (s *Sketch) Flags(fs *flag.FlagSet) {
 	fs.IntVar(&s.opts.count, "count", -1, "anchor circles before satellites; default 26")
 	fs.IntVar(&s.opts.pigments, "pigments", -1, "palette colours in play; default 4")
+	fs.IntVar(&s.opts.maxBands, "max-bands", unsetInt, "most rings a banded circle may have; default 5")
 	fs.IntVar(&s.opts.rungs, "rungs", -1, "steps on the size ladder; default 5")
 	fs.Float64Var(&s.opts.base, "base", -1, "smallest circle radius in canvas units; default 0.03")
 	fs.Float64Var(&s.opts.ratio, "ratio", -1, "size ladder step ratio; default 1.55")
@@ -115,6 +117,7 @@ func (s *Sketch) Configure() (string, error) {
 		{"count", s.opts.count, 0, 400, &s.Count}, // 0 renders the bare ground
 		{"pigments", s.opts.pigments, 1, 12, &s.Pigments},
 		{"rungs", s.opts.rungs, 1, 9, &s.Rungs},
+		{"max-bands", s.opts.maxBands, 2, 40, &s.MaxBands},
 	} {
 		if o.val == unset {
 			continue
