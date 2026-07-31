@@ -260,6 +260,8 @@ type Traited interface {
 
 | 25 | The wash medium is laid below full strength, and that is the setting it turns on | Everything that makes a wash look like one — the rim, the granulation, the pooling — works by varying how much pigment reached a pixel. Laid at full strength the mark saturates: the variation lands on a stack that is already opaque, and every cue is crushed flat, which is what the first version did at alpha 0.9. Held at 0.75 the body of a band still transmits some ground while the rim can go all the way to the pigment, and the difference between the two is the rim. Body then does the opposite job — it keeps the colour the pigment's rather than the ground's — so the two are tuned against each other, not together. |
 
+| 26 | `Wash` caps a ring's raggedness against its own width | Raggedness is an edge deviation measured against the radius, which is right for a pool's silhouette and wrong for a narrow band: the outer and inner boundaries wander independently, so once the deviation approaches the width they cross and the ring dries as a string of beads. The cap lives in `lay` rather than in each caller because it is a property of the primitive, and because it is what makes a run of fine concentric rings — sketch 008's banded circle — possible at all. A filled pool is as wide as it is round, so the cap never binds and `Pool` is untouched. |
+
 ## 9. Roadmap
 
 1. **Sketch 001 "contour"** — shuffled-gradient contour noise (spec:

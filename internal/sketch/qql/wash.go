@@ -85,11 +85,6 @@ func (d *dotWash) band(cv *paint.Canvas, x, y, r, thickness float64, col palette
 	w := d.base
 	w.Layers = min(max(int(4*tp)+6, 8), washMaxLayers)
 
-	// Raggedness is a fraction of the radius, so on a thin band the two
-	// boundaries would wander past each other and break the ring into
-	// beads. Cap the deviation against the band's own width instead.
-	w.Ragged = math.Min(w.Ragged, 0.35*thickness/r)
-
 	// How much the pigment hides its ground. QQL is not a picture painted
 	// on white paper: it lays opaque marks on a coloured ground, often a
 	// dark one, and a pure glaze cannot do that — transparent pigment

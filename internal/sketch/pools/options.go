@@ -9,18 +9,21 @@ import (
 )
 
 type cliOptions struct {
-	count      int
-	pigments   int
-	rungs      int
-	base       float64
-	ratio      float64
-	satellites float64
-	ragged     float64
-	rings      float64
-	open       float64
-	glaze      float64
-	alpha      float64
-	margin     float64
+	count       int
+	pigments    int
+	rungs       int
+	base        float64
+	ratio       float64
+	satellites  float64
+	ragged      float64
+	rings       float64
+	open        float64
+	glaze       float64
+	banded      float64
+	bandWidth   float64
+	bandOverlap float64
+	alpha       float64
+	margin      float64
 }
 
 var _ sketch.Configurable = (*Sketch)(nil)
@@ -37,6 +40,9 @@ func (s *Sketch) Flags(fs *flag.FlagSet) {
 	fs.Float64Var(&s.opts.rings, "rings", -1, "share of circles carrying inner rings; default 0.34")
 	fs.Float64Var(&s.opts.open, "open", -1, "share painted as annuli rather than discs; default 0.28")
 	fs.Float64Var(&s.opts.glaze, "glaze", -1, "share carrying a second pigment on top; default 0.16")
+	fs.Float64Var(&s.opts.banded, "banded", -1, "share of circles filled with fine concentric rings; default 0.3")
+	fs.Float64Var(&s.opts.bandWidth, "band-width", -1, "ring pitch of a banded circle, canvas units; default 0.0065")
+	fs.Float64Var(&s.opts.bandOverlap, "band-overlap", -1, "how far neighbouring rings cross, x pitch; default 0.55")
 	fs.Float64Var(&s.opts.alpha, "alpha", -1, "pool strength; below 1 keeps crossings readable; default 0.62")
 	fs.Float64Var(&s.opts.margin, "margin", -1, "clear paper at the edge; default 0.06")
 }
@@ -57,6 +63,9 @@ func (s *Sketch) Configure() (string, error) {
 		{"rings", s.opts.rings, 0, 1, &s.Rings, 2},
 		{"open", s.opts.open, 0, 1, &s.Open, 2},
 		{"glaze", s.opts.glaze, 0, 1, &s.Glaze, 2},
+		{"banded", s.opts.banded, 0, 1, &s.Banded, 2},
+		{"band-width", s.opts.bandWidth, 0.0008, 0.1, &s.BandWidth, 4},
+		{"band-overlap", s.opts.bandOverlap, 0, 2, &s.BandOverlap, 4},
 		{"alpha", s.opts.alpha, 0.05, 1, &s.Alpha, 2},
 		{"margin", s.opts.margin, 0, 0.4, &s.Margin, 2},
 		{"base", s.opts.base, 0.004, 0.2, &s.Base, 2},

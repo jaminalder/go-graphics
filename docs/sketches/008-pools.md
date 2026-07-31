@@ -43,6 +43,7 @@ a believable third colour wherever two discs cross.
    - `nested` — a pool with 2–3 concentric rings glazed inside it
    - `open` — an annulus, bare paper in the middle, with 0–2 inner rings
    - `glaze` — a pool with a smaller, offset pool of a second pigment on it
+   - `banded` — a disc *made of* fine concentric rings, rim to centre
 6. **Paint.** Largest first, so small marks settle on top the way later
    touches of a brush do. Each circle is `paint.Wash.Pool` / `.Ring` at low
    `Ragged` — deformed enough to be hand-laid, not enough to stop being a
@@ -59,11 +60,48 @@ a believable third colour wherever two discs cross.
 | `Rings` | 0.34 | share of circles carrying inner rings |
 | `Open` | 0.28 | share painted as annuli rather than discs |
 | `Glaze` | 0.16 | share carrying a second pigment on top |
+| `Banded` | 0.3 | share filled with fine concentric rings |
+| `BandWidth` | 0.0055 | ring pitch of a banded circle, canvas units |
+| `BandOverlap` | 0.9 | how far neighbouring rings cross, ×pitch |
 | `Alpha` | 0.74 | pool strength; below 1 so crossings stay readable |
 | `Pigments` | 4 | palette colours in play |
 | `Margin` | 0.06 | clear paper at the edge |
 | `Gap` | 0.12 | clearance between anchors, ×radius |
 | `Candidates` | 7 | darts per anchor; few on purpose, see below |
+
+## The banded circle
+
+Not a pool with rings drawn inside it: a disc that is *made of* rings, the
+way a section through a tree is. Two things do the work, and both are
+properties of transparent paint rather than anything drawn.
+
+**The overlap.** Neighbouring bands cross by `BandOverlap` of the pitch, so
+each seam is two glazes passing through one another and darkens on its own
+— a fine contour line at every ring boundary that nobody drew and that no
+opaque medium would produce. Butt the bands together instead and the mark
+is a flat gradient with hairline gaps in it. The innermost band is widened
+until it has no hole left, so the disc always closes over its centre; past
+that point the wash draws it as the pool it has become.
+
+**The colour ramp.** Bands graduate between `rampAnchors` pigments taken as
+*consecutive entries of the luminance-ordered set, walked in one
+direction*. Free draws from the whole palette put the ramp's midpoint in
+the muddy space between two unrelated colours and the mark comes out grey
+whatever its endpoints were; neighbours graduate cleanly, and walking one
+way means the mark also darkens or lightens as it goes inward rather than
+doubling back.
+
+The pitch is a **width, not a count**, so a mark twice the radius gets twice
+the rings rather than rings twice as fat, and the ring texture weighs the
+same across the whole size ladder.
+
+Prototype — a handful of big ones, some crossing:
+
+```sh
+staticart render pools --profile web --seed 3 --banded 1 --count 7 \
+  --base 0.115 --rungs 2 --ratio 1.45 --satellites 0.7 --pigments 5 \
+  --palette tchelitchew-hide-and-seek
+```
 
 ## Acceptance checklist
 
@@ -78,4 +116,9 @@ a believable third colour wherever two discs cross.
 - [ ] A clear size hierarchy: a few anchors, many small marks, nothing in
       between that muddles the two.
 - [ ] Paper grain is visible inside the pools and absent outside them.
+- [ ] A banded circle is filled edge to centre with no pinhole, its seams
+      read as fine contour lines, and its colour graduates rather than
+      jumping band to band.
+- [ ] Where two banded circles cross, the two ring systems interfere and
+      both stay legible.
 - [ ] Preview and print of the same seed are the same composition.

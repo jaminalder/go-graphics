@@ -111,6 +111,18 @@ func (w Wash) lay(c *Canvas, rng *rand.Rand, u, v, rOuter, rInner float64, col p
 	pin := rInner * c.scale
 	hollow := pin > 1
 
+	// Raggedness is an edge deviation measured against the radius, which
+	// is the right unit for a pool's silhouette and the wrong one for a
+	// narrow band: the two boundaries wander independently, so once the
+	// deviation approaches the width they cross, and the ring dries as a
+	// string of beads instead of a ring. Capping it here rather than in
+	// every caller is what makes a run of fine concentric rings possible
+	// at all. A filled pool is as wide as it is round, so the cap never
+	// binds and its silhouette is untouched.
+	if hollow {
+		w.Ragged = math.Min(w.Ragged, washRaggedCap*(pr-pin)/pr)
+	}
+
 	// Softness varies around the perimeter, as if parts of the paper
 	// were wetter than others: where it is high the edge frays and the
 	// deposits scatter, where it is low they land together and the
@@ -441,6 +453,10 @@ func (w Wash) deposit(rng *rand.Rand, pr, stage, dir, narrow float64, base, soft
 // washPull is how far the earliest deposits are held back from the
 // boundary, as a fraction of the band's width.
 const washPull = 0.1
+
+// washRaggedCap is the most of a band's width its edge deviation may take
+// up before the two boundaries start crossing each other.
+const washRaggedCap = 0.35
 
 // washHarmonics is how many terms shape a pool's silhouette.
 const washHarmonics = 24

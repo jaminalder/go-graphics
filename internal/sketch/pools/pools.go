@@ -38,20 +38,23 @@ const saltPaper = 0x706170 // "pap"
 
 // Sketch holds the structural knobs. Per-seed variation happens in place.
 type Sketch struct {
-	Count      int     // anchor circles, before satellites
-	Rungs      int     // steps on the size ladder
-	Base       float64 // smallest rung, canvas units
-	Ratio      float64 // ladder step ratio
-	Satellites float64 // share of anchors given an overlapping companion
-	Ragged     float64 // wash edge deviation; shoal's blob is 0.22
-	Rings      float64 // share of circles carrying inner rings
-	Open       float64 // share painted as annuli rather than discs
-	Glaze      float64 // share carrying a second pigment on top
-	Alpha      float64 // pool strength
-	Pigments   int     // palette colours in play
-	Margin     float64 // clear paper at the edge
-	Gap        float64 // clearance between anchors, ×radius
-	Candidates int     // darts thrown per anchor
+	Count       int     // anchor circles, before satellites
+	Rungs       int     // steps on the size ladder
+	Base        float64 // smallest rung, canvas units
+	Ratio       float64 // ladder step ratio
+	Satellites  float64 // share of anchors given an overlapping companion
+	Ragged      float64 // wash edge deviation; shoal's blob is 0.22
+	Rings       float64 // share of circles carrying inner rings
+	Open        float64 // share painted as annuli rather than discs
+	Glaze       float64 // share carrying a second pigment on top
+	Banded      float64 // share filled with fine concentric rings
+	BandWidth   float64 // ring pitch of a banded circle, canvas units
+	BandOverlap float64 // how far neighbouring rings cross, ×pitch
+	Alpha       float64 // pool strength
+	Pigments    int     // palette colours in play
+	Margin      float64 // clear paper at the edge
+	Gap         float64 // clearance between anchors, ×radius
+	Candidates  int     // darts thrown per anchor
 
 	opts cliOptions
 }
@@ -59,20 +62,23 @@ type Sketch struct {
 // New returns the sketch with its defaults.
 func New() *Sketch {
 	return &Sketch{
-		Count:      22,
-		Rungs:      5,
-		Base:       0.030,
-		Ratio:      1.55,
-		Satellites: 0.45,
-		Ragged:     0.055,
-		Rings:      0.34,
-		Open:       0.28,
-		Glaze:      0.16,
-		Alpha:      0.74,
-		Pigments:   4,
-		Margin:     0.06,
-		Gap:        0.12,
-		Candidates: 7,
+		Count:       22,
+		Rungs:       5,
+		Base:        0.030,
+		Ratio:       1.55,
+		Satellites:  0.45,
+		Ragged:      0.055,
+		Rings:       0.34,
+		Open:        0.28,
+		Glaze:       0.16,
+		Banded:      0.3,
+		BandWidth:   0.0055,
+		BandOverlap: 0.9,
+		Alpha:       0.74,
+		Pigments:    4,
+		Margin:      0.06,
+		Gap:         0.12,
+		Candidates:  7,
 	}
 }
 
@@ -92,6 +98,7 @@ const (
 	kindNested             // a pool with concentric rings glazed inside it
 	kindOpen               // an annulus, bare paper in the middle
 	kindGlaze              // a pool with a second, offset pigment on it
+	kindBanded             // a disc made of fine overlapping concentric rings
 )
 
 // circle is one placed mark, fully specified before anything is painted.
@@ -105,6 +112,7 @@ type circle struct {
 	offset  float64       // glaze displacement, ×R
 	angle   float64       // glaze direction
 	alpha   float64
+	bands   bandPlan // kindBanded only
 }
 
 // Render implements sketch.Sketch. Painting is stamp-based, so Context.AA
@@ -113,9 +121,9 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 	rng := ctx.RNG(streamLayout)
 
-	paper, bag := s.inks(byLuminance(ctx.Palette.Colors), rng)
+	paper, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
 
-	circles := s.plan(rng, aspect, bag)
+	circles := s.plan(rng, aspect, bag, ramp)
 
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, paper)
 	wash := paint.DefaultWash(ctx.Seed ^ saltPaper)
@@ -138,7 +146,7 @@ func byLuminance(cols []palette.Color) []palette.Color {
 // so one pigment dominates and the rest are progressively rarer: drawing
 // uniformly gives every colour equal presence, which reads as a sampler
 // rather than as a picture.
-func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper palette.Color, bag []palette.Color) {
+func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper palette.Color, bag, ramp []palette.Color) {
 	lightest := byLum[len(byLum)-1]
 	// Paper, not canvas: warm, close to white, and never one of the
 	// pigments — every mark has to be able to sit on it transparently.
@@ -147,7 +155,12 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper palette.Colo
 	n := min(max(s.Pigments, 1), len(byLum))
 	// Take the darkest end of the palette: a transparent glaze of a pale
 	// colour on pale paper deposits nothing anyone can see.
-	pick := append([]palette.Color(nil), byLum[:n]...)
+	// Two views of the same pigments. The bag is shuffled and weighted, so
+	// drawing from it gives one dominant colour and rare accents. The ramp
+	// keeps them in luminance order, because a banded mark graduates
+	// between neighbours on it — see banded.go.
+	ramp = append([]palette.Color(nil), byLum[:n]...)
+	pick := append([]palette.Color(nil), ramp...)
 	rng.Shuffle(len(pick), func(i, j int) { pick[i], pick[j] = pick[j], pick[i] })
 
 	weights := []int{10, 6, 3, 2, 1, 1}
@@ -160,7 +173,7 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper palette.Colo
 			bag = append(bag, c)
 		}
 	}
-	return paper, bag
+	return paper, bag, ramp
 }
 
 // ladder is the size ladder: a geometric run of radii, weighted toward the
@@ -183,7 +196,7 @@ func (s *Sketch) ladder() (radii []float64, weights []float64) {
 
 // plan places every circle and settles what it is made of, largest first
 // so the paint order lets small marks settle on top.
-func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag []palette.Color) []circle {
+func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag, ramp []palette.Color) []circle {
 	radii, weights := s.ladder()
 	maxR := radii[len(radii)-1]
 	index := geom.NewIndex(aspect, 1, maxR)
@@ -198,7 +211,7 @@ func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag []palette.Color) []cir
 		}
 		c := geom.Circle{X: x, Y: y, R: r}
 		index.Insert(c)
-		out = append(out, s.build(rng, c, bag))
+		out = append(out, s.build(rng, c, bag, ramp))
 
 		// A companion, deliberately placed to cross its parent. Left to
 		// chance the overlaps either never happen or arrive as a pile-up;
@@ -221,7 +234,7 @@ func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag []palette.Color) []cir
 			continue
 		}
 		index.Insert(sc)
-		out = append(out, s.build(rng, sc, bag))
+		out = append(out, s.build(rng, sc, bag, ramp))
 	}
 
 	sort.SliceStable(out, func(i, j int) bool { return out[i].R > out[j].R })
@@ -271,7 +284,7 @@ func (s *Sketch) inPaper(c geom.Circle, aspect float64) bool {
 }
 
 // build settles what one placed circle is made of.
-func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag []palette.Color) circle {
+func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag, ramp []palette.Color) circle {
 	c := circle{
 		Circle:  g,
 		pigment: bag[rng.IntN(len(bag))],
@@ -283,6 +296,9 @@ func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag []palette.Color) circl
 	}
 
 	switch {
+	case rng.Float64() < s.Banded:
+		c.kind = kindBanded
+		c.bands = s.planBands(rng, g.R, ramp)
 	case rng.Float64() < s.Open:
 		c.kind = kindOpen
 		// Bands run from a fat annulus to a drawn-looking hoop; the fat
@@ -314,6 +330,8 @@ func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag []palette.Color) circl
 // passage, and because the wash is transparent it deepens here too.
 func (s *Sketch) paint(cv *paint.Canvas, rng *rand.Rand, w paint.Wash, c circle) {
 	switch c.kind {
+	case kindBanded:
+		s.paintBands(cv, rng, w, c)
 	case kindOpen:
 		mid := c.R - c.band/2
 		w.Ring(cv, rng, c.X, c.Y, mid, c.band, c.pigment, c.alpha)
