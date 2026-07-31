@@ -30,6 +30,11 @@ const dimFill = "fill"
 // best: a sparse sheet is a study, a packed one is a picture.
 var schema = trait.Schema{
 	{
+		Name: dimArrange, Key: "a", InName: true,
+		Doc:    "how the marks are laid out on the sheet",
+		Values: arrangements,
+	},
+	{
 		Name: dimFill, Key: "f", InName: true,
 		Doc: "how much of the frame the discs take up",
 		Values: []trait.Value{
@@ -154,4 +159,17 @@ func nearest(index *geom.Index, x, y float64) float64 {
 func (l layout) inPaper(c geom.Circle, aspect float64) bool {
 	return c.X-c.R > l.margin*0.5 && c.X+c.R < aspect-l.margin*0.5 &&
 		c.Y-c.R > l.margin*0.5 && c.Y+c.R < 1-l.margin*0.5
+}
+
+// step is the spacing a structure lays its candidates at.
+//
+// It comes from the *smallest* rung, not from a typical one. A structure
+// is an offer, not a plan: it puts down far more positions than the sheet
+// can hold and the spacing rule thins them, which is how a large mark and
+// the small ones around it can both land on the same rings. Spaced for the
+// average mark instead, a structure offers a few dozen positions, most of
+// which the first few discs invalidate, and the sheet comes out nearly
+// empty however high the count.
+func (l layout) step(radii []float64) float64 {
+	return radii[0] * 2 * (1 + math.Max(l.gap, 0))
 }

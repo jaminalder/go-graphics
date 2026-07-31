@@ -171,10 +171,11 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 	rng := ctx.RNG(streamLayout)
 
-	l := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill))
-	paper, tint, bag, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors), rng)
+	tr := s.Traits(ctx)
+	l := s.layoutFor(tr, ctx.RNG(streamFill))
+	paper, tint, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
 
-	circles := s.plan(l, rng, aspect, bag, ramp)
+	circles := s.plan(l, tr.Get(dimArrange), rng, aspect, ramp)
 
 	// The canvas starts as bare paper; the ground is glazed onto it, on its
 	// own stream so that changing the marks never repaints the sky.
@@ -197,7 +198,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 // so one pigment dominates and the rest are progressively rarer: drawing
 // uniformly gives every colour equal presence, which reads as a sampler
 // rather than as a picture.
-func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper, tint palette.Color, bag, ramp []palette.Color) {
+func (s *Sketch) inks(byLum []palette.Color) (paper, tint palette.Color, ramp []palette.Color) {
 	lightest := byLum[len(byLum)-1]
 	// Bare paper: warm, close to white, and never one of the pigments —
 	// every mark has to be able to sit on it transparently. The ground
@@ -210,13 +211,14 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper, tint palett
 	n := min(max(s.Pigments, 1), len(byLum))
 	// Take the darkest end of the palette: a transparent glaze of a pale
 	// colour on pale paper deposits nothing anyone can see.
-	// Two views of the same pigments. The bag is shuffled and weighted, so
-	// drawing from it gives one dominant colour and rare accents. The ramp
-	// keeps them in luminance order, because a banded mark graduates
-	// between neighbours on it — see banded.go.
+	// Kept in luminance order, because everything that reads colour here
+	// walks it as a sequence: a banded mark graduates between neighbours on
+	// it, and the colour walk steps along it (arrange.go). A shuffled,
+	// weighted draw pile was the older mechanism and is gone with it — the
+	// walk is what gives the piece its dominant colour now, and it does so
+	// in passages rather than uniformly.
 	ramp = append([]palette.Color(nil), byLum[:n]...)
-	bag = rnd.Bag(rng, ramp, []int{10, 6, 3, 2, 1, 1})
-	return paper, tint, bag, ramp
+	return paper, tint, ramp
 }
 
 // groundTint picks the colour the sheet is washed with: the palette's own
@@ -241,45 +243,70 @@ func groundTint(byLum []palette.Color) palette.Color {
 
 // plan places every circle and settles what it is made of, largest first
 // so the paint order lets small marks settle on top.
-func (s *Sketch) plan(l layout, rng *rand.Rand, aspect float64, bag, ramp []palette.Color) []circle {
+func (s *Sketch) plan(l layout, arrange string, rng *rand.Rand, aspect float64, ramp []palette.Color) []circle {
 	radii, weights := l.ladder()
-	maxR := radii[len(radii)-1]
-	index := geom.NewIndex(aspect, 1, maxR)
+	index := geom.NewIndex(aspect, 1, radii[len(radii)-1])
+	walk := newColorWalk(rng, len(ramp))
 
 	var out []circle
-	for range l.count {
-		rung := rnd.PickIndex(rng, weights)
-		r := radii[rung]
-		x, y, ok := l.bestCandidate(rng, index, aspect, r)
-		if !ok {
-			continue
-		}
-		c := geom.Circle{X: x, Y: y, R: r}
-		index.Insert(c)
-		out = append(out, s.build(rng, c, bag, ramp))
+	anchors := 0
 
-		// A companion, deliberately placed to cross its parent. Left to
-		// chance the overlaps either never happen or arrive as a pile-up;
-		// the crossings are the subject, so they are placed on purpose.
-		//
-		// It comes from one rung down, not from the bottom of the ladder:
-		// a speck crossing a large disc shows nothing, and the mixing only
-		// reads when both parties to it are worth looking at.
+	// place lays one anchor and, sometimes, a companion across it. Left to
+	// chance the overlaps either never happen or arrive as a pile-up; the
+	// crossings are the subject, so they are placed on purpose — and from
+	// one rung down, not from the bottom of the ladder, because a speck
+	// crossing a large disc shows nothing.
+	place := func(c geom.Circle, rung int) {
+		index.Insert(c)
+		out = append(out, s.build(rng, c, walk.next(rng), ramp))
+		anchors++
+
 		if rng.Float64() >= l.satellites {
-			continue
+			return
 		}
 		sr := radii[max(rung-1, 0)]
 		if rung == 0 {
-			sr = r * 0.72
+			sr = c.R * 0.72
 		}
 		th := rng.Float64() * 2 * math.Pi
-		d := (r + sr) * (0.42 + 0.32*rng.Float64())
-		sc := geom.Circle{X: x + d*math.Cos(th), Y: y + d*math.Sin(th), R: sr}
+		d := (c.R + sr) * (0.42 + 0.32*rng.Float64())
+		sc := geom.Circle{X: c.X + d*math.Cos(th), Y: c.Y + d*math.Sin(th), R: sr}
 		if !l.inPaper(sc, aspect) {
-			continue
+			return
 		}
 		index.Insert(sc)
-		out = append(out, s.build(rng, sc, bag, ramp))
+		out = append(out, s.build(rng, sc, walk.next(rng), ramp))
+	}
+
+	// A structured arrangement offers positions in its own laying order and
+	// the spacing rule decides which survive — QQL's mechanism, and the
+	// reason the candidates drive the loop rather than the count. Asking
+	// instead for `count` marks and hunting a spot for each lets one
+	// unlucky large draw, which nothing left on the sheet can accommodate,
+	// end the whole placement. Here it simply misses its turn.
+	if spots := candidates(arrange, rng, aspect, l.step(radii)); spots != nil {
+		for _, p := range spots {
+			if anchors >= l.count {
+				break
+			}
+			rung := rnd.PickIndex(rng, weights)
+			c := geom.Circle{X: p.x, Y: p.y, R: radii[rung]}
+			if !l.inPaper(c, aspect) || !index.FitsWithGap(c, c.R*l.gap) {
+				continue
+			}
+			place(c, rung)
+		}
+	} else {
+		// Scatter has no structure, so it throws darts instead.
+		for range l.count {
+			rung := rnd.PickIndex(rng, weights)
+			r := radii[rung]
+			x, y, ok := l.bestCandidate(rng, index, aspect, r)
+			if !ok {
+				continue
+			}
+			place(geom.Circle{X: x, Y: y, R: r}, rung)
+		}
 	}
 
 	sort.SliceStable(out, func(i, j int) bool { return out[i].R > out[j].R })
@@ -287,11 +314,15 @@ func (s *Sketch) plan(l layout, rng *rand.Rand, aspect float64, bag, ramp []pale
 }
 
 // build settles what one placed circle is made of.
-func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag, ramp []palette.Color) circle {
+func (s *Sketch) build(rng *rand.Rand, g geom.Circle, at int, ramp []palette.Color) circle {
+	// The walk decides the hue and the bag decides the accents: a mark
+	// takes its pigment from where the walk stands, and its second colour
+	// from a neighbour on the ramp, so a passage holds together while no
+	// two marks in it are quite the same.
 	c := circle{
 		Circle:  g,
-		pigment: bag[rng.IntN(len(bag))],
-		second:  bag[rng.IntN(len(bag))],
+		pigment: ramp[at],
+		second:  ramp[(at+1+rng.IntN(max(len(ramp)-1, 1)))%len(ramp)],
 		// Strength varies a little per mark, the way a loaded brush does,
 		// and stays well below 1 so a crossing is still readable as two
 		// pigments rather than as one opaque patch.
@@ -301,7 +332,7 @@ func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag, ramp []palette.Color)
 	switch {
 	case rng.Float64() < s.Banded:
 		c.kind = kindBanded
-		c.bands = s.planBands(rng, g.R, ramp)
+		c.bands = s.planBands(rng, g.R, at, ramp)
 	case rng.Float64() < s.Open:
 		c.kind = kindOpen
 		// Bands run from a fat annulus to a drawn-looking hoop; the fat

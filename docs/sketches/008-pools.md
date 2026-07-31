@@ -75,7 +75,43 @@ a believable third colour wherever two discs cross.
 
 | Flag | Values (weight) |
 |---|---|
+| `--arrange` | scatter 2 · **orbital 3** · **formation 3** · shadows 2 |
 | `--fill` | sparse 1 · open 2 · **medium 3** · **busy 3** · packed 2 |
+
+### `--arrange`: where the marks go
+
+Borrowed from QQL, whose own note on its structure trait is the useful
+part: the structure decides where the flow lines start, *"and that turns
+out to matter more than the field itself — the same field seeded in
+concentric bands, in soft blobs, or in a grid of rectangles gives three
+unmistakably different pieces"*. What is taken here is the seeding, not the
+flow. Each arrangement offers candidate positions in a laying order and the
+spacing rule decides which survive: the field proposes and the packing
+disposes, which is QQL's mechanism with one moving part removed.
+
+- `orbital` — concentric rings about a centre that is usually off-canvas,
+  so the sheet shows an arc of something larger rather than a target
+- `formation` — a grid of rectangles rastered in rows or columns, some
+  dropped; the gaps are what keep it from reading as wallpaper
+- `shadows` — non-overlapping blobs filled from the rim inward, reading as
+  separate objects in the same field
+- `scatter` — the original blue-noise placement, the only one that leaves
+  the sheet with no direction at all
+
+The offer is spaced from the **smallest** rung, not a typical one. A
+structure is an offer, not a plan: it puts down far more positions than the
+sheet can hold. Spaced for the average mark, it offers a few dozen
+positions, the first few discs invalidate nearly all of them, and the sheet
+comes out empty however high the count — which is exactly what the first
+version did, and what `TestEveryArrangementFillsTheSheet` now guards.
+
+**Colour walks with the structure.** Because candidates are taken in the
+order the structure produced them — round a ring, along a row, outward
+through a blob — marks that are neighbours in the sequence are neighbours
+on the sheet. An index walks the luminance-ordered pigments and mostly
+stays put, stepping a handful of times across a piece, so the sheet comes
+out in passages of colour. Drawing each mark's colour freely gives every
+pigment equal presence everywhere, which is what reads as confetti.
 
 Filling a frame is not "more circles": it takes the count up, the size
 ladder down, the clearance in — negative, so discs cross — and the margin
@@ -97,7 +133,8 @@ or four big ones in it is a composition.
 given, so you can move one number without restating the other six.
 
 ```sh
-staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+staticart sweep pools --seeds 1-12 --vary arrange=orbital,formation,shadows \
+  --vary fill=busy,packed --profile web
 ```
 
 ## Tunables

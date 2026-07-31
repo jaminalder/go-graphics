@@ -87,7 +87,7 @@ func TestBandsOverlapTheirNeighbours(t *testing.T) {
 func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
 	s := configured(t)
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors), rng)
+	_, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors))
 
 	// The pitch is only free between the two limits: below a couple of
 	// bands a disc still has to come out whole, and above the cap it is the
@@ -96,7 +96,7 @@ func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
 	capped := float64(s.MaxBands) * s.BandWidth
 	var lastPitch float64
 	for _, r := range []float64{0.05, 0.09, 0.15, 0.22, 0.35} {
-		p := s.planBands(rng, r, ramp)
+		p := s.planBands(rng, r, 0, ramp)
 		n := len(p.mid)
 		step := p.mid[0] - p.mid[1] // consecutive centres are one pitch apart
 
@@ -132,9 +132,9 @@ func TestBigCircleKeepsFewWideRings(t *testing.T) {
 	radii, _ := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill)).ladder()
 	big := radii[len(radii)-1]
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors), rng)
+	_, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors))
 
-	p := s.planBands(rng, big, ramp)
+	p := s.planBands(rng, big, 0, ramp)
 	if n := len(p.mid); n > s.MaxBands {
 		t.Errorf("the largest circle (r=%v) gets %d rings, over the cap of %d", big, n, s.MaxBands)
 	}

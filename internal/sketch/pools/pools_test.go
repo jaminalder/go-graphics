@@ -50,9 +50,10 @@ func plan(t *testing.T, s *Sketch, seed uint64) []circle {
 	t.Helper()
 	ctx := testCtx(t, seed)
 	rng := ctx.RNG(streamLayout)
-	l := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill))
-	_, _, bag, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors), rng)
-	return s.plan(l, rng, 1, bag, ramp)
+	tr := s.Traits(ctx)
+	l := s.layoutFor(tr, ctx.RNG(streamFill))
+	_, _, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
+	return s.plan(l, tr.Get(dimArrange), rng, 1, ramp)
 }
 
 func TestDeterminism(t *testing.T) {
@@ -173,5 +174,70 @@ func TestConfigureRejectsOutOfRange(t *testing.T) {
 		if _, err := s.Configure(); err == nil {
 			t.Errorf("%v was accepted", args)
 		}
+	}
+}
+
+// arrangeNames is every structure, so tests sweep the axis rather than
+// whichever one a single seed happens to draw.
+var arrangeNames = []string{"scatter", "orbital", "formation", "shadows"}
+
+// TestEveryArrangementFillsTheSheet is the guard the first version of the
+// structured planner needed and did not have. A structure offers positions
+// and the spacing rule thins them; if the offer is spaced for a typical
+// mark rather than the smallest one, the first few discs invalidate nearly
+// all of it and the sheet comes out empty however high the count.
+func TestEveryArrangementFillsTheSheet(t *testing.T) {
+	for _, a := range arrangeNames {
+		for _, f := range fills {
+			for seed := uint64(1); seed <= 4; seed++ {
+				s := configured(t, "--arrange", a, "--fill", f)
+				ctx := testCtx(t, seed)
+				budget := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill)).count
+				cs := plan(t, s, seed)
+				// Measured against the level's own budget rather than a flat
+				// number: a sparse sheet is meant to hold six marks and a
+				// packed one sixty, and the failure being guarded against —
+				// an offer so coarse the first few discs invalidate it — took
+				// both to nearly nothing.
+				if want := budget * 2 / 5; len(cs) < want {
+					t.Errorf("%s/%s seed %d: %d marks against a budget of %d — the structure starved",
+						a, f, seed, len(cs), budget)
+				}
+			}
+		}
+	}
+}
+
+// TestColourWalksInPassages pins what makes a piece read as composed
+// rather than as confetti: marks that are neighbours on the sheet are
+// neighbours in colour, because the walk steps along the pigments in the
+// order the structure lays its candidates out. Drawing each mark's colour
+// freely would give every pigment equal presence everywhere.
+func TestColourWalksInPassages(t *testing.T) {
+	s := configured(t, "--arrange", "orbital", "--fill", "busy")
+	ctx := testCtx(t, 3)
+	rng := ctx.RNG(streamLayout)
+	tr := s.Traits(ctx)
+	l := s.layoutFor(tr, ctx.RNG(streamFill))
+	_, _, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
+	cs := s.plan(l, "orbital", rng, 1, ramp)
+
+	// plan sorts by size for painting, so count distinct pigments instead
+	// of walking neighbours: a walk visits a few, confetti visits them all
+	// in roughly equal measure.
+	seen := map[palette.Color]int{}
+	for _, c := range cs {
+		seen[c.pigment]++
+	}
+	if len(cs) < 8 {
+		t.Fatalf("only %d marks to judge", len(cs))
+	}
+	most := 0
+	for _, n := range seen {
+		most = max(most, n)
+	}
+	if share := float64(most) / float64(len(cs)); share < 0.25 {
+		t.Errorf("the commonest pigment holds %.0f%% of %d marks — the colour is not walking, it is scattering",
+			share*100, len(cs))
 	}
 }

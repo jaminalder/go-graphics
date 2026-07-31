@@ -67,8 +67,7 @@ func TestGroundIsPaintedNotFilled(t *testing.T) {
 // paper and the ground would read as a stain rather than as a wash.
 func TestGroundCoversTheWholeSheet(t *testing.T) {
 	s := configured(t)
-	paper, _, _, _ := s.inks(palette.ByLuminance(testCtx(t, 42).Palette.Colors),
-		testCtx(t, 42).RNG(streamLayout))
+	paper, _, _ := s.inks(palette.ByLuminance(testCtx(t, 42).Palette.Colors))
 	img := bareGround(t, 42)
 	b := img.Bounds()
 
