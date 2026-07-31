@@ -61,8 +61,8 @@ a believable third colour wherever two discs cross.
 | `Open` | 0.28 | share painted as annuli rather than discs |
 | `Glaze` | 0.16 | share carrying a second pigment on top |
 | `Banded` | 0.3 | share filled with fine concentric rings |
-| `BandWidth` | 0.0055 | ring pitch of a banded circle, canvas units |
-| `BandOverlap` | 0.9 | how far neighbouring rings cross, ×pitch |
+| `BandWidth` | 0.022 | ring pitch of a banded circle, canvas units |
+| `BandOverlap` | 0.4 | how far neighbouring rings cross, ×pitch |
 | `Alpha` | 0.74 | pool strength; below 1 so crossings stay readable |
 | `Pigments` | 4 | palette colours in play |
 | `Margin` | 0.06 | clear paper at the edge |
@@ -93,7 +93,15 @@ doubling back.
 
 The pitch is a **width, not a count**, so a mark twice the radius gets twice
 the rings rather than rings twice as fat, and the ring texture weighs the
-same across the whole size ladder.
+same across the whole size ladder. At the default pitch the largest circle
+comes out with **5–10 bands** — wide enough that each is a ring of colour in
+its own right, with its own wet edge and rim, rather than a line in a
+woodcut. `TestBigCircleGetsFiveToTenBands` holds the pitch to that against
+the top of the size ladder, since the count is what the mark reads as.
+
+The two dials are worth knowing: `--band-width 0.008` gives a fine grain of
+thirty-odd rings, `0.03` a bold half-dozen; `--band-overlap 0.2` leaves the
+seams open, `0.9` merges them into a graduated fill.
 
 Prototype — a handful of big ones, some crossing:
 

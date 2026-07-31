@@ -73,29 +73,47 @@ func TestBandsOverlapTheirNeighbours(t *testing.T) {
 	}
 }
 
-// TestBandPitchIsResolutionIndependent guards the reason the pitch is a
-// width and not a count: the ring texture has to weigh the same on a large
-// mark as on a small one, so a mark twice the radius gets twice the rings
-// rather than rings twice as fat.
-func TestBandPitchIsResolutionIndependent(t *testing.T) {
+// TestBandPitchHoldsAcrossSizes guards the reason the pitch is a width and
+// not a count: the ring texture has to weigh the same on a large mark as on
+// a small one, so a mark twice the radius gets twice the rings rather than
+// rings twice as fat.
+//
+// The count is a rounded quotient, so the realised pitch cannot land on the
+// nominal one exactly — a disc has to come out whole. The bound below is
+// that rounding and nothing more, which is the strongest thing that is
+// actually true, and it is tightest where it matters: at a handful of wide
+// bands the quantisation is a quarter of a band, and at thirty fine ones it
+// vanishes.
+func TestBandPitchHoldsAcrossSizes(t *testing.T) {
 	s := New()
 	rng := testCtx(t, 1).RNG(streamLayout)
 	_, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
 
-	small := s.planBands(rng, 0.05, ramp)
-	large := s.planBands(rng, 0.20, ramp)
-	if ratio := float64(len(large.mid)) / float64(len(small.mid)); math.Abs(ratio-4) > 0.35 {
-		t.Errorf("a 4x radius gave %.2fx the bands, want ~4x — the pitch is not fixed", ratio)
-	}
-	mean := func(w []float64) float64 {
-		t := 0.0
-		for _, v := range w {
-			t += v
+	for _, r := range []float64{0.05, 0.09, 0.15, 0.22, 0.4} {
+		p := s.planBands(rng, r, ramp)
+		n := len(p.mid)
+		step := p.mid[0] - p.mid[1] // consecutive centres are one pitch apart
+		if bound := 0.5 * s.BandWidth / float64(n); math.Abs(step-s.BandWidth) > bound+1e-9 {
+			t.Errorf("radius %v: %d bands at pitch %.5f, want %.5f ±%.5f",
+				r, n, step, s.BandWidth, bound)
 		}
-		return t / float64(len(w))
 	}
-	if a, b := mean(small.width), mean(large.width); math.Abs(a-b)/b > 0.2 {
-		t.Errorf("band widths differ by size: %v small vs %v large", a, b)
+}
+
+// TestBigCircleGetsFiveToTenBands pins the pitch against the size ladder.
+// The band count is what the mark reads as: a handful of wide rings is a
+// set of concentric glazes, thirty fine ones is a woodcut. The top of the
+// ladder is where the choice shows, so that is where it is measured.
+func TestBigCircleGetsFiveToTenBands(t *testing.T) {
+	s := New()
+	radii, _ := s.ladder()
+	big := radii[len(radii)-1]
+	rng := testCtx(t, 1).RNG(streamLayout)
+	_, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
+
+	n := len(s.planBands(rng, big, ramp).mid)
+	if n < 5 || n > 10 {
+		t.Errorf("the largest circle (r=%v) gets %d bands, want 5-10 at pitch %v", big, n, s.BandWidth)
 	}
 }
 

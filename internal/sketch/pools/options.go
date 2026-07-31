@@ -41,8 +41,8 @@ func (s *Sketch) Flags(fs *flag.FlagSet) {
 	fs.Float64Var(&s.opts.open, "open", -1, "share painted as annuli rather than discs; default 0.28")
 	fs.Float64Var(&s.opts.glaze, "glaze", -1, "share carrying a second pigment on top; default 0.16")
 	fs.Float64Var(&s.opts.banded, "banded", -1, "share of circles filled with fine concentric rings; default 0.3")
-	fs.Float64Var(&s.opts.bandWidth, "band-width", -1, "ring pitch of a banded circle, canvas units; default 0.0065")
-	fs.Float64Var(&s.opts.bandOverlap, "band-overlap", -1, "how far neighbouring rings cross, x pitch; default 0.55")
+	fs.Float64Var(&s.opts.bandWidth, "band-width", -1, "ring pitch of a banded circle, canvas units; default 0.022")
+	fs.Float64Var(&s.opts.bandOverlap, "band-overlap", -1, "how far neighbouring rings cross, x pitch; default 0.4")
 	fs.Float64Var(&s.opts.alpha, "alpha", -1, "pool strength; below 1 keeps crossings readable; default 0.62")
 	fs.Float64Var(&s.opts.margin, "margin", -1, "clear paper at the edge; default 0.06")
 }
