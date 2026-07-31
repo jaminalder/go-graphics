@@ -87,7 +87,7 @@ func TestBandsOverlapTheirNeighbours(t *testing.T) {
 func TestBandPitchHoldsAcrossSizes(t *testing.T) {
 	s := New()
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
+	_, _, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
 
 	for _, r := range []float64{0.05, 0.09, 0.15, 0.22, 0.4} {
 		p := s.planBands(rng, r, ramp)
@@ -109,7 +109,7 @@ func TestBigCircleGetsFiveToTenBands(t *testing.T) {
 	radii, _ := s.ladder()
 	big := radii[len(radii)-1]
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
+	_, _, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
 
 	n := len(s.planBands(rng, big, ramp).mid)
 	if n < 5 || n > 10 {

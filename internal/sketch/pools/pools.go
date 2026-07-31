@@ -30,11 +30,16 @@ import (
 const (
 	streamLayout = 1 // placement, sizes, structure, colour
 	streamPaint  = 2 // per-pool wash deformation
+	streamGround = 3 // the ground wash
 )
 
 // saltPaper salts the granulation lattice so the paper texture is
 // independent of the layout.
 const saltPaper = 0x706170 // "pap"
+
+// saltGround salts the ground's own granulation lattice, so the sky's
+// tooth is not a copy of the marks'.
+const saltGround = 0x67726e // "grn"
 
 // Sketch holds the structural knobs. Per-seed variation happens in place.
 type Sketch struct {
@@ -52,6 +57,7 @@ type Sketch struct {
 	BandOverlap float64 // how far neighbouring rings cross, ×pitch
 	Alpha       float64 // pool strength
 	Pigments    int     // palette colours in play
+	Ground      float64 // strength of the painted ground wash; 0 is bare paper
 	Margin      float64 // clear paper at the edge
 	Gap         float64 // clearance between anchors, ×radius
 	Candidates  int     // darts thrown per anchor
@@ -76,6 +82,7 @@ func New() *Sketch {
 		BandOverlap: 0.4,
 		Alpha:       0.74,
 		Pigments:    4,
+		Ground:      0.55,
 		Margin:      0.06,
 		Gap:         0.12,
 		Candidates:  7,
@@ -121,11 +128,18 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 	rng := ctx.RNG(streamLayout)
 
-	paper, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
+	paper, tint, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
 
 	circles := s.plan(rng, aspect, bag, ramp)
 
+	// The canvas starts as bare paper; the ground is glazed onto it, on its
+	// own stream so that changing the marks never repaints the sky.
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, paper)
+	if s.Ground > 0 {
+		paintGround(cv, ctx.RNG(streamGround), groundWash(ctx.Seed^saltGround),
+			aspect, s.Ground, tint)
+	}
+
 	wash := paint.DefaultWash(ctx.Seed ^ saltPaper)
 	wash.Ragged = s.Ragged
 	prng := ctx.RNG(streamPaint)
@@ -146,11 +160,15 @@ func byLuminance(cols []palette.Color) []palette.Color {
 // so one pigment dominates and the rest are progressively rarer: drawing
 // uniformly gives every colour equal presence, which reads as a sampler
 // rather than as a picture.
-func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper palette.Color, bag, ramp []palette.Color) {
+func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper, tint palette.Color, bag, ramp []palette.Color) {
 	lightest := byLum[len(byLum)-1]
-	// Paper, not canvas: warm, close to white, and never one of the
-	// pigments — every mark has to be able to sit on it transparently.
-	paper = lightest.Lighten(0.72).Desaturate(0.55)
+	// Bare paper: warm, close to white, and never one of the pigments —
+	// every mark has to be able to sit on it transparently. The ground
+	// colour is a single tint glazed over it, the palette's own lightest
+	// colour softened, so the sky belongs to the same set of paints as
+	// everything standing on it.
+	paper = lightest.Lighten(0.86).Desaturate(0.7)
+	tint = lightest.Desaturate(0.3)
 
 	n := min(max(s.Pigments, 1), len(byLum))
 	// Take the darkest end of the palette: a transparent glaze of a pale
@@ -173,7 +191,7 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper palette.Colo
 			bag = append(bag, c)
 		}
 	}
-	return paper, bag, ramp
+	return paper, tint, bag, ramp
 }
 
 // ladder is the size ladder: a geometric run of radii, weighted toward the

@@ -262,6 +262,8 @@ type Traited interface {
 
 | 26 | `Wash` caps a ring's raggedness against its own width | Raggedness is an edge deviation measured against the radius, which is right for a pool's silhouette and wrong for a narrow band: the outer and inner boundaries wander independently, so once the deviation approaches the width they cross and the ring dries as a string of beads. The cap lives in `lay` rather than in each caller because it is a property of the primitive, and because it is what makes a run of fine concentric rings — sketch 008's banded circle — possible at all. A filled pool is as wide as it is round, so the cap never binds and `Pool` is untouched. |
 
+| 27 | The ground is glazed on, not filled | A flat wash is the hardest thing in watercolour to make even, and it dries with the unevenness of the process in it. Sketch 008 therefore starts the canvas as bare paper and lays the ground colour over it in a grid of large pools that run off every edge — so the variation is the paper showing through a real wash, not a texture applied to a flat fill, and the marks standing on it stop reading as computed. The grid bleeds well past the canvas because a pool boundary inside the frame reads as a circle on the ground, in a sketch already full of circles. It is the one wash in the picture meant to be featureless, so it runs on a quarter of the usual deposit stack; a pool the size of the canvas pays for its stack on every pixel it covers, and at a full stack the ground was four times the cost of the artwork. |
+
 ## 9. Roadmap
 
 1. **Sketch 001 "contour"** — shuffled-gradient contour noise (spec:

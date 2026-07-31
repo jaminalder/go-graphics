@@ -27,7 +27,7 @@ func plan(t *testing.T, s *Sketch, seed uint64) []circle {
 	t.Helper()
 	ctx := testCtx(t, seed)
 	rng := ctx.RNG(streamLayout)
-	_, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
+	_, _, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
 	return s.plan(rng, 1, bag, ramp)
 }
 

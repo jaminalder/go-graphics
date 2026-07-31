@@ -19,8 +19,16 @@ a believable third colour wherever two discs cross.
 
 ## Algorithm
 
-1. **Paper.** The palette's lightest colour, lightened and desaturated to an
-   off-white. Everything else is transparent pigment over it.
+1. **Paper, then ground.** The canvas starts as bare paper — the palette's
+   lightest colour taken almost to white. The ground colour is then *laid*
+   on it, not filled: a single tint glazed over the sheet in a few large
+   pools that run off every edge. A flat wash is the first thing a
+   watercolourist learns and the hardest to make even, and it dries with
+   the unevenness of that process in it — heavier where strokes crossed,
+   granulated wherever the tooth caught pigment. What makes it read as
+   painted is that the paper still shows through: the variation is the
+   paper, not a texture laid over a fill. `Ground` is its strength; at 0
+   the sheet is the bare paper it used to be.
 2. **Pigments.** `Pigments` colours drawn from the palette by luminance,
    darkest kept as the ink for interior rings. A weighted bag makes one
    pigment dominant and the rest progressively rarer, so the sheet reads as
@@ -65,7 +73,9 @@ a believable third colour wherever two discs cross.
 | `BandOverlap` | 0.4 | how far neighbouring rings cross, ×pitch |
 | `Alpha` | 0.74 | pool strength; below 1 so crossings stay readable |
 | `Pigments` | 4 | palette colours in play |
+| `Ground` | 0.55 | strength of the painted ground wash; 0 is bare paper |
 | `Margin` | 0.06 | clear paper at the edge |
+| `Gap` | 0.12 | clearance between circles, ×radius; negative lets them cross |
 | `Gap` | 0.12 | clearance between anchors, ×radius |
 | `Candidates` | 7 | darts per anchor; few on purpose, see below |
 
@@ -111,6 +121,21 @@ staticart render pools --profile web --seed 3 --banded 1 --count 7 \
   --palette tchelitchew-hide-and-seek
 ```
 
+## Filling the frame
+
+`Count` alone does not fill a sheet — it gives the same picture with more
+specks in it. The frame fills when four things move together: the count up,
+the size ladder down, `Gap` in (negative, so discs cross), and `Margin`
+closed. The set in `out/discs` steps all four across five levels:
+
+| level | count | base | gap | margin |
+|---|---|---|---|---|
+| sparse | 6 | 0.115 | 0.12 | 0.055 |
+| open | 11 | 0.090 | 0.10 | 0.045 |
+| medium | 20 | 0.070 | 0.07 | 0.035 |
+| busy | 34 | 0.055 | 0.02 | 0.028 |
+| packed | 58 | 0.045 | −0.07 | 0.020 |
+
 ## Acceptance checklist
 
 - [ ] Discs read as **circles**, not blobs — the silhouette wobbles but never
@@ -124,6 +149,8 @@ staticart render pools --profile web --seed 3 --banded 1 --count 7 \
 - [ ] A clear size hierarchy: a few anchors, many small marks, nothing in
       between that muddles the two.
 - [ ] Paper grain is visible inside the pools and absent outside them.
+- [ ] The ground reads as a laid wash — uneven, granulated, paper showing
+      through — with no pool boundary legible as a circle inside the frame.
 - [ ] A banded circle is filled edge to centre with no pinhole, its seams
       read as fine contour lines, and its colour graduates rather than
       jumping band to band.
