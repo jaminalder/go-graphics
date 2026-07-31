@@ -34,6 +34,15 @@ a believable third colour wherever two discs cross.
 
    Ground and marks granulate at one shared `paperTooth`, because they are
    on one piece of paper — two grain scales in a picture are two papers.
+
+   The tint is the palette's lightest colour, softened. A few palettes have
+   a near-white as their lightest — a paper colour rather than a paint —
+   and it cannot tint anything: the ground comes out as bare paper with a
+   rumour of colour on it, and none of the wash's structure shows. Those
+   borrow from the next colour down until the tint has body. The threshold
+   sits above every ordinary palette's lightest (0.88 against a typical
+   0.61-0.82), so it rescues the handful that need it rather than
+   correcting the rest.
 2. **Pigments.** `Pigments` colours drawn from the palette by luminance,
    darkest kept as the ink for interior rings. A weighted bag makes one
    pigment dominant and the rest progressively rarer, so the sheet reads as
@@ -79,7 +88,7 @@ a believable third colour wherever two discs cross.
 | `Alpha` | 0.74 | pool strength; below 1 so crossings stay readable |
 | `Pigments` | 4 | palette colours in play |
 | `Ground` | 0.5 | strength of the painted ground wash; 0 is bare paper |
-| `GroundBlotch` | 0.42 | wavelength of the ground's unevenness, canvas units |
+| `GroundBlotch` | 0.34 | wavelength of the ground's unevenness, canvas units |
 | `Margin` | 0.06 | clear paper at the edge |
 | `Gap` | 0.12 | clearance between circles, ×radius; negative lets them cross |
 | `Gap` | 0.12 | clearance between anchors, ×radius |

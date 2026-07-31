@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/geom"
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -83,7 +84,7 @@ func New() *Sketch {
 		Alpha:        0.74,
 		Pigments:     4,
 		Ground:       0.5,
-		GroundBlotch: 0.42,
+		GroundBlotch: 0.34,
 		Margin:       0.06,
 		Gap:          0.12,
 		Candidates:   7,
@@ -169,7 +170,7 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper, tint palett
 	// colour softened, so the sky belongs to the same set of paints as
 	// everything standing on it.
 	paper = lightest.Lighten(0.86).Desaturate(0.7)
-	tint = lightest.Desaturate(0.3)
+	tint = groundTint(byLum)
 
 	n := min(max(s.Pigments, 1), len(byLum))
 	// Take the darkest end of the palette: a transparent glaze of a pale
@@ -193,6 +194,26 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper, tint palett
 		}
 	}
 	return paper, tint, bag, ramp
+}
+
+// groundTint picks the colour the sheet is washed with: the palette's own
+// lightest, softened. A few palettes have a near-white as their lightest —
+// a paper colour rather than a paint — and it cannot tint anything: the
+// ground comes out as bare paper with a rumour of colour on it and none of
+// the wash's structure shows. Those borrow from the next colour down until
+// the tint has body. The threshold is set above every ordinary palette's
+// lightest, so this is a rescue for the handful that need it and not a
+// correction applied to the rest.
+func groundTint(byLum []palette.Color) palette.Color {
+	c := byLum[len(byLum)-1]
+	const tooPale, target = 0.88, 0.85
+	if l := c.Luminance(); l > tooPale && len(byLum) > 1 {
+		next := byLum[len(byLum)-2]
+		if span := l - next.Luminance(); span > 1e-6 {
+			c = palette.Lerp(c, next, mathx.Clamp01((l-target)/span))
+		}
+	}
+	return c.Desaturate(0.3)
 }
 
 // ladder is the size ladder: a geometric run of radii, weighted toward the
@@ -411,7 +432,7 @@ const paperTooth = 0.007
 // over a whole sheet they are the only thing there is to see.
 func groundWash(seed uint64) paint.Wash {
 	w := paint.DefaultWash(seed)
-	w.Mottle = 0.95
+	w.Mottle = 1.45
 	w.Grain = 0.42
 	w.GrainScale = paperTooth
 	return w
