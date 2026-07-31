@@ -30,7 +30,6 @@ import (
 const (
 	streamLayout = 1 // placement, sizes, structure, colour
 	streamPaint  = 2 // per-pool wash deformation
-	streamGround = 3 // the ground wash
 )
 
 // saltPaper salts the granulation lattice so the paper texture is
@@ -43,24 +42,25 @@ const saltGround = 0x67726e // "grn"
 
 // Sketch holds the structural knobs. Per-seed variation happens in place.
 type Sketch struct {
-	Count       int     // anchor circles, before satellites
-	Rungs       int     // steps on the size ladder
-	Base        float64 // smallest rung, canvas units
-	Ratio       float64 // ladder step ratio
-	Satellites  float64 // share of anchors given an overlapping companion
-	Ragged      float64 // wash edge deviation; shoal's blob is 0.22
-	Rings       float64 // share of circles carrying inner rings
-	Open        float64 // share painted as annuli rather than discs
-	Glaze       float64 // share carrying a second pigment on top
-	Banded      float64 // share filled with fine concentric rings
-	BandWidth   float64 // ring pitch of a banded circle, canvas units
-	BandOverlap float64 // how far neighbouring rings cross, ×pitch
-	Alpha       float64 // pool strength
-	Pigments    int     // palette colours in play
-	Ground      float64 // strength of the painted ground wash; 0 is bare paper
-	Margin      float64 // clear paper at the edge
-	Gap         float64 // clearance between anchors, ×radius
-	Candidates  int     // darts thrown per anchor
+	Count        int     // anchor circles, before satellites
+	Rungs        int     // steps on the size ladder
+	Base         float64 // smallest rung, canvas units
+	Ratio        float64 // ladder step ratio
+	Satellites   float64 // share of anchors given an overlapping companion
+	Ragged       float64 // wash edge deviation; shoal's blob is 0.22
+	Rings        float64 // share of circles carrying inner rings
+	Open         float64 // share painted as annuli rather than discs
+	Glaze        float64 // share carrying a second pigment on top
+	Banded       float64 // share filled with fine concentric rings
+	BandWidth    float64 // ring pitch of a banded circle, canvas units
+	BandOverlap  float64 // how far neighbouring rings cross, ×pitch
+	Alpha        float64 // pool strength
+	Pigments     int     // palette colours in play
+	Ground       float64 // strength of the painted ground wash; 0 is bare paper
+	GroundBlotch float64 // wavelength of the ground's unevenness, canvas units
+	Margin       float64 // clear paper at the edge
+	Gap          float64 // clearance between anchors, ×radius
+	Candidates   int     // darts thrown per anchor
 
 	opts cliOptions
 }
@@ -68,24 +68,25 @@ type Sketch struct {
 // New returns the sketch with its defaults.
 func New() *Sketch {
 	return &Sketch{
-		Count:       22,
-		Rungs:       5,
-		Base:        0.030,
-		Ratio:       1.55,
-		Satellites:  0.45,
-		Ragged:      0.055,
-		Rings:       0.34,
-		Open:        0.28,
-		Glaze:       0.16,
-		Banded:      0.3,
-		BandWidth:   0.022,
-		BandOverlap: 0.4,
-		Alpha:       0.74,
-		Pigments:    4,
-		Ground:      0.55,
-		Margin:      0.06,
-		Gap:         0.12,
-		Candidates:  7,
+		Count:        22,
+		Rungs:        5,
+		Base:         0.030,
+		Ratio:        1.55,
+		Satellites:   0.45,
+		Ragged:       0.055,
+		Rings:        0.34,
+		Open:         0.28,
+		Glaze:        0.16,
+		Banded:       0.3,
+		BandWidth:    0.022,
+		BandOverlap:  0.4,
+		Alpha:        0.74,
+		Pigments:     4,
+		Ground:       0.5,
+		GroundBlotch: 0.42,
+		Margin:       0.06,
+		Gap:          0.12,
+		Candidates:   7,
 	}
 }
 
@@ -136,12 +137,12 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	// own stream so that changing the marks never repaints the sky.
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, paper)
 	if s.Ground > 0 {
-		paintGround(cv, ctx.RNG(streamGround), groundWash(ctx.Seed^saltGround),
-			aspect, s.Ground, tint)
+		groundWash(ctx.Seed^saltGround).Ground(cv, tint, s.Ground, s.GroundBlotch)
 	}
 
 	wash := paint.DefaultWash(ctx.Seed ^ saltPaper)
 	wash.Ragged = s.Ragged
+	wash.GrainScale = paperTooth
 	prng := ctx.RNG(streamPaint)
 	for _, c := range circles {
 		s.paint(cv, prng, wash, c)
@@ -394,4 +395,24 @@ func weightedPick(rng *rand.Rand, weights []float64) int {
 		}
 	}
 	return len(weights) - 1
+}
+
+// paperTooth is the grain of the sheet, in canvas units. Ground and marks
+// share it because they are on one piece of paper: the default is fine
+// enough to read as noise across an empty ground, and a ground and a mark
+// granulating at different scales are two different papers in one picture.
+const paperTooth = 0.007
+
+// groundWash is the wash the sheet's ground is laid with. It is the one
+// wash in the picture that is meant to be featureless, so everything that
+// gives a pool its character — the stack, the ragged edge, the rim — plays
+// no part. What is left is the unevenness of the pigment and the tooth of
+// the paper, which is all a flat wash has, and both are turned up: spread
+// over a whole sheet they are the only thing there is to see.
+func groundWash(seed uint64) paint.Wash {
+	w := paint.DefaultWash(seed)
+	w.Mottle = 0.95
+	w.Grain = 0.42
+	w.GrainScale = paperTooth
+	return w
 }

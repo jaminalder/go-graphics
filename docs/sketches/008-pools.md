@@ -20,15 +20,20 @@ a believable third colour wherever two discs cross.
 ## Algorithm
 
 1. **Paper, then ground.** The canvas starts as bare paper — the palette's
-   lightest colour taken almost to white. The ground colour is then *laid*
-   on it, not filled: a single tint glazed over the sheet in a few large
-   pools that run off every edge. A flat wash is the first thing a
-   watercolourist learns and the hardest to make even, and it dries with
-   the unevenness of that process in it — heavier where strokes crossed,
-   granulated wherever the tooth caught pigment. What makes it read as
-   painted is that the paper still shows through: the variation is the
-   paper, not a texture laid over a fill. `Ground` is its strength; at 0
-   the sheet is the bare paper it used to be.
+   lightest colour taken almost to white — and a single tint is washed over
+   the whole sheet with `paint.Wash.Ground`. A flat wash dries with the
+   unevenness of its own laying in it: blotchy at a broad scale where the
+   pigment pooled, speckled at the paper's scale where the tooth caught it.
+   Both come from a per-pixel field, not from shapes. The first version
+   covered the sheet with a grid of overlapping pools, and no matter how
+   soft their edges were made, every pool boundary stayed legible as a fine
+   arc — more circles, on a picture already full of them. A field has
+   nothing to have an edge. `Ground` is the wash's strength and
+   `GroundBlotch` the wavelength of its unevenness; at `Ground` 0 the sheet
+   is bare paper.
+
+   Ground and marks granulate at one shared `paperTooth`, because they are
+   on one piece of paper — two grain scales in a picture are two papers.
 2. **Pigments.** `Pigments` colours drawn from the palette by luminance,
    darkest kept as the ink for interior rings. A weighted bag makes one
    pigment dominant and the rest progressively rarer, so the sheet reads as
@@ -73,7 +78,8 @@ a believable third colour wherever two discs cross.
 | `BandOverlap` | 0.4 | how far neighbouring rings cross, ×pitch |
 | `Alpha` | 0.74 | pool strength; below 1 so crossings stay readable |
 | `Pigments` | 4 | palette colours in play |
-| `Ground` | 0.55 | strength of the painted ground wash; 0 is bare paper |
+| `Ground` | 0.5 | strength of the painted ground wash; 0 is bare paper |
+| `GroundBlotch` | 0.42 | wavelength of the ground's unevenness, canvas units |
 | `Margin` | 0.06 | clear paper at the edge |
 | `Gap` | 0.12 | clearance between circles, ×radius; negative lets them cross |
 | `Gap` | 0.12 | clearance between anchors, ×radius |
@@ -150,7 +156,9 @@ closed. The set in `out/discs` steps all four across five levels:
       between that muddles the two.
 - [ ] Paper grain is visible inside the pools and absent outside them.
 - [ ] The ground reads as a laid wash — uneven, granulated, paper showing
-      through — with no pool boundary legible as a circle inside the frame.
+      through — with **no line, arc or edge of any kind** legible in it.
+- [ ] The ground and the marks granulate at the same scale: one sheet of
+      paper, not two.
 - [ ] A banded circle is filled edge to centre with no pinhole, its seams
       read as fine contour lines, and its colour graduates rather than
       jumping band to band.

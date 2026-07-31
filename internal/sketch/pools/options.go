@@ -9,24 +9,34 @@ import (
 )
 
 type cliOptions struct {
-	count       int
-	pigments    int
-	rungs       int
-	base        float64
-	ratio       float64
-	satellites  float64
-	ragged      float64
-	rings       float64
-	open        float64
-	glaze       float64
-	banded      float64
-	bandWidth   float64
-	bandOverlap float64
-	alpha       float64
-	ground      float64
-	margin      float64
-	gap         float64
+	count        int
+	pigments     int
+	rungs        int
+	base         float64
+	ratio        float64
+	satellites   float64
+	ragged       float64
+	rings        float64
+	open         float64
+	glaze        float64
+	banded       float64
+	bandWidth    float64
+	bandOverlap  float64
+	alpha        float64
+	ground       float64
+	groundBlotch float64
+	margin       float64
+	gap          float64
 }
+
+// The flag defaults that mean "leave the sketch's own value alone". They
+// are exact sentinels rather than "anything negative", so that a typo like
+// --count -2 is rejected instead of being silently ignored — which is what
+// happened once --count 0 became legal for rendering a bare ground.
+const (
+	unset    = -1.0
+	unsetInt = -1
+)
 
 var _ sketch.Configurable = (*Sketch)(nil)
 
@@ -48,6 +58,7 @@ func (s *Sketch) Flags(fs *flag.FlagSet) {
 	fs.Float64Var(&s.opts.alpha, "alpha", -1, "pool strength; below 1 keeps crossings readable; default 0.62")
 	fs.Float64Var(&s.opts.ground, "ground", -1, "strength of the painted ground wash; 0 is bare paper; default 0.55")
 	fs.Float64Var(&s.opts.gap, "gap", -99, "clearance between circles, x radius; negative lets them overlap; default 0.12")
+	fs.Float64Var(&s.opts.groundBlotch, "ground-blotch", -1, "wavelength of the ground's unevenness, canvas units; default 0.42")
 	fs.Float64Var(&s.opts.margin, "margin", -1, "clear paper at the edge; default 0.06")
 }
 
@@ -72,11 +83,12 @@ func (s *Sketch) Configure() (string, error) {
 		{"band-overlap", s.opts.bandOverlap, 0, 2, &s.BandOverlap, 4},
 		{"alpha", s.opts.alpha, 0.05, 1, &s.Alpha, 2},
 		{"ground", s.opts.ground, 0, 1, &s.Ground, 2},
+		{"ground-blotch", s.opts.groundBlotch, 0.02, 3, &s.GroundBlotch, 6},
 		{"margin", s.opts.margin, 0, 0.4, &s.Margin, 2},
 		{"base", s.opts.base, 0.004, 0.2, &s.Base, 2},
 		{"ratio", s.opts.ratio, 1.05, 3, &s.Ratio, 2},
 	} {
-		if o.val < 0 {
+		if o.val == unset {
 			continue
 		}
 		if o.val < o.lo || o.val > o.hi {
@@ -100,11 +112,11 @@ func (s *Sketch) Configure() (string, error) {
 		lo, hi int
 		dst    *int
 	}{
-		{"count", s.opts.count, 1, 400, &s.Count},
+		{"count", s.opts.count, 0, 400, &s.Count}, // 0 renders the bare ground
 		{"pigments", s.opts.pigments, 1, 12, &s.Pigments},
 		{"rungs", s.opts.rungs, 1, 9, &s.Rungs},
 	} {
-		if o.val < 0 {
+		if o.val == unset {
 			continue
 		}
 		if o.val < o.lo || o.val > o.hi {

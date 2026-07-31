@@ -133,7 +133,7 @@ func TestConfigureRejectsOutOfRange(t *testing.T) {
 	for _, args := range [][]string{
 		{"--alpha", "2"},
 		{"--ragged", "0.9"},
-		{"--count", "0"},
+		{"--count", "-2"},
 		{"--ratio", "0.5"},
 		{"--pigments", "99"},
 	} {
