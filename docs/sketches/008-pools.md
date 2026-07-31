@@ -75,62 +75,56 @@ a believable third colour wherever two discs cross.
 
 | Flag | Values (weight) |
 |---|---|
-| `--arrange` | scatter 2 · **orbital 3** · **formation 3** · shadows 2 |
+| `--arrange` | **orbital 3** · **shadows 3** · formation 2 · scatter 1 |
+| `--flow` | horizontal 3 · vertical 2 · diagonal 2 · **spiral 4** · circular 2 · explosive 1 |
 | `--fill` | sparse 1 · open 2 · **medium 3** · **busy 3** · packed 2 |
 
-### `--arrange`: where the marks go
+### `--arrange` and `--flow`: where the marks go
 
-Borrowed from QQL, whose own note on its structure trait is the useful
-part: the structure decides where the flow lines start, *"and that turns
-out to matter more than the field itself — the same field seeded in
-concentric bands, in soft blobs, or in a grid of rectangles gives three
-unmistakably different pieces"*. What is taken here is the seeding, not the
-flow. Each arrangement offers candidate positions in a laying order and the
-spacing rule decides which survive: the field proposes and the packing
-disposes, which is QQL's mechanism with one moving part removed.
+Borrowed from QQL, and all three of its moving parts. A **structure** seeds
+start points; a **flow field** says which way to walk from them; and marks
+are laid along that walk, shoulder to shoulder, until something already on
+the sheet is in the way. The field proposes and the spacing rule disposes.
 
-- `orbital` — concentric rings about a centre that is usually off-canvas,
-  so the sheet shows an arc of something larger rather than a target
-- `formation` — a grid of rectangles rastered in rows or columns, some
-  dropped; the gaps are what keep it from reading as wallpaper
-- `shadows` — non-overlapping blobs filled from the rim inward, reading as
-  separate objects in the same field
-- `scatter` — the original blue-noise placement, the only one that leaves
-  the sheet with no direction at all
+The first version of this took only the structure, on QQL's own reasoning
+that the seeding matters more than the field. That is true of the
+*composition* and false of the *surface*. What makes a QQL piece
+recognisable at a glance is that its marks **touch**: they run in
+contiguous strands that curve, and a strand holds one size and one colour
+for its whole length. Scattering marks over a structured grid gives the
+same large-scale arrangement with none of that, and reads as a scatter.
 
-The offer is spaced from the **smallest** rung, not a typical one. A
-structure is an offer, not a plan: it puts down far more positions than the
-sheet can hold. Spaced for the average mark, it offers a few dozen
-positions, the first few discs invalidate nearly all of them, and the sheet
-comes out empty however high the count — which is exactly what the first
-version did, and what `TestEveryArrangementFillsTheSheet` now guards.
+Three things are load-bearing, and all three come from the walk:
 
-**Colour walks with the structure.** Because candidates are taken in the
-order the structure produced them — round a ring, along a row, outward
-through a blob — marks that are neighbours in the sequence are neighbours
-on the sheet. An index walks the luminance-ordered pigments and mostly
-stays put, stepping a handful of times across a piece, so the sheet comes
-out in passages of colour. Drawing each mark's colour freely gives every
-pigment equal presence everywhere, which is what reads as confetti.
+- **Marks advance by their own diameter**, so consecutive marks touch. A
+  fixed grid of candidate positions cannot do this — the step has to follow
+  the size of the mark being laid, which changes with every run.
+- **A run holds one whole colour scheme**, not just a hue: the pigment, its
+  partner, and the direction a banded mark graduates. Holding only the base
+  lets the other two redraw at every mark, and a strand whose marks share a
+  colour but differ in everything else about their colour does not read as
+  one thing. QQL's runs are identical marks repeated.
+- **A run holds one size.** Per mark, sizes come out as salt and pepper and
+  no strand reads as a strand.
 
-Filling a frame is not "more circles": it takes the count up, the size
-ladder down, the clearance in — negative, so discs cross — and the margin
-closed, all together. Raising the count alone gives the same picture with
-more specks in it. Those six numbers were being set together by hand on
-every render, which is a single decision wearing six hats, so they are one
-axis now.
+`--arrange` picks the structure:
 
-The level resolves to **ranges, not numbers**, which is what makes a trait
-worth having: "busy" means a busy sheet, not one particular busy sheet, and
-two seeds at that level differ in how many marks, how large and how crowded
-while both still read as busy. Every level's ladder reaches a disc of
-roughly a quarter of the canvas, so even a packed sheet carries a few large
-marks — a packed field of one size is a texture, a packed field with three
-or four big ones in it is a composition.
+- `orbital` — concentric bands about a usually off-canvas centre, cut into
+  arcs; walked along a circular field these come out as record grooves
+- `shadows` — non-overlapping blobs, each filling in against the field, so
+  they read as separate objects
+- `formation` — a grid of rectangles, some dropped; the gaps are what keep
+  it from reading as wallpaper
+- `scatter` — darts rather than walks, the only one with no direction in it
 
-`--count`, `--rungs`, `--base`, `--ratio`, `--satellites`, `--gap` and
-`--margin` remain, now as *overrides*: each applies only when actually
-given, so you can move one number without restating the other six.
+`--flow` picks the field: `horizontal`, `vertical`, `diagonal` for strands
+that run straight, `spiral`, `circular`, `explosive` for strands that curve.
+
+The seeds are spaced off the **smallest** rung, not the mean. A walk fills
+in along its own length, so seeding at mark spacing lays every strand on
+the last one; seeding at the mean — which a ladder reaching a quarter of
+the canvas drags upward — puts a handful of walks on the whole sheet and
+leaves most of it bare.
 
 ```sh
 staticart sweep pools --seeds 1-12 --vary arrange=orbital,formation,shadows \

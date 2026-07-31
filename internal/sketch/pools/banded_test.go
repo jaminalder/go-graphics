@@ -96,7 +96,7 @@ func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
 	capped := float64(s.MaxBands) * s.BandWidth
 	var lastPitch float64
 	for _, r := range []float64{0.05, 0.09, 0.15, 0.22, 0.35} {
-		p := s.planBands(rng, r, 0, ramp)
+		p := s.planBands(rng, r, scheme{dir: 1}, ramp)
 		n := len(p.mid)
 		step := p.mid[0] - p.mid[1] // consecutive centres are one pitch apart
 
@@ -134,7 +134,7 @@ func TestBigCircleKeepsFewWideRings(t *testing.T) {
 	rng := testCtx(t, 1).RNG(streamLayout)
 	_, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors))
 
-	p := s.planBands(rng, big, 0, ramp)
+	p := s.planBands(rng, big, scheme{dir: 1}, ramp)
 	if n := len(p.mid); n > s.MaxBands {
 		t.Errorf("the largest circle (r=%v) gets %d rings, over the cap of %d", big, n, s.MaxBands)
 	}

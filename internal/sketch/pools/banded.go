@@ -43,7 +43,7 @@ type bandPlan struct {
 
 // planBands cuts a disc of radius r into rings of roughly bandWidth and
 // gives each one a colour from the ramp.
-func (s *Sketch) planBands(rng *rand.Rand, r float64, at int, ramp []palette.Color) bandPlan {
+func (s *Sketch) planBands(rng *rand.Rand, r float64, sc scheme, ramp []palette.Color) bandPlan {
 	// Band count comes from a width in canvas units, not from a fixed
 	// number, so a mark twice the radius gets twice the rings rather than
 	// rings twice as fat and the ring texture keeps its weight across the
@@ -66,15 +66,13 @@ func (s *Sketch) planBands(rng *rand.Rand, r float64, at int, ramp []palette.Col
 	// grey whatever its endpoints were; neighbours graduate cleanly, and
 	// walking one way means the mark also darkens or lightens as it goes
 	// inward instead of doubling back on itself.
+	// Where the ramp starts and which way it runs both come from the run's
+	// scheme, so every banded mark in a strand graduates identically and
+	// the strand reads as one repeated mark rather than as a queue of
+	// related ones.
 	anchors := make([]palette.Color, rampAnchors)
-	dir := 1
-	if rng.Float64() < 0.5 {
-		dir = -1
-	}
-	// The ramp starts where the colour walk stands, so a banded mark
-	// belongs to the same passage as the plain marks around it.
 	for i := range anchors {
-		anchors[i] = ramp[((at+i*dir)%len(ramp)+len(ramp))%len(ramp)]
+		anchors[i] = ramp[((sc.at+i*sc.dir)%len(ramp)+len(ramp))%len(ramp)]
 	}
 
 	p := bandPlan{

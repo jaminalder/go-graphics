@@ -175,7 +175,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	l := s.layoutFor(tr, ctx.RNG(streamFill))
 	paper, tint, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
 
-	circles := s.plan(l, tr.Get(dimArrange), rng, aspect, ramp)
+	circles := s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), rng, aspect, ramp)
 
 	// The canvas starts as bare paper; the ground is glazed onto it, on its
 	// own stream so that changing the marks never repaints the sky.
@@ -243,69 +243,63 @@ func groundTint(byLum []palette.Color) palette.Color {
 
 // plan places every circle and settles what it is made of, largest first
 // so the paint order lets small marks settle on top.
-func (s *Sketch) plan(l layout, arrange string, rng *rand.Rand, aspect float64, ramp []palette.Color) []circle {
+func (s *Sketch) plan(l layout, arrange, flow string, rng *rand.Rand, aspect float64, ramp []palette.Color) []circle {
 	radii, weights := l.ladder()
 	index := geom.NewIndex(aspect, 1, radii[len(radii)-1])
 	walk := newColorWalk(rng, len(ramp))
 
 	var out []circle
-	anchors := 0
-
-	// place lays one anchor and, sometimes, a companion across it. Left to
-	// chance the overlaps either never happen or arrive as a pile-up; the
-	// crossings are the subject, so they are placed on purpose — and from
-	// one rung down, not from the bottom of the ladder, because a speck
-	// crossing a large disc shows nothing.
-	place := func(c geom.Circle, rung int) {
+	place := func(c geom.Circle, sc scheme) bool {
+		if !l.inPaper(c, aspect) || !index.FitsWithGap(c, c.R*l.gap) {
+			return false
+		}
 		index.Insert(c)
-		out = append(out, s.build(rng, c, walk.next(rng), ramp))
-		anchors++
-
-		if rng.Float64() >= l.satellites {
-			return
-		}
-		sr := radii[max(rung-1, 0)]
-		if rung == 0 {
-			sr = c.R * 0.72
-		}
-		th := rng.Float64() * 2 * math.Pi
-		d := (c.R + sr) * (0.42 + 0.32*rng.Float64())
-		sc := geom.Circle{X: c.X + d*math.Cos(th), Y: c.Y + d*math.Sin(th), R: sr}
-		if !l.inPaper(sc, aspect) {
-			return
-		}
-		index.Insert(sc)
-		out = append(out, s.build(rng, sc, walk.next(rng), ramp))
+		out = append(out, s.build(rng, c, sc, ramp))
+		return true
 	}
 
-	// A structured arrangement offers positions in its own laying order and
-	// the spacing rule decides which survive — QQL's mechanism, and the
-	// reason the candidates drive the loop rather than the count. Asking
-	// instead for `count` marks and hunting a spot for each lets one
-	// unlucky large draw, which nothing left on the sheet can accommodate,
-	// end the whole placement. Here it simply misses its turn.
-	if spots := candidates(arrange, rng, aspect, l.step(radii)); spots != nil {
-		for _, p := range spots {
-			if anchors >= l.count {
+	groups := startGroups(arrange, rng, aspect, l.spacing(radii))
+	if groups == nil {
+		return s.scatter(l, rng, aspect, ramp, radii, weights, index, walk, place, &out)
+	}
+
+	f := newField(flow, rng, aspect)
+	for _, g := range groups {
+		if len(out) >= l.count {
+			break
+		}
+		// One size and one colour for the whole run. This is the rule the
+		// look turns on: per mark they come out as salt and pepper and no
+		// strand reads as a strand.
+		rung := rnd.PickIndex(rng, weights)
+		r := radii[rung]
+		sc := walk.next(rng)
+
+		for _, start := range g {
+			if len(out) >= l.count {
 				break
 			}
-			rung := rnd.PickIndex(rng, weights)
-			c := geom.Circle{X: p.x, Y: p.y, R: radii[rung]}
-			if !l.inPaper(c, aspect) || !index.FitsWithGap(c, c.R*l.gap) {
-				continue
+			// Both ways from the seed, so a run is a whole stretch of the
+			// field through its start rather than a tail hanging off it.
+			for _, dir := range [2]float64{1, -1} {
+				x, y := start.x, start.y
+				for step := 0; step < maxWalk; step++ {
+					if placed := place(geom.Circle{X: x, Y: y, R: r}, sc); placed {
+						s.satellite(l, rng, index, aspect, geom.Circle{X: x, Y: y, R: r}, rung, radii, sc, ramp, &out)
+					}
+					// Advance by this mark's own diameter, which is what
+					// makes consecutive marks touch. A fixed grid cannot:
+					// its step would have to be the size of the mark being
+					// laid, and that changes with every run.
+					adv := 2*r + r*math.Max(l.gap, 0)
+					th := f.at(x, y)
+					x += dir * adv * math.Cos(th)
+					y += dir * adv * math.Sin(th)
+					if !inBleed(pt{x, y}, aspect) {
+						break
+					}
+				}
 			}
-			place(c, rung)
-		}
-	} else {
-		// Scatter has no structure, so it throws darts instead.
-		for range l.count {
-			rung := rnd.PickIndex(rng, weights)
-			r := radii[rung]
-			x, y, ok := l.bestCandidate(rng, index, aspect, r)
-			if !ok {
-				continue
-			}
-			place(geom.Circle{X: x, Y: y, R: r}, rung)
 		}
 	}
 
@@ -313,16 +307,70 @@ func (s *Sketch) plan(l layout, arrange string, rng *rand.Rand, aspect float64, 
 	return out
 }
 
+// maxWalk bounds one direction of one run, so a field that circles forever
+// cannot spin in place.
+const maxWalk = 400
+
+// satellite sometimes lays a companion across a mark. Left to chance the
+// overlaps either never happen or arrive as a pile-up; the crossings are
+// part of the subject, so they are placed on purpose — and from one rung
+// down, because a speck crossing a large disc shows nothing.
+func (s *Sketch) satellite(l layout, rng *rand.Rand, index *geom.Index, aspect float64,
+	c geom.Circle, rung int, radii []float64, sc scheme, ramp []palette.Color, out *[]circle,
+) {
+	if rng.Float64() >= l.satellites {
+		return
+	}
+	sr := radii[max(rung-1, 0)]
+	if rung == 0 {
+		sr = c.R * 0.72
+	}
+	th := rng.Float64() * 2 * math.Pi
+	d := (c.R + sr) * (0.42 + 0.32*rng.Float64())
+	comp := geom.Circle{X: c.X + d*math.Cos(th), Y: c.Y + d*math.Sin(th), R: sr}
+	if !l.inPaper(comp, aspect) {
+		return
+	}
+	index.Insert(comp)
+	*out = append(*out, s.build(rng, comp, sc, ramp))
+}
+
+// scatter is the structureless arrangement: darts rather than walks, and
+// the only one that leaves the sheet with no direction in it at all.
+func (s *Sketch) scatter(l layout, rng *rand.Rand, aspect float64, ramp []palette.Color,
+	radii, weights []float64, index *geom.Index, walk *colorWalk,
+	place func(geom.Circle, scheme) bool, out *[]circle,
+) []circle {
+	// Attempts, not placements: a dart that lands on an occupied patch has
+	// not spent a mark, and counting it as one leaves a crowded sheet
+	// far short of its own budget.
+	for tries := 0; len(*out) < l.count && tries < l.count*4; tries++ {
+		rung := rnd.PickIndex(rng, weights)
+		r := radii[rung]
+		x, y, ok := l.bestCandidate(rng, index, aspect, r)
+		if !ok {
+			continue
+		}
+		sc := walk.next(rng)
+		c := geom.Circle{X: x, Y: y, R: r}
+		if place(c, sc) {
+			s.satellite(l, rng, index, aspect, c, rung, radii, sc, ramp, out)
+		}
+	}
+	sort.SliceStable(*out, func(i, j int) bool { return (*out)[i].R > (*out)[j].R })
+	return *out
+}
+
 // build settles what one placed circle is made of.
-func (s *Sketch) build(rng *rand.Rand, g geom.Circle, at int, ramp []palette.Color) circle {
+func (s *Sketch) build(rng *rand.Rand, g geom.Circle, sc scheme, ramp []palette.Color) circle {
 	// The walk decides the hue and the bag decides the accents: a mark
 	// takes its pigment from where the walk stands, and its second colour
 	// from a neighbour on the ramp, so a passage holds together while no
 	// two marks in it are quite the same.
 	c := circle{
 		Circle:  g,
-		pigment: ramp[at],
-		second:  ramp[(at+1+rng.IntN(max(len(ramp)-1, 1)))%len(ramp)],
+		pigment: ramp[sc.at],
+		second:  ramp[sc.second],
 		// Strength varies a little per mark, the way a loaded brush does,
 		// and stays well below 1 so a crossing is still readable as two
 		// pigments rather than as one opaque patch.
@@ -332,7 +380,7 @@ func (s *Sketch) build(rng *rand.Rand, g geom.Circle, at int, ramp []palette.Col
 	switch {
 	case rng.Float64() < s.Banded:
 		c.kind = kindBanded
-		c.bands = s.planBands(rng, g.R, at, ramp)
+		c.bands = s.planBands(rng, g.R, sc, ramp)
 	case rng.Float64() < s.Open:
 		c.kind = kindOpen
 		// Bands run from a fat annulus to a drawn-looking hoop; the fat

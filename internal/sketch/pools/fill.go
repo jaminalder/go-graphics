@@ -35,6 +35,11 @@ var schema = trait.Schema{
 		Values: arrangements,
 	},
 	{
+		Name: dimFlow, Key: "w", InName: true,
+		Doc:    "the field a run of marks follows",
+		Values: flows,
+	},
+	{
 		Name: dimFill, Key: "f", InName: true,
 		Doc: "how much of the frame the discs take up",
 		Values: []trait.Value{
@@ -76,17 +81,17 @@ func newFill(level string, rng *rand.Rand) layout {
 	case "sparse":
 		l.count = 5 + rng.IntN(4)
 		l.rungs, l.base = 2, rnd.Uniform(rng, 0.105, 0.125)
-		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.50, 1.70), rnd.Uniform(rng, 0.10, 0.16), rnd.Uniform(rng, 0.050, 0.062)
+		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.50, 1.70), rnd.Uniform(rng, 0.06, 0.12), rnd.Uniform(rng, 0.050, 0.062)
 		l.satellites = rnd.Uniform(rng, 0.55, 0.75)
 	case "open":
 		l.count = 10 + rng.IntN(5)
 		l.rungs, l.base = 3, rnd.Uniform(rng, 0.078, 0.092)
-		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.55, 1.70), rnd.Uniform(rng, 0.08, 0.12), rnd.Uniform(rng, 0.040, 0.050)
+		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.55, 1.70), rnd.Uniform(rng, 0.04, 0.09), rnd.Uniform(rng, 0.040, 0.050)
 		l.satellites = rnd.Uniform(rng, 0.55, 0.72)
 	case "medium":
 		l.count = 18 + rng.IntN(9)
 		l.rungs, l.base = 4, rnd.Uniform(rng, 0.060, 0.070)
-		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.50, 1.60), rnd.Uniform(rng, 0.05, 0.08), rnd.Uniform(rng, 0.030, 0.040)
+		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.50, 1.60), rnd.Uniform(rng, 0.02, 0.06), rnd.Uniform(rng, 0.030, 0.040)
 		l.satellites = rnd.Uniform(rng, 0.50, 0.68)
 	case "busy":
 		l.count = 32 + rng.IntN(13)
@@ -96,7 +101,7 @@ func newFill(level string, rng *rand.Rand) layout {
 	default: // packed
 		l.count = 55 + rng.IntN(16)
 		l.rungs, l.base = 5, rnd.Uniform(rng, 0.036, 0.045)
-		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.52, 1.66), rnd.Uniform(rng, -0.08, -0.02), rnd.Uniform(rng, 0.018, 0.026)
+		l.ratio, l.gap, l.margin = rnd.Uniform(rng, 1.52, 1.66), rnd.Uniform(rng, -0.04, 0.01), rnd.Uniform(rng, 0.018, 0.026)
 		l.satellites = rnd.Uniform(rng, 0.42, 0.58)
 	}
 	return l
@@ -161,15 +166,15 @@ func (l layout) inPaper(c geom.Circle, aspect float64) bool {
 		c.Y-c.R > l.margin*0.5 && c.Y+c.R < 1-l.margin*0.5
 }
 
-// step is the spacing a structure lays its candidates at.
+// spacing is the distance between *walks*, not between marks. A walk fills
+// in along its own length, so seeding at mark spacing lays every strand on
+// top of the last one; seeding much wider leaves the sheet in stripes.
 //
-// It comes from the *smallest* rung, not from a typical one. A structure
-// is an offer, not a plan: it puts down far more positions than the sheet
-// can hold and the spacing rule thins them, which is how a large mark and
-// the small ones around it can both land on the same rings. Spaced for the
-// average mark instead, a structure offers a few dozen positions, most of
-// which the first few discs invalidate, and the sheet comes out nearly
-// empty however high the count.
-func (l layout) step(radii []float64) float64 {
-	return radii[0] * 2 * (1 + math.Max(l.gap, 0))
+// It comes off the smallest rung, not the mean. The ladder reaches a disc
+// of a quarter of the canvas, so its mean is dragged up by a rung that
+// comes up one time in ten — seeding at that spacing puts a handful of
+// walks on the whole sheet and most of it stays bare. Three of the
+// commonest mark is the width at which strands read as strands.
+func (l layout) spacing(radii []float64) float64 {
+	return radii[0] * 3
 }

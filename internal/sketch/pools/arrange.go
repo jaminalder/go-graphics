@@ -8,85 +8,150 @@ import (
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
-// Where the marks go, borrowed from QQL.
+// Where the marks go, borrowed from QQL — all three moving parts of it.
 //
-// QQL's own note on its structure trait is the useful part: the structure
-// decides where the flow lines start, "and that turns out to matter more
-// than the field itself — the same field seeded in concentric bands, in
-// soft blobs, or in a grid of rectangles gives three unmistakably different
-// pieces". So what is taken here is the seeding, not the flow: each
-// arrangement produces candidate positions in a laying order, and the
-// spacing rule decides which of them survive. The field proposes and the
-// packing disposes, which is QQL's mechanism with one moving part removed.
+// A structure seeds start points; a flow field says which way to walk from
+// them; and marks are laid along that walk, shoulder to shoulder, until
+// something already on the sheet is in the way. The field proposes and the
+// spacing rule disposes.
 //
-// The order matters as much as the positions. Candidates are walked in the
-// order the structure produced them — round a ring, along a row, outward
-// through a blob — and the colour walks with them (see colorWalk), so a
-// piece comes out in passages rather than as confetti. That is the other
-// half of what makes a QQL piece read as composed.
+// The first version of this took only the structure, on the reasoning —
+// QQL's own — that the seeding matters more than the field. That is true of
+// the *composition*, and false of the surface. What makes a QQL piece
+// recognisable at a glance is that its marks touch: they run in contiguous
+// strands that curve, and a strand holds one size and one colour for its
+// whole length. Scattering marks over a structured grid gives the same
+// large-scale arrangement with none of that, and reads as a scatter.
+//
+// So three things are load-bearing here, and all three come from the walk:
+//
+//   - Marks advance by their own diameter, so consecutive marks touch. A
+//     fixed grid of candidate positions cannot do this: the step has to
+//     follow the size of the mark being laid.
+//   - A run holds one size and one colour. QQL sets both per group, not per
+//     dot; per dot they come out as salt and pepper and no strand reads as
+//     a strand.
+//   - Runs are laid along the field, so the strands curve with it.
 
-const dimArrange = "arrange"
+const (
+	dimArrange = "arrange"
+	dimFlow    = "flow"
+)
 
-// arrangements are the structures a seed can draw. Scatter is the original
-// blue-noise placement and stays reachable: it is the only one that leaves
-// the sheet with no direction at all, which some pieces want.
+// arrangements are the structures a seed can draw: where the walks begin.
+// Orbital and shadows carry the weight: the sweeping arcs of one and the
+// filled-in fields of the other are where this vocabulary is at its best.
+// Scatter stays reachable but rare — it is the only one with no direction
+// in it at all, which a piece occasionally wants and usually does not.
 var arrangements = []trait.Value{
-	{Name: "scatter", Weight: 2},
 	{Name: "orbital", Weight: 3},
-	{Name: "formation", Weight: 3},
-	{Name: "shadows", Weight: 2},
+	{Name: "formation", Weight: 2},
+	{Name: "shadows", Weight: 3},
+	{Name: "scatter", Weight: 1},
 }
 
-// pt is a candidate position.
+// flows are the fields a walk follows. The linear ones give strands that
+// run straight across the sheet, the radial ones strands that curve; spiral
+// sits between circular and explosive and is the most useful of them, which
+// is why QQL weights it highest too.
+var flows = []trait.Value{
+	{Name: "horizontal", Weight: 3},
+	{Name: "vertical", Weight: 2},
+	{Name: "diagonal", Weight: 2},
+	{Name: "spiral", Weight: 4},
+	{Name: "circular", Weight: 2},
+	{Name: "explosive", Weight: 1},
+}
+
+// pt is a start point.
 type pt struct{ x, y float64 }
 
-// candidateCap bounds a structure's offer. A fine step over a bled canvas
-// can ask for a hundred thousand positions, almost all of which the first
-// few marks invalidate; this keeps a pathological fill from spending its
-// render on arithmetic nobody sees.
-const candidateCap = 20000
+// bleed is how far past the canvas a structure reaches and a walk may
+// wander, so a composition runs off the edge instead of stopping at it.
+const bleed = 0.2
 
-// candidates lays out the positions one arrangement offers, in the order
-// they should be tried. step is the spacing to aim for, which the caller
-// sets from the size ladder so the same structure works at every fill.
-func candidates(name string, rng *rand.Rand, aspect, step float64) []pt {
-	step = math.Max(step, 0.004)
+// field is the direction a walk takes at any point.
+type field struct {
+	radial      bool
+	theta       float64 // linear heading
+	cx, cy      float64 // radial centre
+	circularity float64 // 0 = straight out of the centre, 1 = round it
+	clockwise   bool
+}
+
+func newField(name string, rng *rand.Rand, aspect float64) field {
+	f := field{
+		cx: aspect * rnd.Uniform(rng, 0.15, 0.85),
+		cy: rnd.Uniform(rng, 0.15, 0.85),
+		// A little off true, always: a field at exactly 0 or 90 degrees
+		// draws strands that line up with the frame and read as ruled.
+		clockwise: rnd.Odds(rng, 0.5),
+	}
+	switch name {
+	case "horizontal":
+		f.theta = rnd.Gauss(rng, 0, 0.12)
+	case "vertical":
+		f.theta = math.Pi/2 + rnd.Gauss(rng, 0, 0.12)
+	case "diagonal":
+		f.theta = math.Pi/4 + rnd.Gauss(rng, 0, 0.12)
+		if rnd.Odds(rng, 0.5) {
+			f.theta = -f.theta
+		}
+	case "circular":
+		f.radial, f.circularity = true, rnd.Uniform(rng, 0.88, 1)
+	case "explosive":
+		f.radial, f.circularity = true, rnd.Uniform(rng, 0.1, 0.35)
+	default: // spiral
+		f.radial, f.circularity = true, rnd.Uniform(rng, 0.45, 0.8)
+	}
+	return f
+}
+
+// at is the heading at a point.
+func (f field) at(x, y float64) float64 {
+	if !f.radial {
+		return f.theta
+	}
+	out := math.Atan2(y-f.cy, x-f.cx)
+	turn := math.Pi / 2 * f.circularity
+	if f.clockwise {
+		turn = -turn
+	}
+	return out + turn
+}
+
+// startGroups seeds the walks. A group is the unit that shares a size and a
+// colour, so the structure decides not only where the piece is dense but
+// how it is divided into passages.
+//
+// The spacing here is the distance between *walks*, not between marks: the
+// walk fills in along its own length, so seeding at mark spacing would lay
+// every strand on top of the last one.
+func startGroups(name string, rng *rand.Rand, aspect, spacing float64) [][]pt {
 	switch name {
 	case "orbital":
-		return capped(orbital(rng, aspect, step))
+		return orbitalStarts(rng, aspect, spacing)
 	case "formation":
-		return capped(formation(rng, aspect, step))
+		return formationStarts(rng, aspect, spacing)
 	case "shadows":
-		return capped(shadows(rng, aspect, step))
+		return shadowStarts(rng, aspect, spacing)
 	default:
 		return nil // scatter has no structure; the planner throws darts
 	}
 }
 
-// capped trims an offer that ran away.
-func capped(p []pt) []pt {
-	if len(p) > candidateCap {
-		return p[:candidateCap]
-	}
-	return p
-}
-
-// bleed is how far past the canvas a structure reaches, so a composition
-// runs off the edge instead of stopping politely at it.
-const bleed = 0.15
-
-// orbital seeds concentric rings around a centre that is often off-canvas,
-// so the sheet shows an arc of something larger rather than a target.
-func orbital(rng *rand.Rand, aspect, step float64) []pt {
+// orbitalStarts seeds concentric bands about a centre, each band cut into
+// arcs. Walked along a circular field these come out as record grooves;
+// walked across one they come out as spokes.
+func orbitalStarts(rng *rand.Rand, aspect, spacing float64) [][]pt {
 	cx := aspect * rnd.Pick(rng, []rnd.Weighted[float64]{
-		{V: 0.5, W: 3}, {V: 0.2, W: 2}, {V: 0.8, W: 2}, {V: -0.4, W: 1}, {V: 1.4, W: 1},
+		{V: 0.5, W: 3}, {V: 0.15, W: 2}, {V: 0.85, W: 2}, {V: -0.3, W: 1}, {V: 1.3, W: 1},
 	})
 	cy := rnd.Pick(rng, []rnd.Weighted[float64]{
-		{V: 0.5, W: 3}, {V: 0.2, W: 2}, {V: 0.8, W: 2}, {V: -0.4, W: 1}, {V: 1.4, W: 1},
+		{V: 0.5, W: 3}, {V: 0.15, W: 2}, {V: 0.85, W: 2}, {V: -0.3, W: 1}, {V: 1.3, W: 1},
 	})
-	// Rings are spaced a little wider than the marks, so the bands read as
-	// bands; packed exactly at step they merge into a texture.
-	ringStep := step * rnd.Uniform(rng, 1.0, 1.5)
+	ringStep := spacing * rnd.Uniform(rng, 0.9, 1.6)
+	arcs := rnd.Choice(rng, []int{1, 2, 3})
 	phase := rnd.Uniform(rng, 0, 2*math.Pi)
 
 	reach := 0.0
@@ -94,79 +159,81 @@ func orbital(rng *rand.Rand, aspect, step float64) []pt {
 		reach = math.Max(reach, math.Hypot(c[0]-cx, c[1]-cy))
 	}
 
-	var out []pt
+	var groups [][]pt
 	for r := ringStep; r < reach+ringStep; r += ringStep {
-		// One mark every `step` of arc, so rings stay evenly dense however
-		// large they get.
-		n := max(int(2*math.Pi*r/step), 1)
-		for i := range n {
-			th := phase + float64(i)*2*math.Pi/float64(n)
-			p := pt{cx + r*math.Cos(th), cy + r*math.Sin(th)}
-			if inBleed(p, aspect) {
-				out = append(out, p)
+		for a := range arcs {
+			var g []pt
+			span := 2 * math.Pi / float64(arcs)
+			from := phase + float64(a)*span
+			// A handful of seeds per arc; the walk joins them up.
+			n := max(int(r*span/(spacing*2)), 1)
+			for i := range n {
+				th := from + float64(i)*span/float64(n)
+				p := pt{cx + r*math.Cos(th), cy + r*math.Sin(th)}
+				if inBleed(p, aspect) {
+					g = append(g, p)
+				}
+			}
+			if len(g) > 0 {
+				groups = append(groups, g)
 			}
 		}
 	}
-	return out
+	return groups
 }
 
-// formation rasters a grid of rectangles and drops some of them. The gaps
-// are what keep it from reading as wallpaper.
-func formation(rng *rand.Rand, aspect, step float64) []pt {
+// formationStarts divides the sheet into rectangles and seeds each with a
+// coarse lattice, dropping some chunks. The gaps are what keep a formation
+// piece from reading as wallpaper.
+func formationStarts(rng *rand.Rand, aspect, spacing float64) [][]pt {
 	across := rnd.Pick(rng, []rnd.Weighted[int]{{V: 1, W: 3}, {V: 2, W: 3}, {V: 3, W: 2}, {V: 4, W: 1}})
 	down := rnd.Pick(rng, []rnd.Weighted[int]{{V: 1, W: 3}, {V: 2, W: 3}, {V: 3, W: 2}, {V: 4, W: 1}})
 	skip := rnd.Pick(rng, []rnd.Weighted[float64]{{V: 0, W: 3}, {V: 0.15, W: 2}, {V: 0.35, W: 1}})
-	// Rows or columns: which way a chunk is rastered decides which way the
-	// colour passages run, and that is half of how the piece reads.
-	columnar := rnd.Odds(rng, 0.5)
-	jitter := step * rnd.Uniform(rng, 0.05, 0.3)
 
 	w := (aspect + 2*bleed) / float64(across)
 	h := (1 + 2*bleed) / float64(down)
 
-	var out []pt
+	var groups [][]pt
 	first := true
 	for i := range across {
 		for j := range down {
-			// The first chunk always survives, so no seed comes out empty.
 			if !first && rnd.Odds(rng, skip) {
 				continue
 			}
 			first = false
 			x0, y0 := -bleed+float64(i)*w, -bleed+float64(j)*h
-			outer, inner := h, w
-			if columnar {
-				outer, inner = w, h
-			}
-			for a := 0.0; a < outer; a += step {
-				for b := 0.0; b < inner; b += step {
-					p := pt{x0 + b, y0 + a}
-					if columnar {
-						p = pt{x0 + a, y0 + b}
-					}
-					p.x += rnd.Gauss(rng, 0, jitter)
-					p.y += rnd.Gauss(rng, 0, jitter)
+			var g []pt
+			for y := y0; y < y0+h; y += spacing {
+				for x := x0; x < x0+w; x += spacing {
+					p := pt{x, y}
 					if inBleed(p, aspect) {
-						out = append(out, p)
+						g = append(g, p)
 					}
 				}
 			}
+			if len(g) > 0 {
+				groups = append(groups, g)
+			}
 		}
 	}
-	return out
+	return groups
 }
 
-// shadows scatters non-overlapping blobs and fills each one from the rim
-// inward, so they read as separate objects in the same field.
-func shadows(rng *rand.Rand, aspect, step float64) []pt {
-	count := rnd.Choice(rng, []int{3, 4, 6, 9, 14})
+// shadowStarts scatters non-overlapping blobs and seeds each one, so they
+// read as separate objects filling in against the same field.
+func shadowStarts(rng *rand.Rand, aspect, spacing float64) [][]pt {
+	count := rnd.Choice(rng, []int{3, 5, 8, 12})
 	type blob struct{ x, y, r float64 }
 	var blobs []blob
 	for iter := 0; len(blobs) < count && iter < 400; iter++ {
+		// Blob size is a fraction of the sheet, not a multiple of the seed
+		// spacing: tied to spacing, a sparse fill — whose marks are large,
+		// so whose seeds are far apart — asks for blobs bigger than the
+		// canvas, one of them fits, and the piece is a single object.
 		b := blob{
 			x: rnd.Uniform(rng, 0, aspect),
 			y: rnd.Uniform(rng, 0, 1),
-			r: rnd.Uniform(rng, 4*step, math.Max(0.42, 6*step)),
+			r: rnd.Uniform(rng, 0.10, 0.34),
 		}
 		clear := true
 		for _, o := range blobs {
@@ -180,30 +247,25 @@ func shadows(rng *rand.Rand, aspect, step float64) []pt {
 		}
 	}
 
-	outward := rnd.Odds(rng, 0.5)
-	var out []pt
+	var groups [][]pt
 	for _, b := range blobs {
-		var group []pt
-		for r := b.r; r > 0; r -= step {
-			n := max(int(2*math.Pi*r/step), 1)
-			phase := rnd.Uniform(rng, 0, 2*math.Pi)
+		var g []pt
+		for r := b.r; r > 0; r -= spacing {
+			n := max(int(2*math.Pi*r/(spacing*1.5)), 1)
 			for i := range n {
-				th := phase + float64(i)*2*math.Pi/float64(n)
+				th := float64(i) * 2 * math.Pi / float64(n)
 				p := pt{b.x + r*math.Cos(th), b.y + r*math.Sin(th)}
 				if inBleed(p, aspect) {
-					group = append(group, p)
+					g = append(g, p)
 				}
 			}
 		}
-		group = append(group, pt{b.x, b.y})
-		if outward {
-			for i, j := 0, len(group)-1; i < j; i, j = i+1, j-1 {
-				group[i], group[j] = group[j], group[i]
-			}
+		g = append(g, pt{b.x, b.y})
+		if len(g) > 0 {
+			groups = append(groups, g)
 		}
-		out = append(out, group...)
 	}
-	return out
+	return groups
 }
 
 func inBleed(p pt, aspect float64) bool {
@@ -213,31 +275,43 @@ func inBleed(p pt, aspect float64) bool {
 // colorWalk is how a piece gets passages of colour instead of confetti.
 //
 // It steps an index along the luminance-ordered pigments and mostly stays
-// put: neighbouring marks — which, because candidates are walked in the
-// structure's own order, are neighbours on the sheet too — come out
-// related, and the piece turns over a handful of times rather than at every
-// mark. Drawing each mark's colour freely gives every pigment equal
-// presence everywhere, which is what reads as confetti.
+// put. Because it is advanced once per *group* rather than once per mark,
+// and a group is a run of marks laid along one stretch of the field, the
+// piece turns colour where it turns direction — which is what reads as
+// composed. Drawing each mark's colour freely gives every pigment equal
+// presence everywhere, which reads as confetti.
 type colorWalk struct {
-	n     int     // pigments to walk over
-	at    int     // where the walk stands
-	churn float64 // chance of stepping at each mark
+	n     int
+	at    int
+	churn float64
 }
 
 func newColorWalk(rng *rand.Rand, n int) *colorWalk {
 	return &colorWalk{
-		n:  n,
-		at: rng.IntN(max(n, 1)),
-		// Low: a piece with a dozen colour changes reads as composed, one
-		// with a hundred reads as noise.
-		churn: rnd.Uniform(rng, 0.04, 0.22),
+		n:     n,
+		at:    rng.IntN(max(n, 1)),
+		churn: rnd.Uniform(rng, 0.3, 0.8),
 	}
 }
 
-// next advances the walk and returns the pigment index for the next mark.
-func (w *colorWalk) next(rng *rand.Rand) int {
+// scheme is a whole colour decision, held for a run: which pigment, which
+// partner it is paired with, and which way a banded mark graduates.
+//
+// All three, not just the first. Holding the base pigment alone still lets
+// the partner and the graduation re-draw at every mark, and a strand whose
+// marks share a colour but differ in everything else about their colour
+// does not read as one thing — QQL's runs are identical marks repeated,
+// and that is what makes them runs.
+type scheme struct {
+	at     int // pigment, as an index into the ramp
+	second int // its partner
+	dir    int // which way a banded mark walks the ramp: +1 or -1
+}
+
+// next advances the walk and returns the scheme for the next group.
+func (w *colorWalk) next(rng *rand.Rand) scheme {
 	if w.n < 2 {
-		return 0
+		return scheme{dir: 1}
 	}
 	if rnd.Odds(rng, w.churn) {
 		step := rnd.Pick(rng, []rnd.Weighted[int]{{V: 1, W: 6}, {V: 2, W: 3}, {V: 3, W: 1}})
@@ -246,5 +320,13 @@ func (w *colorWalk) next(rng *rand.Rand) int {
 		}
 		w.at = ((w.at+step)%w.n + w.n) % w.n
 	}
-	return w.at
+	dir := 1
+	if rnd.Odds(rng, 0.5) {
+		dir = -1
+	}
+	return scheme{
+		at:     w.at,
+		second: (w.at + 1 + rng.IntN(max(w.n-1, 1))) % w.n,
+		dir:    dir,
+	}
 }
