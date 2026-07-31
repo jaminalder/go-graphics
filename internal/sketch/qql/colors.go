@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand/v2"
 
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
@@ -13,11 +14,11 @@ import (
 // sampling keeps the survivors in their original neighbourly order, so the
 // walk along them still moves between related colours.
 func newScheme(tr trait.Set, set colorSet, f frame, rng *rand.Rand) scheme {
-	bgOpts := make([]weighted[bgChoice], len(set.Backgrounds))
+	bgOpts := make([]rnd.Weighted[bgChoice], len(set.Backgrounds))
 	for i, b := range set.Backgrounds {
-		bgOpts[i] = weighted[bgChoice]{b, b.Weight}
+		bgOpts[i] = rnd.Weighted[bgChoice]{V: b, W: b.Weight}
 	}
-	bg := wc(rng, bgOpts)
+	bg := rnd.Pick(rng, bgOpts)
 
 	// The ground rewrites the palette: colours that would vanish against it
 	// are swapped for a readable cousin, or dropped outright.
@@ -31,48 +32,48 @@ func newScheme(tr trait.Set, set colorSet, f frame, rng *rand.Rand) scheme {
 		seq = set.Seq // a ground that erased everything is no ground at all
 	}
 
-	splatterOpts := make([]weighted[swatchKey], 0, len(set.Splatter))
+	splatterOpts := make([]rnd.Weighted[swatchKey], 0, len(set.Splatter))
 	for _, s := range set.Splatter {
 		if to, keep := bg.substitute(s.Color); keep {
-			splatterOpts = append(splatterOpts, weighted[swatchKey]{to, s.Weight})
+			splatterOpts = append(splatterOpts, rnd.Weighted[swatchKey]{V: to, W: s.Weight})
 		}
 	}
 	var splatterChoices []swatchKey
 	if len(splatterOpts) > 0 {
-		n := max(1, int(math.Round(gauss(rng, 1.5, 2))))
+		n := max(1, int(math.Round(rnd.Gauss(rng, 1.5, 2))))
 		for range n {
-			splatterChoices = append(splatterChoices, wc(rng, splatterOpts))
+			splatterChoices = append(splatterChoices, rnd.Pick(rng, splatterOpts))
 		}
 	}
 
 	variety := tr.Get(dimColorVariety)
-	var oddsChoices []weighted[float64]
-	var countChoices []weighted[int]
+	var oddsChoices []rnd.Weighted[float64]
+	var countChoices []rnd.Weighted[int]
 	switch variety {
 	case "low":
-		oddsChoices = []weighted[float64]{{0, 4}, {0.001, 2}, {0.002, 2}, {0.005, 2}}
-		countChoices = []weighted[int]{{1, 1}, {2, 3}, {3, 4}, {4, 5}, {5, 3}}
+		oddsChoices = []rnd.Weighted[float64]{{V: 0, W: 4}, {V: 0.001, W: 2}, {V: 0.002, W: 2}, {V: 0.005, W: 2}}
+		countChoices = []rnd.Weighted[int]{{V: 1, W: 1}, {V: 2, W: 3}, {V: 3, W: 4}, {V: 4, W: 5}, {V: 5, W: 3}}
 	case "medium":
-		oddsChoices = []weighted[float64]{{0, 3}, {0.002, 2}, {0.005, 2}, {0.01, 1}, {0.03, 1}}
-		countChoices = []weighted[int]{{5, 1}, {6, 2}, {7, 3}, {8, 5}, {10, 3}, {15, 2}}
+		oddsChoices = []rnd.Weighted[float64]{{V: 0, W: 3}, {V: 0.002, W: 2}, {V: 0.005, W: 2}, {V: 0.01, W: 1}, {V: 0.03, W: 1}}
+		countChoices = []rnd.Weighted[int]{{V: 5, W: 1}, {V: 6, W: 2}, {V: 7, W: 3}, {V: 8, W: 5}, {V: 10, W: 3}, {V: 15, W: 2}}
 	default: // high — and the one-in-a-thousand piece that is nothing but splatter
-		oddsChoices = []weighted[float64]{
-			{0, 3}, {0.002, 2}, {0.005, 2}, {0.01, 1}, {0.03, 1}, {0.08, 1}, {0.5, 0.05},
+		oddsChoices = []rnd.Weighted[float64]{
+			{V: 0, W: 3}, {V: 0.002, W: 2}, {V: 0.005, W: 2}, {V: 0.01, W: 1}, {V: 0.03, W: 1}, {V: 0.08, W: 1}, {V: 0.5, W: 0.05},
 		}
-		countChoices = []weighted[int]{{10, 3}, {12, 4}, {15, 5}, {20, 3}, {25, 3}}
+		countChoices = []rnd.Weighted[int]{{V: 10, W: 3}, {V: 12, W: 4}, {V: 15, W: 5}, {V: 20, W: 3}, {V: 25, W: 3}}
 	}
 
-	primary := winnow(rng, seq, wc(rng, countChoices))
-	secondary := winnow(rng, seq, wc(rng, countChoices))
+	primary := rnd.Winnow(rng, seq, rnd.Pick(rng, countChoices))
+	secondary := rnd.Winnow(rng, seq, rnd.Pick(rng, countChoices))
 
 	return scheme{
 		set:             set,
 		Background:      set.swatch(bg.Color).Color(),
 		Primary:         primary,
 		Secondary:       secondary,
-		SplatterCenterX: uniform(rng, f.w(-0.1), f.w(1.1)),
-		SplatterCenterY: uniform(rng, f.h(-0.1), f.h(1.1)),
-		SplatterOdds:    wc(rng, oddsChoices),
+		SplatterCenterX: rnd.Uniform(rng, f.w(-0.1), f.w(1.1)),
+		SplatterCenterY: rnd.Uniform(rng, f.h(-0.1), f.h(1.1)),
+		SplatterOdds:    rnd.Pick(rng, oddsChoices),
 		SplatterChoices: splatterChoices,
 	}
 }

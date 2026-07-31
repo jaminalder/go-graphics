@@ -71,13 +71,42 @@ a believable third colour wherever two discs cross.
    `Ragged` — deformed enough to be hand-laid, not enough to stop being a
    circle.
 
+## Traits
+
+| Flag | Values (weight) |
+|---|---|
+| `--fill` | sparse 1 · open 2 · **medium 3** · **busy 3** · packed 2 |
+
+Filling a frame is not "more circles": it takes the count up, the size
+ladder down, the clearance in — negative, so discs cross — and the margin
+closed, all together. Raising the count alone gives the same picture with
+more specks in it. Those six numbers were being set together by hand on
+every render, which is a single decision wearing six hats, so they are one
+axis now.
+
+The level resolves to **ranges, not numbers**, which is what makes a trait
+worth having: "busy" means a busy sheet, not one particular busy sheet, and
+two seeds at that level differ in how many marks, how large and how crowded
+while both still read as busy. Every level's ladder reaches a disc of
+roughly a quarter of the canvas, so even a packed sheet carries a few large
+marks — a packed field of one size is a texture, a packed field with three
+or four big ones in it is a composition.
+
+`--count`, `--rungs`, `--base`, `--ratio`, `--satellites`, `--gap` and
+`--margin` remain, now as *overrides*: each applies only when actually
+given, so you can move one number without restating the other six.
+
+```sh
+staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+```
+
 ## Tunables
+
+The composition ones live on the `fill` trait above; these are what a
+mark is made of and painted with.
 
 | field | default | what it does |
 |---|---|---|
-| `Count` | 22 | anchor circles before satellites |
-| `Rungs` / `Ratio` / `Base` | 5 / 1.55 / 0.030 | the size ladder, canvas units |
-| `Satellites` | 0.45 | share of anchors that get an overlapping companion |
 | `Ragged` | 0.055 | wash edge deviation; 0.22 is shoal's blob |
 | `Rings` | 0.34 | share of circles carrying inner rings |
 | `Open` | 0.28 | share painted as annuli rather than discs |
@@ -90,10 +119,7 @@ a believable third colour wherever two discs cross.
 | `Pigments` | 4 | palette colours in play |
 | `Ground` | 0.5 | strength of the painted ground wash; 0 is bare paper |
 | `GroundBlotch` | 0.34 | wavelength of the ground's unevenness, canvas units |
-| `Margin` | 0.06 | clear paper at the edge |
-| `Gap` | 0.12 | clearance between circles, ×radius; negative lets them cross |
 | `Gap` | 0.12 | clearance between anchors, ×radius |
-| `Candidates` | 7 | darts per anchor; few on purpose, see below |
 
 ## The banded circle
 
@@ -142,26 +168,6 @@ staticart render pools --profile web --seed 3 --banded 1 --count 7 \
   --base 0.115 --rungs 2 --ratio 1.45 --satellites 0.7 --pigments 5 \
   --palette tchelitchew-hide-and-seek
 ```
-
-## Filling the frame
-
-`Count` alone does not fill a sheet — it gives the same picture with more
-specks in it. The frame fills when four things move together: the count up,
-the size ladder down, `Gap` in (negative, so discs cross), and `Margin`
-closed. The set in `out/discs` steps all four across five levels:
-
-| level | count | base | rungs × ratio | largest | gap | margin |
-|---|---|---|---|---|---|---|
-| open | 12 | 0.085 | 3 × 1.62 | 0.223 | 0.10 | 0.045 |
-| medium | 22 | 0.065 | 4 × 1.55 | 0.242 | 0.06 | 0.035 |
-| busy | 38 | 0.050 | 5 × 1.52 | 0.267 | 0.01 | 0.028 |
-| packed | 62 | 0.040 | 5 × 1.60 | 0.262 | −0.05 | 0.020 |
-
-Every level reaches a disc of around a quarter of the canvas, so a packed
-sheet carries a few genuinely large marks among the small ones. That is the
-size hierarchy doing the work: a packed field of one size is a texture, a
-packed field with three or four big ones in it is a composition — and the
-ring cap is what keeps those big ones a few wide bands rather than targets.
 
 ## Acceptance checklist
 

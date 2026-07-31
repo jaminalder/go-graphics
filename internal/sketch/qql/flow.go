@@ -4,6 +4,8 @@ import (
 	"math"
 	"math/rand/v2"
 
+	"github.com/jaminalder/go-graphics/internal/mathx"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
@@ -79,29 +81,29 @@ func (ff *flowField) radial(spec flowFieldSpec, rng *rand.Rand) []float64 {
 
 	// The centre is usually one of a few telling positions — dead centre,
 	// a third in, off the edge — and sometimes anywhere at all.
-	cx := wc(rng, []weighted[float64]{
-		{uniform(rng, f.w(0), f.w(1)), 2},
-		{f.w(-2.0 / 3.0), 0.5},
-		{f.w(-1.0 / 3.0), 1},
-		{f.w(0), 1},
-		{f.w(1.0 / 3.0), 1.5},
-		{f.w(1.0 / 2.0), 1.5},
-		{f.w(2.0 / 3.0), 1.5},
-		{f.w(1), 1.5},
-		{f.w(4.0 / 3.0), 1},
-		{f.w(5.0 / 3.0), 0.5},
+	cx := rnd.Pick(rng, []rnd.Weighted[float64]{
+		{V: rnd.Uniform(rng, f.w(0), f.w(1)), W: 2},
+		{V: f.w(-2.0 / 3.0), W: 0.5},
+		{V: f.w(-1.0 / 3.0), W: 1},
+		{V: f.w(0), W: 1},
+		{V: f.w(1.0 / 3.0), W: 1.5},
+		{V: f.w(1.0 / 2.0), W: 1.5},
+		{V: f.w(2.0 / 3.0), W: 1.5},
+		{V: f.w(1), W: 1.5},
+		{V: f.w(4.0 / 3.0), W: 1},
+		{V: f.w(5.0 / 3.0), W: 0.5},
 	})
-	cy := wc(rng, []weighted[float64]{
-		{uniform(rng, f.h(0), f.h(1)), 2},
-		{f.h(-2.0 / 3.0), 0.5},
-		{f.h(-1.0 / 3.0), 1},
-		{f.h(0), 1},
-		{f.h(1.0 / 3.0), 1.5},
-		{f.h(1.0 / 2.0), 1.5},
-		{f.h(2.0 / 3.0), 1.5},
-		{f.h(1), 1},
-		{f.h(4.0 / 3.0), 1},
-		{f.h(5.0 / 3.0), 0.5},
+	cy := rnd.Pick(rng, []rnd.Weighted[float64]{
+		{V: rnd.Uniform(rng, f.h(0), f.h(1)), W: 2},
+		{V: f.h(-2.0 / 3.0), W: 0.5},
+		{V: f.h(-1.0 / 3.0), W: 1},
+		{V: f.h(0), W: 1},
+		{V: f.h(1.0 / 3.0), W: 1.5},
+		{V: f.h(1.0 / 2.0), W: 1.5},
+		{V: f.h(2.0 / 3.0), W: 1.5},
+		{V: f.h(1), W: 1},
+		{V: f.h(4.0 / 3.0), W: 1},
+		{V: f.h(5.0 / 3.0), W: 0.5},
 	})
 
 	theta := make([]float64, ff.cols*ff.rows)
@@ -144,11 +146,11 @@ func newDisturbances(tr trait.Set, f frame, rng *rand.Rand) []disturbance {
 	var thetaSpan float64
 	switch tr.Get(dimTurbulence) {
 	case "low":
-		count = wc(rng, []weighted[int]{{10, 2}, {15, 3}, {20, 2}, {30, 1}})
-		thetaSpan = wc(rng, []weighted[float64]{{pi(0.005), 1}, {pi(0.01), 1}})
+		count = rnd.Pick(rng, []rnd.Weighted[int]{{V: 10, W: 2}, {V: 15, W: 3}, {V: 20, W: 2}, {V: 30, W: 1}})
+		thetaSpan = rnd.Pick(rng, []rnd.Weighted[float64]{{V: pi(0.005), W: 1}, {V: pi(0.01), W: 1}})
 	case "high":
-		count = wc(rng, []weighted[int]{{20, 1}, {30, 2}, {40, 3}, {50, 2}, {60, 1}})
-		thetaSpan = wc(rng, []weighted[float64]{{pi(0.05), 1}, {pi(0.1), 1}, {pi(0.15), 1}})
+		count = rnd.Pick(rng, []rnd.Weighted[int]{{V: 20, W: 1}, {V: 30, W: 2}, {V: 40, W: 3}, {V: 50, W: 2}, {V: 60, W: 1}})
+		thetaSpan = rnd.Pick(rng, []rnd.Weighted[float64]{{V: pi(0.05), W: 1}, {V: pi(0.1), W: 1}, {V: pi(0.15), W: 1}})
 	default: // none
 		return nil
 	}
@@ -158,10 +160,10 @@ func newDisturbances(tr trait.Set, f frame, rng *rand.Rand) []disturbance {
 	out := make([]disturbance, count)
 	for i := range out {
 		out[i] = disturbance{
-			cx:     uniform(rng, lx, rx),
-			cy:     uniform(rng, ty, by),
-			theta:  gauss(rng, 0, thetaSpan),
-			radius: math.Max(math.Abs(gauss(rng, f.w(0.35), f.w(0.35))), f.w(0.1)),
+			cx:     rnd.Uniform(rng, lx, rx),
+			cy:     rnd.Uniform(rng, ty, by),
+			theta:  rnd.Gauss(rng, 0, thetaSpan),
+			radius: math.Max(math.Abs(rnd.Gauss(rng, f.w(0.35), f.w(0.35))), f.w(0.1)),
 		}
 	}
 	return out
@@ -177,7 +179,7 @@ func (ff *flowField) disturb(ds []disturbance) {
 			x := ff.lx + ff.spc*float64(i)
 			for j := j0; j <= j1; j++ {
 				y := ff.ty + ff.spc*float64(j)
-				ff.theta[i*ff.rows+j] += rescale(dist(d.cx, d.cy, x, y), 0, d.radius, d.theta, 0)
+				ff.theta[i*ff.rows+j] += mathx.Rescale(dist(d.cx, d.cy, x, y), 0, d.radius, d.theta, 0)
 			}
 		}
 	}
@@ -197,7 +199,7 @@ type tracer struct {
 }
 
 func newTracer(ff *flowField, f frame, rng *rand.Rand) *tracer {
-	length := choice(rng, []int{500, 650, 850})
+	length := rnd.Choice(rng, []int{500, 650, 850})
 	return &tracer{
 		field:  ff,
 		length: length,

@@ -11,7 +11,6 @@ package circles
 import (
 	"image"
 	"math"
-	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/geom"
 	"github.com/jaminalder/go-graphics/internal/mathx"
@@ -149,10 +148,7 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 
 	// Palette roles: the lightest color recedes into the background; all
 	// colors (including the lightest) can anchor circles.
-	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
-	sort.SliceStable(byLum, func(i, j int) bool {
-		return byLum[i].Luminance() < byLum[j].Luminance()
-	})
+	byLum := palette.ByLuminance(ctx.Palette.Colors)
 	bg := byLum[len(byLum)-1].Lighten(0.5).Desaturate(0.3)
 
 	frng := ctx.RNG(streamFills)

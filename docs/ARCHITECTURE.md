@@ -46,7 +46,12 @@ The first sketch reproduces
 ```
 cmd/staticart/            CLI: generic flag parsing + wiring only, no art logic
 internal/
-  mathx/                  Clamp01, Remap, Smoothstep         → (stdlib only)
+  mathx/                  Clamp01, Remap, Rescale,
+                          Smoothstep                         → (stdlib only)
+  rnd/                    the sampling vocabulary: weighted
+                          choice, gaussians, winnow, bag     → (stdlib only)
+  opt/                    declarative CLI knobs: flags,
+                          ranges, filename suffix            → (stdlib only)
   palette/                Color type, manipulation, data     → mathx
   gradient/               Gradient implementations           → palette, mathx
   geom/                   circles + spatial index            → (stdlib only)
@@ -56,12 +61,12 @@ internal/
   paint/                  stamp canvas, wobbly paths, rings,
                           disc marks, watercolour washes     → palette, render, mathx
   render/                 pixel loop (AA, dither), profiles,
-                          encoding + metadata                → palette
+                          contact sheets, encoding+metadata  → palette
   sketch/                 Sketch/Configurable/Traited,
                           Context, registry, Raster helper   → palette, render, trait
     sketchtest/           shared test helpers (goldens etc.) → sketch
     contour/, tapestry/, circles/, drift/, rounds/,
-    shoal/, qql/                            the sketches     → all of the above
+    shoal/, qql/, pools/                    the sketches     → all of the above
 docs/                     this file, sketch specs, idea backlog, reference data
 tools/                    code generators (palette data)
 out/                      rendered images (gitignored)
@@ -75,7 +80,8 @@ cmd → sketch (registry) → {gradient, noise, render, trait} → palette → m
 
 Rules:
 
-- `mathx`, `geom`, `noise`, and `trait` are leaf packages: stdlib imports only.
+- `mathx`, `geom`, `noise`, `trait`, `rnd` and `opt` are leaf packages:
+  stdlib imports only.
 - Sketches live in subpackages of `internal/sketch`; `cmd` discovers them
   only through the registry. Sketch-specific CLI options are owned by the
   sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
@@ -103,6 +109,24 @@ knob in its tier:
    do it deliberately, update the sketch spec, regenerate goldens.
 4. **Quality/output** (CLI, composition-neutral): `--aa`, `--deep`,
    `--format`, profiles.
+
+### Working the output space
+
+The unit of work is not an image, it is a space. A change to a sketch is
+judged by sweeping it, not by looking at one render — one seed says almost
+nothing about what a change did.
+
+```sh
+staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+staticart sweep tapestry --seeds 1-20 --vary relief-preset=baseline,deep-carve
+```
+
+`sweep` strips its own flags (`--seeds`, `--vary`, `--out`, `--cols`,
+`--cell`, `--jobs`) and passes everything else to `render` untouched, so a
+knob added to a sketch today is sweepable without touching the command. It
+writes the renders, a `manifest.txt` naming each tile, and one `sheet.png`
+— box-downsampled, because point sampling turns fine rings and dithered
+gradients into moiré and a thumbnail that lies is worse than none.
 
 ## 4. Core invariants
 
@@ -266,6 +290,10 @@ type Traited interface {
 
 | 28 | Past `MaxBands` the banded mark widens its rings instead of adding them | The ring pitch is a width, so the ring texture keeps its weight as a mark grows — which is right until the mark is large, at which point it goes on accumulating rings until it reads as a target. What makes the mark is a ring wide enough to be a band of colour in its own right, with its own wet edge and rim, and that is exactly what a rising count destroys. So the rule inverts at the cap: the count stops and the pitch grows. It is the same trade a painter makes, and it means the size ladder can reach much further up — a disc of a quarter of the canvas is still five bands — without the largest marks turning into a different kind of object from the small ones. |
 
+| 29 | The sampling vocabulary and the CLI-knob boilerplate became leaf packages (`rnd`, `opt`) | Both had been written for one sketch and then reinvented, more weakly, in others: `pools` and `shoal` each grew a private weighted-bag, and every sketch grew the same forty lines of range checks. `rnd` also names the idea rather than just sharing it — a parameter is a *weighted choice among a few hand-picked options, softened by a gaussian*, which is what gives an output space outliers instead of uniform noise. `opt` fixed a bug class while it was at it: knobs are registered with the sketch's real defaults and "was it set" is read from the FlagSet, where the hand-written versions used a `-1` sentinel that hid the true default from `--help`, made a negative range unexpressible (`--gap -0.05`), and silently swallowed `--count -2` as "unset". |
+| 30 | Sketch 008 has a `fill` trait; its composition knobs are overrides on it | Filling a frame takes the count up, the ladder down, the clearance negative and the margin closed, *together* — raising the count alone gives the same picture with more specks in it. Those six numbers were being set together by hand on every render, which is a single decision wearing six hats. `fill` is that decision, and like QQL's traits it resolves to *ranges* rather than numbers, so two seeds at the same level differ in how many marks, how large and how crowded while both still read as busy. The individual flags remain, now as overrides that only apply when actually given — which is what `opt.Set.WasSet` is for. |
+| 31 | tapestry's options were left hand-written | `opt` earns its place where a sketch has a list of ranged knobs. Tapestry's `Configure` is not that: it is flag *implications* (`--relief-preset` implies `--relief`; `--grain-seed` implies `--grain` unless `--crackle`), which is domain logic and reads better as the code it already is. Converting it would have been churn for uniformity's sake and would have risked the recipes of finished pieces. Extract where there is duplication, not everywhere there is a pattern. |
+
 ## 9. Roadmap
 
 1. **Sketch 001 "contour"** — shuffled-gradient contour noise (spec:
@@ -273,15 +301,14 @@ type Traited interface {
 2. Palette library: full ColorLisa dataset + manipulation ops.
 3. More noise-family sketches (turbulence, domain warping).
 4. First vector sketch → introduce `tdewolff/canvas`.
-5. **Give the other sketches an output space.** `internal/trait` was built
-   for sketch 007 but is sketch-agnostic: tapestry and the watercolour work
-   should declare a `trait.Schema` for the choices that are genuinely
-   discrete and orthogonal (relief preset, terrace character, wash
-   behaviour), and inherit derivation, overrides and inspection. Expect the
-   sampling vocabulary in `sketch/qql/sample.go` — weighted choice,
-   gaussians, `winnow` — to be promoted to a shared leaf at that point.
-6. **Exploration tooling for curation.** The essays are about the output
-   space, not the single render: batch seed rendering and a contact sheet
-   would make sweeping and curating practical. Deliberately deferred until
-   there is a sense of what the spaces look like.
+5. **Give the other sketches an output space.** Done for 008 (`fill`); the
+   sampling vocabulary is now `internal/rnd`. Tapestry is the open case and
+   the hard one: its interesting choices are toggles and continuous ranges
+   rather than orthogonal discrete axes, so a schema would have to be
+   *designed* for it (a "terrace character" axis, say) rather than
+   transcribed from the knobs it already has. Do it when a tapestry sweep
+   is wanted, not before.
+6. **Exploration tooling for curation.** Done: `staticart sweep`. What it
+   still lacks is a way to record a verdict — a sweep produces twenty
+   images and the judgement about them lives only in the conversation.
 7. Possible later: fractals, tilings, SVG export, gallery index generator.

@@ -8,6 +8,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -65,6 +66,8 @@ func run(args []string) error {
 		return nil
 	case "render":
 		return runRender(args[1:])
+	case "sweep":
+		return runSweep(args[1:])
 	case "traits":
 		return runTraits(args[1:])
 	case "-h", "--help", "help":
@@ -80,6 +83,7 @@ func usage() {
   staticart list                      list sketches
   staticart palettes                  list palette slugs
   staticart render <sketch> [flags]   render a sketch
+  staticart sweep  <sketch> [flags]   render a batch and a contact sheet
   staticart traits <sketch> [flags]   show the traits a seed resolves to
 
 common render flags:
@@ -90,13 +94,43 @@ common render flags:
   --deep                        16-bit PNG master (png only)
   --format png|jpg  --out dir
 
+sweep flags (everything else is passed through to render):
+  --seeds 1-20 | 3,7,11         seeds to walk
+  --vary flag=v1,v2             repeatable; every combination is rendered
+  --out dir                     default out/sweep
+  --cols N  --cell PX  --jobs N sheet layout and parallelism
+
+  staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+
 sketch-specific flags (e.g. tapestry's --relief, --crackle, --terrace-seed)
 are listed by: staticart render <sketch> --help`)
 }
 
 func runRender(args []string) error {
+	out, err := renderOne(args)
+	if err != nil {
+		return err
+	}
+	if err := writeRender(out); err != nil {
+		return err
+	}
+	fmt.Println(out.path)
+	return nil
+}
+
+// rendered is one finished image and everything needed to file it. Sweep
+// needs the image without the file, and render needs both, so the two are
+// separated here rather than in two copies of the same forty lines.
+type rendered struct {
+	img    image.Image
+	path   string
+	format string
+	meta   render.Meta
+}
+
+func renderOne(args []string) (rendered, error) {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("render needs a sketch name (try: staticart list)")
+		return rendered{}, fmt.Errorf("render needs a sketch name (try: staticart list)")
 	}
 	name := args[0]
 
@@ -113,43 +147,43 @@ func runRender(args []string) error {
 
 	s, ok := registry().Get(name)
 	if !ok {
-		return fmt.Errorf("unknown sketch %q (try: staticart list)", name)
+		return rendered{}, fmt.Errorf("unknown sketch %q (try: staticart list)", name)
 	}
 	// Sketch-specific options are owned by the sketch itself.
 	if c, ok := s.(sketch.Configurable); ok {
 		c.Flags(fs)
 	}
 	if err := fs.Parse(args[1:]); err != nil {
-		return err
+		return rendered{}, err
 	}
 
 	fileName := s.Name()
 	if c, ok := s.(sketch.Configurable); ok {
 		suffix, err := c.Configure()
 		if err != nil {
-			return err
+			return rendered{}, err
 		}
 		fileName += suffix
 	}
 	pal, ok := palette.ByName(*paletteName)
 	if !ok {
-		return fmt.Errorf("unknown palette %q (try: staticart palettes)", *paletteName)
+		return rendered{}, fmt.Errorf("unknown palette %q (try: staticart palettes)", *paletteName)
 	}
 
 	w, h := *width, *height
 	if w == 0 || h == 0 {
 		if w != 0 || h != 0 {
-			return fmt.Errorf("--width and --height must be given together")
+			return rendered{}, fmt.Errorf("--width and --height must be given together")
 		}
 		p, err := render.ProfileByName(*profileName)
 		if err != nil {
-			return err
+			return rendered{}, err
 		}
 		w, h = p.Width, p.Height
 	}
 
 	if *deep && *format != "png" {
-		return fmt.Errorf("--deep requires --format png")
+		return rendered{}, fmt.Errorf("--deep requires --format png")
 	}
 
 	ctx := sketch.Context{Width: w, Height: h, Seed: *seed, Palette: pal, AA: *aa, Deep: *deep}
@@ -165,33 +199,34 @@ func runRender(args []string) error {
 
 	img, err := s.Render(ctx)
 	if err != nil {
-		return err
+		return rendered{}, err
 	}
 
-	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		return err
-	}
 	file := fmt.Sprintf("%s_%s_%d_%dx%d.%s", fileName, pal.Slug, *seed, w, h, *format)
-	path := filepath.Join(*outDir, file)
+	return rendered{
+		img:    img,
+		path:   filepath.Join(*outDir, file),
+		format: *format,
+		meta: render.Meta{
+			DPI:      300,
+			Software: "staticart " + buildRevision(),
+			Comment:  comment,
+		},
+	}, nil
+}
 
-	meta := render.Meta{
-		DPI:      300,
-		Software: "staticart " + buildRevision(),
-		Comment:  comment,
-	}
-	switch *format {
-	case "png":
-		err = render.WritePNGMeta(path, img, meta)
-	case "jpg", "jpeg":
-		err = render.WriteJPEGMeta(path, img, meta)
-	default:
-		return fmt.Errorf("unknown format %q (png|jpg)", *format)
-	}
-	if err != nil {
+func writeRender(r rendered) error {
+	if err := os.MkdirAll(filepath.Dir(r.path), 0o755); err != nil {
 		return err
 	}
-	fmt.Println(path)
-	return nil
+	switch r.format {
+	case "png":
+		return render.WritePNGMeta(r.path, r.img, r.meta)
+	case "jpg", "jpeg":
+		return render.WriteJPEGMeta(r.path, r.img, r.meta)
+	default:
+		return fmt.Errorf("unknown format %q (png|jpg)", r.format)
+	}
 }
 
 // runTraits reports the point in a sketch's output space that a seed

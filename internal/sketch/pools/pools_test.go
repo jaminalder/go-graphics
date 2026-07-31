@@ -13,6 +13,10 @@ import (
 
 var update = flag.Bool("update", false, "regenerate golden files")
 
+// fills is every level of the fill trait, so tests sweep the whole axis
+// rather than whichever one seed 42 happens to draw.
+var fills = []string{"sparse", "open", "medium", "busy", "packed"}
+
 func testCtx(t *testing.T, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("tchelitchew-hide-and-seek")
@@ -22,41 +26,63 @@ func testCtx(t *testing.T, seed uint64) sketch.Context {
 	return sketch.Context{Width: 96, Height: 96, Seed: seed, Palette: pal}
 }
 
+// configured returns a sketch with its options resolved, optionally pinning
+// flags the way the CLI would. Tests go through the real path rather than
+// setting fields, because which flags were *given* is what tells an
+// override from what the seed's fill level drew.
+func configured(t *testing.T, args ...string) *Sketch {
+	t.Helper()
+	s := New()
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	s.Flags(fs)
+	if err := fs.Parse(args); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Configure(); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
 // plan runs the layout for one seed on a 1×1 canvas.
 func plan(t *testing.T, s *Sketch, seed uint64) []circle {
 	t.Helper()
 	ctx := testCtx(t, seed)
 	rng := ctx.RNG(streamLayout)
-	_, _, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
-	return s.plan(rng, 1, bag, ramp)
+	l := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill))
+	_, _, bag, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors), rng)
+	return s.plan(l, rng, 1, bag, ramp)
 }
 
 func TestDeterminism(t *testing.T) {
-	sketchtest.AssertDeterministic(t, New(), testCtx(t, 42), testCtx(t, 43))
+	sketchtest.AssertDeterministic(t, configured(t), testCtx(t, 42), testCtx(t, 43))
 }
 
 func TestGolden(t *testing.T) {
-	got := sketchtest.RenderNRGBA(t, New(), testCtx(t, 42))
+	got := sketchtest.RenderNRGBA(t, configured(t), testCtx(t, 42))
 	sketchtest.Golden(t, got, "testdata/pools_seed42_96.png", *update)
 }
 
 func TestPlanStaysOnTheLadderAndOnThePaper(t *testing.T) {
-	s := New()
-	radii, _ := s.ladder()
-	onLadder := func(r float64) bool {
-		for _, v := range radii {
-			if math.Abs(v-r) < 1e-9 {
-				return true
-			}
-		}
-		// The one exception: a bottom-rung anchor's companion, which has
-		// no rung below it to come from.
-		return math.Abs(r-radii[0]*0.72) < 1e-9
-	}
+	// Every level of the fill axis, since each draws its own ladder.
 	for seed := uint64(1); seed <= 12; seed++ {
+		s := configured(t, "--fill", fills[int(seed)%len(fills)])
+		ctx := testCtx(t, seed)
+		radii, _ := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill)).ladder()
+		onLadder := func(r float64) bool {
+			for _, v := range radii {
+				if math.Abs(v-r) < 1e-9 {
+					return true
+				}
+			}
+			// The one exception: a bottom-rung anchor's companion, which has
+			// no rung below it to come from.
+			return math.Abs(r-radii[0]*0.72) < 1e-9
+		}
 		cs := plan(t, s, seed)
-		if len(cs) < s.Count/2 {
-			t.Fatalf("seed %d: only %d circles from %d anchors — the layout is starving", seed, len(cs), s.Count)
+		if len(cs) < 3 {
+			t.Fatalf("seed %d: only %d circles — the layout is starving", seed, len(cs))
 		}
 		for _, c := range cs {
 			if !onLadder(c.R) {
@@ -76,7 +102,7 @@ func TestPlanStaysOnTheLadderAndOnThePaper(t *testing.T) {
 // later touch of a brush does. Reversed, every small mark is buried.
 func TestLargestPaintedFirst(t *testing.T) {
 	for seed := uint64(1); seed <= 6; seed++ {
-		cs := plan(t, New(), seed)
+		cs := plan(t, configured(t), seed)
 		for i := 1; i < len(cs); i++ {
 			if cs[i].R > cs[i-1].R+1e-9 {
 				t.Fatalf("seed %d: circle %d (r=%v) is painted after a smaller one (r=%v)",
@@ -93,7 +119,7 @@ func TestLargestPaintedFirst(t *testing.T) {
 func TestSatellitesActuallyCross(t *testing.T) {
 	crossings := 0
 	for seed := uint64(1); seed <= 8; seed++ {
-		cs := plan(t, New(), seed)
+		cs := plan(t, configured(t), seed)
 		for i := range cs {
 			for j := i + 1; j < len(cs); j++ {
 				d := math.Hypot(cs[i].X-cs[j].X, cs[i].Y-cs[j].Y)

@@ -41,3 +41,13 @@ func All() []Palette {
 	copy(out, palettes)
 	return out
 }
+
+// ByLuminance copies a palette's colours into darkest-first order. Nearly
+// every sketch needs this — the darkest colour is the one that reads as
+// ink and the lightest as paper — so it lives here rather than being
+// re-sorted in each of them.
+func ByLuminance(colors []Color) []Color {
+	out := append([]Color(nil), colors...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Luminance() < out[j].Luminance() })
+	return out
+}

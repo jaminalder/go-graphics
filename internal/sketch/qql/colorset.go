@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 )
 
 // swatchKey indexes qqlSwatches. Colours are referred to by key rather than
@@ -85,8 +86,8 @@ func (s scheme) swatch(k swatchKey) palette.Swatch { return s.set.swatch(k) }
 // the sequence rather than sampling it freely is what keeps neighbouring
 // groups related instead of merely sharing a palette.
 func pickNextColor(seqLen, current int, rng *rand.Rand) int {
-	step := wc(rng, []weighted[int]{{1, 0.64}, {2, 0.24}, {3, 0.1}, {4, 0.02}})
-	if odds(rng, 0.5) {
+	step := rnd.Pick(rng, []rnd.Weighted[int]{{V: 1, W: 0.64}, {V: 2, W: 0.24}, {V: 3, W: 0.1}, {V: 4, W: 0.02}})
+	if rnd.Odds(rng, 0.5) {
 		step = -step
 	}
 	n := seqLen

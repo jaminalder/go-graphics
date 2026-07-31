@@ -4,6 +4,8 @@ import (
 	"math"
 	"math/rand/v2"
 
+	"github.com/jaminalder/go-graphics/internal/mathx"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
@@ -35,10 +37,10 @@ type flowFieldSpec struct {
 
 func newFlowFieldSpec(tr trait.Set, rng *rand.Rand) flowFieldSpec {
 	linear := func(theta float64) flowFieldSpec {
-		if odds(rng, 0.5) {
+		if rnd.Odds(rng, 0.5) {
 			theta = pi(1) - theta // mirror left-right
 		}
-		if odds(rng, 0.5) {
+		if rnd.Odds(rng, 0.5) {
 			theta += pi(1) // flip up-down
 		}
 		return flowFieldSpec{kind: flowLinear, defaultTheta: modulo(theta, pi(2))}
@@ -47,9 +49,9 @@ func newFlowFieldSpec(tr trait.Set, rng *rand.Rand) flowFieldSpec {
 		return flowFieldSpec{
 			kind:         flowRadial,
 			circularity:  circularity,
-			outward:      odds(rng, 0.5),
-			clockwise:    odds(rng, 0.5),
-			defaultTheta: wc(rng, []weighted[float64]{{pi(0), 1}, {pi(0.25), 1}, {pi(0.5), 1}}),
+			outward:      rnd.Odds(rng, 0.5),
+			clockwise:    rnd.Odds(rng, 0.5),
+			defaultTheta: rnd.Pick(rng, []rnd.Weighted[float64]{{V: pi(0), W: 1}, {V: pi(0.25), W: 1}, {V: pi(0.5), W: 1}}),
 		}
 	}
 
@@ -61,15 +63,15 @@ func newFlowFieldSpec(tr trait.Set, rng *rand.Rand) flowFieldSpec {
 	case "vertical":
 		return linear(pi(0.5))
 	case "random-linear":
-		return linear(uniform(rng, pi(0), pi(0.5)))
+		return linear(rnd.Uniform(rng, pi(0), pi(0.5)))
 	case "explosive":
-		return radial(uniform(rng, 0.2, 0.4))
+		return radial(rnd.Uniform(rng, 0.2, 0.4))
 	case "spiral":
-		return radial(uniform(rng, 0.4, 0.75))
+		return radial(rnd.Uniform(rng, 0.4, 0.75))
 	case "circular":
-		return radial(math.Min(uniform(rng, 0.75, 1.02), 1))
+		return radial(math.Min(rnd.Uniform(rng, 0.75, 1.02), 1))
 	default: // random-radial
-		return radial(math.Min(math.Max(uniform(rng, -0.01, 1.01), 0), 1))
+		return radial(math.Min(math.Max(rnd.Uniform(rng, -0.01, 1.01), 0), 1))
 	}
 }
 
@@ -87,43 +89,43 @@ func newSpacingSpec(tr trait.Set, f frame, rng *rand.Rand) spacingSpec {
 	switch tr.Get(dimSpacing) {
 	case "dense":
 		return spacingSpec{
-			multiplier: math.Max(gauss(rng, 1, 0.04), 0.98),
-			constant:   f.w(math.Max(gauss(rng, 0, 0.002), 0)),
+			multiplier: math.Max(rnd.Gauss(rng, 1, 0.04), 0.98),
+			constant:   f.w(math.Max(rnd.Gauss(rng, 0, 0.002), 0)),
 		}
 	case "medium":
 		switch {
-		case odds(rng, 0.333): // mostly proportional
+		case rnd.Odds(rng, 0.333): // mostly proportional
 			return spacingSpec{
-				multiplier: 1.15 + math.Max(gauss(rng, 0, 0.2), 0),
-				constant:   f.w(math.Max(gauss(rng, 0, 0.001), 0)),
+				multiplier: 1.15 + math.Max(rnd.Gauss(rng, 0, 0.2), 0),
+				constant:   f.w(math.Max(rnd.Gauss(rng, 0, 0.001), 0)),
 			}
-		case odds(rng, 0.5): // mostly constant
+		case rnd.Odds(rng, 0.5): // mostly constant
 			return spacingSpec{
-				multiplier: uniform(rng, 1, 1.03),
-				constant:   f.w(0.003) + f.w(math.Max(gauss(rng, 0, 0.005), 0)),
+				multiplier: rnd.Uniform(rng, 1, 1.03),
+				constant:   f.w(0.003) + f.w(math.Max(rnd.Gauss(rng, 0, 0.005), 0)),
 			}
 		default: // some of both
 			return spacingSpec{
-				multiplier: 1.05 + math.Max(gauss(rng, 0, 0.1), 0),
-				constant:   f.w(0.002) + f.w(math.Max(gauss(rng, 0, 0.0015), 0)),
+				multiplier: 1.05 + math.Max(rnd.Gauss(rng, 0, 0.1), 0),
+				constant:   f.w(0.002) + f.w(math.Max(rnd.Gauss(rng, 0, 0.0015), 0)),
 			}
 		}
 	default: // sparse
 		switch {
-		case odds(rng, 0.333):
+		case rnd.Odds(rng, 0.333):
 			return spacingSpec{
-				multiplier: 1.25 + math.Max(gauss(rng, 0, 0.5), 0),
-				constant:   f.w(math.Max(gauss(rng, 0, 0.002), 0)),
+				multiplier: 1.25 + math.Max(rnd.Gauss(rng, 0, 0.5), 0),
+				constant:   f.w(math.Max(rnd.Gauss(rng, 0, 0.002), 0)),
 			}
-		case odds(rng, 0.5):
+		case rnd.Odds(rng, 0.5):
 			return spacingSpec{
-				multiplier: uniform(rng, 1.01, 1.08),
-				constant:   f.w(0.008) + f.w(math.Max(gauss(rng, 0, 0.02), 0)),
+				multiplier: rnd.Uniform(rng, 1.01, 1.08),
+				constant:   f.w(0.008) + f.w(math.Max(rnd.Gauss(rng, 0, 0.02), 0)),
 			}
 		default:
 			return spacingSpec{
-				multiplier: 1.15 + math.Max(gauss(rng, 0, 0.3), 0),
-				constant:   f.w(0.005) + f.w(math.Max(gauss(rng, 0, 0.006), 0)),
+				multiplier: 1.15 + math.Max(rnd.Gauss(rng, 0, 0.3), 0),
+				constant:   f.w(0.005) + f.w(math.Max(rnd.Gauss(rng, 0, 0.006), 0)),
 			}
 		}
 	}
@@ -143,23 +145,23 @@ func newColorChangeOdds(tr trait.Set, rng *rand.Rand) colorChangeOdds {
 	var group, line float64
 	switch tr.Get(dimStructure) + "/" + tr.Get(dimColorVariety) {
 	case "shadows/low":
-		group, line = gauss(rng, 0.15, 0.15), uniform(rng, -0.004, 0.002)
+		group, line = rnd.Gauss(rng, 0.15, 0.15), rnd.Uniform(rng, -0.004, 0.002)
 	case "shadows/medium":
-		group, line = gauss(rng, 0.55, 0.2), 0.01
+		group, line = rnd.Gauss(rng, 0.55, 0.2), 0.01
 	case "shadows/high":
-		group, line = gauss(rng, 0.9, 0.1), uniform(rng, -0.1, 0.2)
+		group, line = rnd.Gauss(rng, 0.9, 0.1), rnd.Uniform(rng, -0.1, 0.2)
 	case "formation/low":
-		group, line = gauss(rng, 0.5, 0.2), uniform(rng, -0.002, 0.003)
+		group, line = rnd.Gauss(rng, 0.5, 0.2), rnd.Uniform(rng, -0.002, 0.003)
 	case "formation/medium":
-		group, line = gauss(rng, 0.75, 0.2), uniform(rng, -0.005, 0.01)
+		group, line = rnd.Gauss(rng, 0.75, 0.2), rnd.Uniform(rng, -0.005, 0.01)
 	case "formation/high":
-		group, line = gauss(rng, 0.9, 0.1), uniform(rng, -0.1, 0.2)
+		group, line = rnd.Gauss(rng, 0.9, 0.1), rnd.Uniform(rng, -0.1, 0.2)
 	case "orbital/low":
-		group, line = gauss(rng, 0.11, 0.08), uniform(rng, -0.002, 0.0015)
+		group, line = rnd.Gauss(rng, 0.11, 0.08), rnd.Uniform(rng, -0.002, 0.0015)
 	case "orbital/medium":
-		group, line = gauss(rng, 0.25, 0.1), uniform(rng, -0.01, 0.01)
+		group, line = rnd.Gauss(rng, 0.25, 0.1), rnd.Uniform(rng, -0.01, 0.01)
 	default: // orbital/high
-		group, line = gauss(rng, 0.7, 0.2), uniform(rng, -0.1, 0.2)
+		group, line = rnd.Gauss(rng, 0.7, 0.2), rnd.Uniform(rng, -0.1, 0.2)
 	}
 
 	// The base rates are calibrated for medium rings packed densely; bigger
@@ -185,12 +187,10 @@ func newColorChangeOdds(tr trait.Set, rng *rand.Rand) colorChangeOdds {
 
 	mult := bySize * bySpacing
 	return colorChangeOdds{
-		group: clamp01(group * mult),
-		line:  clamp01(line * mult),
+		group: mathx.Clamp01(group * mult),
+		line:  mathx.Clamp01(line * mult),
 	}
 }
-
-func clamp01(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
 
 // ---------------------------------------------------------------- dot size
 
@@ -200,7 +200,7 @@ func clamp01(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
 type scaleGenerator struct {
 	variety string
 	mean    float64
-	choices []weighted[float64]
+	choices []rnd.Weighted[float64]
 }
 
 func newScaleGenerator(tr trait.Set, f frame, rng *rand.Rand) *scaleGenerator {
@@ -213,90 +213,90 @@ func newScaleGenerator(tr trait.Set, f frame, rng *rand.Rand) *scaleGenerator {
 	size := tr.Get(dimRingSize)
 	switch tr.Get(dimSizeVariety) {
 	case "constant":
-		var choices []weighted[float64]
+		var choices []rnd.Weighted[float64]
 		switch size {
 		case "small":
-			choices = []weighted[float64]{{xs[1], 2}, {s[0], 3}, {s[1], 2}, {s[2], 1}}
+			choices = []rnd.Weighted[float64]{{V: xs[1], W: 2}, {V: s[0], W: 3}, {V: s[1], W: 2}, {V: s[2], W: 1}}
 		case "medium":
-			choices = []weighted[float64]{{m[0], 2}, {m[1], 3}, {m[2], 2}, {m[3], 1}}
+			choices = []rnd.Weighted[float64]{{V: m[0], W: 2}, {V: m[1], W: 3}, {V: m[2], W: 2}, {V: m[3], W: 1}}
 		default:
-			choices = []weighted[float64]{{l[0], 3}, {l[1], 2}, {l[2], 1}}
+			choices = []rnd.Weighted[float64]{{V: l[0], W: 3}, {V: l[1], W: 2}, {V: l[2], W: 1}}
 		}
-		return &scaleGenerator{variety: "constant", mean: wc(rng, choices), choices: choices}
+		return &scaleGenerator{variety: "constant", mean: rnd.Pick(rng, choices), choices: choices}
 
 	case "variable":
-		var choices []weighted[float64]
+		var choices []rnd.Weighted[float64]
 		switch size {
 		case "small":
-			choices = []weighted[float64]{{xs[1], 1.3}, {s[0], 2}, {s[1], 5}, {s[2], 8}, {m[0], 3}}
+			choices = []rnd.Weighted[float64]{{V: xs[1], W: 1.3}, {V: s[0], W: 2}, {V: s[1], W: 5}, {V: s[2], W: 8}, {V: m[0], W: 3}}
 		case "medium":
-			choices = []weighted[float64]{{s[2], 2}, {m[0], 8}, {m[1], 8}, {m[2], 13}, {m[3], 8}, {l[0], 5}}
+			choices = []rnd.Weighted[float64]{{V: s[2], W: 2}, {V: m[0], W: 8}, {V: m[1], W: 8}, {V: m[2], W: 13}, {V: m[3], W: 8}, {V: l[0], W: 5}}
 		default:
-			choices = []weighted[float64]{{m[1], 0.5}, {m[2], 2}, {m[3], 2}, {l[0], 5}, {l[1], 8}, {l[2], 8}, {l[3], 4}}
+			choices = []rnd.Weighted[float64]{{V: m[1], W: 0.5}, {V: m[2], W: 2}, {V: m[3], W: 2}, {V: l[0], W: 5}, {V: l[1], W: 8}, {V: l[2], W: 8}, {V: l[3], W: 4}}
 		}
-		return &scaleGenerator{variety: "variable", mean: wc(rng, choices), choices: choices}
+		return &scaleGenerator{variety: "variable", mean: rnd.Pick(rng, choices), choices: choices}
 
 	default: // wild — starts anywhere on the ladder and roams widely
 		var starts []float64
-		var choices []weighted[float64]
+		var choices []rnd.Weighted[float64]
 		switch size {
 		case "small":
 			starts = []float64{s[1], s[2], m[0], m[1], m[2]}
-			choices = []weighted[float64]{
-				{xs[0], 3},
-				{xs[1], 3},
-				{s[0], 3},
-				{s[1], 4},
-				{s[2], 4},
-				{m[0], 3},
-				{m[1], 3},
-				{m[2], 3},
+			choices = []rnd.Weighted[float64]{
+				{V: xs[0], W: 3},
+				{V: xs[1], W: 3},
+				{V: s[0], W: 3},
+				{V: s[1], W: 4},
+				{V: s[2], W: 4},
+				{V: m[0], W: 3},
+				{V: m[1], W: 3},
+				{V: m[2], W: 3},
 			}
 		case "medium":
 			starts = []float64{s[2], m[0], m[1], m[2], m[3], l[0], l[1]}
-			choices = []weighted[float64]{
-				{xs[0], 1},
-				{xs[1], 1},
-				{s[0], 1},
-				{s[1], 1},
-				{s[2], 2},
-				{m[0], 3},
-				{m[1], 3},
-				{m[2], 3},
-				{m[3], 3},
-				{l[0], 2},
-				{l[1], 2},
-				{l[2], 1},
+			choices = []rnd.Weighted[float64]{
+				{V: xs[0], W: 1},
+				{V: xs[1], W: 1},
+				{V: s[0], W: 1},
+				{V: s[1], W: 1},
+				{V: s[2], W: 2},
+				{V: m[0], W: 3},
+				{V: m[1], W: 3},
+				{V: m[2], W: 3},
+				{V: m[3], W: 3},
+				{V: l[0], W: 2},
+				{V: l[1], W: 2},
+				{V: l[2], W: 1},
 			}
 		default:
 			starts = []float64{l[0], l[1], l[2], l[3]}
-			choices = []weighted[float64]{
-				{xs[0], 1},
-				{xs[1], 1},
-				{s[0], 1},
-				{s[1], 1},
-				{s[2], 1},
-				{m[0], 1},
-				{m[1], 1},
-				{m[2], 1},
-				{l[0], 2},
-				{l[1], 5},
-				{l[2], 5},
-				{l[3], 5},
+			choices = []rnd.Weighted[float64]{
+				{V: xs[0], W: 1},
+				{V: xs[1], W: 1},
+				{V: s[0], W: 1},
+				{V: s[1], W: 1},
+				{V: s[2], W: 1},
+				{V: m[0], W: 1},
+				{V: m[1], W: 1},
+				{V: m[2], W: 1},
+				{V: l[0], W: 2},
+				{V: l[1], W: 5},
+				{V: l[2], W: 5},
+				{V: l[3], W: 5},
 			}
 		}
-		return &scaleGenerator{variety: "wild", mean: choice(rng, starts), choices: choices}
+		return &scaleGenerator{variety: "wild", mean: rnd.Choice(rng, starts), choices: choices}
 	}
 }
 
 func (g *scaleGenerator) next(f frame, rng *rand.Rand) float64 {
 	switch g.variety {
 	case "constant":
-		return gauss(rng, g.mean, math.Min(f.w(0.01), g.mean*0.05))
+		return rnd.Gauss(rng, g.mean, math.Min(f.w(0.01), g.mean*0.05))
 	case "variable":
-		return gauss(rng, g.mean, math.Min(f.w(0.035), g.mean*0.15))
+		return rnd.Gauss(rng, g.mean, math.Min(f.w(0.035), g.mean*0.15))
 	default:
-		return gauss(rng, g.mean, g.mean*0.3)
+		return rnd.Gauss(rng, g.mean, g.mean*0.3)
 	}
 }
 
@@ -305,11 +305,11 @@ func (g *scaleGenerator) change(rng *rand.Rand) {
 	case "constant":
 		// A constant piece keeps one mean for its whole life.
 	case "variable":
-		g.mean = wc(rng, g.choices)
-		g.mean = gauss(rng, g.mean, g.mean*0.1)
+		g.mean = rnd.Pick(rng, g.choices)
+		g.mean = rnd.Gauss(rng, g.mean, g.mean*0.1)
 	default:
-		g.mean = wc(rng, g.choices)
-		g.mean = gauss(rng, g.mean, g.mean*0.3)
+		g.mean = rnd.Pick(rng, g.choices)
+		g.mean = rnd.Gauss(rng, g.mean, g.mean*0.3)
 	}
 }
 
@@ -328,7 +328,7 @@ type bullseye struct {
 type bullseyeGenerator struct {
 	densityMean float64
 	densitySpan float64
-	ringOptions []weighted[int]
+	ringOptions []rnd.Weighted[int]
 }
 
 func newBullseyeGenerator(tr trait.Set, rng *rand.Rand) bullseyeGenerator {
@@ -343,20 +343,20 @@ func newBullseyeGenerator(tr trait.Set, rng *rand.Rand) bullseyeGenerator {
 	default: // mixed
 		mean, span = 0.7, 1.0
 	}
-	dropoff := rescale(span, 0, 1, 1, 0.35)
+	dropoff := mathx.Rescale(span, 0, 1, 1, 0.35)
 
-	var options []weighted[int]
+	var options []rnd.Weighted[int]
 	weight := 1.0
 	for n := len(counts) * 2; n > 0 && weight > 0.001; n-- {
-		options = append(options, weighted[int]{choice(rng, counts), weight})
+		options = append(options, rnd.Weighted[int]{V: rnd.Choice(rng, counts), W: weight})
 		weight *= dropoff
 	}
 	return bullseyeGenerator{densityMean: mean, densitySpan: span, ringOptions: options}
 }
 
 func (g bullseyeGenerator) next(rng *rand.Rand) bullseye {
-	density := math.Min(math.Max(gauss(rng, g.densityMean, g.densitySpan/2), 0.17), 0.93)
-	return bullseye{rings: wc(rng, g.ringOptions), density: density}
+	density := math.Min(math.Max(rnd.Gauss(rng, g.densityMean, g.densitySpan/2), 0.17), 0.93)
+	return bullseye{rings: rnd.Pick(rng, g.ringOptions), density: density}
 }
 
 // ----------------------------------------------------------------- margins
@@ -403,8 +403,8 @@ func newStackOffset(tr trait.Set, f frame, rng *rand.Rand) stackOffset {
 	}
 	return stackOffset{
 		on: true,
-		x:  gauss(rng, 0, f.w(0.0013)),
-		y:  math.Abs(gauss(rng, 0, f.w(0.0013))),
+		x:  rnd.Gauss(rng, 0, f.w(0.0013)),
+		y:  math.Abs(rnd.Gauss(rng, 0, f.w(0.0013))),
 	}
 }
 
@@ -412,5 +412,5 @@ func newStackOffset(tr trait.Set, f frame, rng *rand.Rand) stackOffset {
 // runs straight instead. Most pieces never do it; when they do, the straight
 // groups cut across the curved ones and give the composition a second voice.
 func newIgnoreFlowFieldOdds(rng *rand.Rand) float64 {
-	return wc(rng, []weighted[float64]{{0, 10}, {0.5, 2}, {0.8, 1}, {0.9, 1}})
+	return rnd.Pick(rng, []rnd.Weighted[float64]{{V: 0, W: 10}, {V: 0.5, W: 2}, {V: 0.8, W: 1}, {V: 0.9, W: 1}})
 }

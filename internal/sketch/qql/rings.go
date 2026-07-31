@@ -4,8 +4,10 @@ import (
 	"math"
 	"math/rand/v2"
 
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
@@ -33,9 +35,9 @@ func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackO
 		// the likelier it is to be flecked, falling off steeply with
 		// distance so the flecks read as a spill rather than a dusting.
 		if sch.SplatterOdds > 0 && len(sch.SplatterChoices) > 0 {
-			fade := math.Pow(rescale(dist(d.x, d.y, sch.SplatterCenterX, sch.SplatterCenterY),
+			fade := math.Pow(mathx.Rescale(dist(d.x, d.y, sch.SplatterCenterX, sch.SplatterCenterY),
 				0, f.w(1.4), 1, 0), 2.5)
-			if odds(rng, sch.SplatterOdds*fade) {
+			if rnd.Odds(rng, sch.SplatterOdds*fade) {
 				splattered = append(splattered, d)
 			}
 		}
@@ -48,7 +50,7 @@ func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackO
 			shadow.y += stack.y
 			shadow.primary = d.secondary
 			shadow.secondary = d.secondary
-			shadow.density = d.density * gauss(rng, 0.99, 0.03)
+			shadow.density = d.density * rnd.Gauss(rng, 0.99, 0.03)
 			drawRingDot(cv, f, shadow, rng, w)
 		}
 
@@ -61,7 +63,7 @@ func paintDots(cv *paint.Canvas, f frame, tr trait.Set, sch scheme, stack stackO
 	}
 
 	for _, d := range splattered {
-		c := sch.swatch(choice(rng, sch.SplatterChoices))
+		c := sch.swatch(rnd.Choice(rng, sch.SplatterChoices))
 		col := c.Draw(rng)
 		d.primary, d.secondary = col, col
 		d.density = math.Max(0.17, d.density*0.7)
@@ -85,14 +87,14 @@ func drawRingDot(cv *paint.Canvas, f frame, d dot, rng *rand.Rand, w *dotWash) {
 	bandThickness := math.Max(f.w(minRadius), bandStep*(1-d.density))
 
 	// A tightly packed dot has less room to let its bands wander.
-	varianceAdjust := rescale(d.density, 0.1, 1, 0.5, 1.2)
+	varianceAdjust := mathx.Rescale(d.density, 0.1, 1, 0.5, 1.2)
 	var positionVariance float64
 	if rings >= 7 {
-		positionVariance = varianceAdjust * rescale(float64(rings), 7, 9, 0.008, 0.005)
+		positionVariance = varianceAdjust * mathx.Rescale(float64(rings), 7, 9, 0.008, 0.005)
 	} else {
-		positionVariance = varianceAdjust * rescale(float64(rings), 1, 7, 0.022, 0.008)
+		positionVariance = varianceAdjust * mathx.Rescale(float64(rings), 1, 7, 0.022, 0.008)
 	}
-	thicknessVariance := rescale(d.density, 0.1, 1, 0.01, 0.13)
+	thicknessVariance := mathx.Rescale(d.density, 0.1, 1, 0.01, 0.13)
 
 	primary := d.primary.Color()
 	secondary := d.secondary.Color()
@@ -106,19 +108,19 @@ func drawRingDot(cv *paint.Canvas, f frame, d dot, rng *rand.Rand, w *dotWash) {
 		band++
 
 		wobble := math.Min(f.w(0.0005), r*positionVariance)
-		cx := gauss(rng, d.x, wobble)
-		cy := gauss(rng, d.y, wobble)
+		cx := rnd.Gauss(rng, d.x, wobble)
+		cy := rnd.Gauss(rng, d.y, wobble)
 
-		thickness := gauss(rng, bandThickness, bandThickness*thicknessVariance)
+		thickness := rnd.Gauss(rng, bandThickness, bandThickness*thicknessVariance)
 		if r < f.w(0.002) && rings == 1 {
 			// A dot too small to hold a ring becomes a disc, more or less
 			// filled depending on its density.
-			thickness = rescale(d.density, 0, 1, r, r*0.25)
+			thickness = mathx.Rescale(d.density, 0, 1, r, r*0.25)
 		}
 		if rings == 1 && d.scale > f.w(0.02) {
 			// Keep big single-ring dots from turning into fat doughnuts.
-			thickness = rescale(thickness, f.w(0.003), f.w(0.08), f.w(0.003), f.w(0.05))
-			thickness = math.Min(thickness, rescale(d.scale, 0, f.w(0.1), f.w(0.003), f.w(0.04)))
+			thickness = mathx.Rescale(thickness, f.w(0.003), f.w(0.08), f.w(0.003), f.w(0.05))
+			thickness = math.Min(thickness, mathx.Rescale(d.scale, 0, f.w(0.1), f.w(0.003), f.w(0.04)))
 			thickness = math.Min(thickness, f.w(0.04))
 		}
 
@@ -142,30 +144,30 @@ func drawMessyCircle(cv *paint.Canvas, f frame, x, y, r, thickness, varianceAdju
 	var divisor float64
 	switch {
 	case thickness > f.w(0.02):
-		divisor = rescale(thickness, f.w(0.02), f.w(0.04), f.w(0.00021), f.w(0.00022))
+		divisor = mathx.Rescale(thickness, f.w(0.02), f.w(0.04), f.w(0.00021), f.w(0.00022))
 	case thickness > f.w(0.006):
-		divisor = rescale(thickness, f.w(0.006), f.w(0.02), f.w(0.00015), f.w(0.00021))
+		divisor = mathx.Rescale(thickness, f.w(0.006), f.w(0.02), f.w(0.00015), f.w(0.00021))
 	case thickness > f.w(0.003):
-		divisor = rescale(thickness, f.w(0.003), f.w(0.006), f.w(0.00012), f.w(0.00015))
+		divisor = mathx.Rescale(thickness, f.w(0.003), f.w(0.006), f.w(0.00012), f.w(0.00015))
 	default:
-		divisor = rescale(thickness, 0, f.w(0.006), f.w(0.00016), f.w(0.00012))
+		divisor = mathx.Rescale(thickness, 0, f.w(0.006), f.w(0.00016), f.w(0.00012))
 	}
 	rounds := int(math.Ceil(math.Max(thickness/divisor, 1)))
 
-	varianceRatio := varianceAdjust * rescale(thickness, f.w(0.001), f.w(0.04), 0.08, 0.03)
+	varianceRatio := varianceAdjust * mathx.Rescale(thickness, f.w(0.001), f.w(0.04), 0.08, 0.03)
 
 	var meanThickness float64
 	switch {
 	case thickness > f.w(0.02):
-		meanThickness = rescale(thickness, f.w(0.02), f.w(0.04), f.w(0.0007), f.w(0.00073))
+		meanThickness = mathx.Rescale(thickness, f.w(0.02), f.w(0.04), f.w(0.0007), f.w(0.00073))
 	case thickness > f.w(0.006):
-		meanThickness = rescale(thickness, f.w(0.006), f.w(0.02), f.w(0.0005), f.w(0.0007))
+		meanThickness = mathx.Rescale(thickness, f.w(0.006), f.w(0.02), f.w(0.0005), f.w(0.0007))
 	default:
-		meanThickness = rescale(thickness, f.w(0.001), f.w(0.006), f.w(0.0001), f.w(0.0005))
+		meanThickness = mathx.Rescale(thickness, f.w(0.001), f.w(0.006), f.w(0.0001), f.w(0.0005))
 	}
 
 	for i := range rounds {
-		rr := rescale(float64(i), 0, float64(rounds), r, r-thickness)
+		rr := mathx.Rescale(float64(i), 0, float64(rounds), r, r-thickness)
 
 		wobble := varianceAdjust * math.Min(f.w(0.0015), thickness*varianceRatio)
 		spread := 1.0
@@ -173,14 +175,14 @@ func drawMessyCircle(cv *paint.Canvas, f frame, x, y, r, thickness, varianceAdju
 			wobble *= 1.5
 			spread = 2
 		}
-		cx := gauss(rng, x, wobble)
-		cy := gauss(rng, y, wobble)
+		cx := rnd.Gauss(rng, x, wobble)
+		cy := rnd.Gauss(rng, y, wobble)
 
-		lineVariance := meanThickness * spread * rescale(thickness, f.w(0.001), f.w(0.04), 0.25, 1.1)
+		lineVariance := meanThickness * spread * mathx.Rescale(thickness, f.w(0.001), f.w(0.04), 0.25, 1.1)
 		if rr < f.w(0.002) {
 			lineVariance = meanThickness * 0.1
 		}
-		lineThickness := math.Max(gauss(rng, meanThickness, lineVariance), f.w(0.0002))
+		lineThickness := math.Max(rnd.Gauss(rng, meanThickness, lineVariance), f.w(0.0002))
 
 		drawCleanCircle(cv, f, cx, cy, rr, lineThickness, col, rng)
 	}
@@ -192,8 +194,8 @@ func drawCleanCircle(cv *paint.Canvas, f frame, x, y, r, thickness float64, col 
 	r = math.Max(r-thickness*0.5, f.w(0.0002))
 	weight := thickness * 0.95
 	variance := math.Min(f.w(0.0015), r*eccentricity)
-	rx := gauss(rng, r, variance)
-	ry := gauss(rng, r, variance)
+	rx := rnd.Gauss(rng, r, variance)
+	ry := rnd.Gauss(rng, r, variance)
 	if rx <= 0 || ry <= 0 {
 		return
 	}

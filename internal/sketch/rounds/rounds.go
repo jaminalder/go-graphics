@@ -13,8 +13,8 @@ import (
 	"image"
 	"math"
 	"math/rand/v2"
-	"sort"
 
+	"github.com/jaminalder/go-graphics/internal/opt"
 	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -38,12 +38,14 @@ type Sketch struct {
 	Rows, Cols int
 	Human      float64 // 0 = machine-perfect, 1 = dry and streaky
 
-	opts cliOptions
+	knobs *opt.Set
 }
 
 // New returns the sketch with its defaults.
 func New() *Sketch {
-	return &Sketch{Rows: 5, Cols: 4, Human: 0.8}
+	s := &Sketch{Rows: 5, Cols: 4, Human: 0.8}
+	s.declare()
+	return s
 }
 
 // Name implements sketch.Sketch.
@@ -59,10 +61,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 	h := s.Human
 
-	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
-	sort.SliceStable(byLum, func(i, j int) bool {
-		return byLum[i].Luminance() < byLum[j].Luminance()
-	})
+	byLum := palette.ByLuminance(ctx.Palette.Colors)
 	bg := byLum[0]
 	inks := byLum[1:]
 

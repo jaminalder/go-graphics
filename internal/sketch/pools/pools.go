@@ -22,15 +22,20 @@ import (
 
 	"github.com/jaminalder/go-graphics/internal/geom"
 	"github.com/jaminalder/go-graphics/internal/mathx"
+	"github.com/jaminalder/go-graphics/internal/opt"
 	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/sketch"
+	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
 // RNG stream ids (see sketch.Context.RNG).
 const (
 	streamLayout = 1 // placement, sizes, structure, colour
 	streamPaint  = 2 // per-pool wash deformation
+	streamTraits = 3 // which point of the output space this seed is
+	streamFill   = 4 // the fill level made numeric
 )
 
 // saltPaper salts the granulation lattice so the paper texture is
@@ -41,13 +46,14 @@ const saltPaper = 0x706170 // "pap"
 // tooth is not a copy of the marks'.
 const saltGround = 0x67726e // "grn"
 
-// Sketch holds the structural knobs. Per-seed variation happens in place.
+// ringFloor is the radius below which a circle gets one inner ring instead
+// of two or three, in canvas units.
+const ringFloor = 0.055
+
+// Sketch holds what every mark is made of and painted with. Where the
+// marks go is not here: that is the fill trait, resolved per seed into a
+// layout (fill.go), which pin holds the command-line overrides for.
 type Sketch struct {
-	Count        int     // anchor circles, before satellites
-	Rungs        int     // steps on the size ladder
-	Base         float64 // smallest rung, canvas units
-	Ratio        float64 // ladder step ratio
-	Satellites   float64 // share of anchors given an overlapping companion
 	Ragged       float64 // wash edge deviation; shoal's blob is 0.22
 	Rings        float64 // share of circles carrying inner rings
 	Open         float64 // share painted as annuli rather than discs
@@ -60,21 +66,18 @@ type Sketch struct {
 	Pigments     int     // palette colours in play
 	Ground       float64 // strength of the painted ground wash; 0 is bare paper
 	GroundBlotch float64 // wavelength of the ground's unevenness, canvas units
-	Margin       float64 // clear paper at the edge
-	Gap          float64 // clearance between anchors, ×radius
-	Candidates   int     // darts thrown per anchor
 
-	opts cliOptions
+	// pin is where the composition flags land. Only the ones actually given
+	// on the command line are read; the rest come from the fill level.
+	pin layout
+
+	traits *trait.Options
+	knobs  *opt.Set
 }
 
 // New returns the sketch with its defaults.
 func New() *Sketch {
-	return &Sketch{
-		Count:        22,
-		Rungs:        5,
-		Base:         0.030,
-		Ratio:        1.55,
-		Satellites:   0.45,
+	s := &Sketch{
 		Ragged:       0.055,
 		Rings:        0.34,
 		Open:         0.28,
@@ -87,10 +90,46 @@ func New() *Sketch {
 		Pigments:     4,
 		Ground:       0.5,
 		GroundBlotch: 0.34,
-		Margin:       0.06,
-		Gap:          0.12,
-		Candidates:   7,
+		traits:       trait.NewOptions(schema),
 	}
+	// The pin defaults are only ever shown in --help; a knob left alone is
+	// taken from the fill level, not from here.
+	s.pin = newFill("medium", rand.New(rand.NewPCG(1, 1)))
+	s.declare()
+	return s
+}
+
+// Schema implements sketch.Traited.
+func (s *Sketch) Schema() trait.Schema { return schema }
+
+// Traits implements sketch.Traited.
+func (s *Sketch) Traits(ctx sketch.Context) trait.Set {
+	return s.traits.Resolve(ctx.RNG(streamTraits))
+}
+
+// layoutFor resolves the composition for one render: what the seed's fill
+// level drew, with any pinned flag laid over it. This is the whole point of
+// the trait — a caller can move one number without restating the other
+// seven, and a caller who says nothing still gets a coherent sheet.
+func (s *Sketch) layoutFor(tr trait.Set, rng *rand.Rand) layout {
+	l := newFill(tr.Get(dimFill), rng)
+	for _, o := range []struct {
+		name string
+		set  func()
+	}{
+		{"count", func() { l.count = s.pin.count }},
+		{"rungs", func() { l.rungs = s.pin.rungs }},
+		{"base", func() { l.base = s.pin.base }},
+		{"ratio", func() { l.ratio = s.pin.ratio }},
+		{"satellites", func() { l.satellites = s.pin.satellites }},
+		{"gap", func() { l.gap = s.pin.gap }},
+		{"margin", func() { l.margin = s.pin.margin }},
+	} {
+		if s.knobs.WasSet(o.name) {
+			o.set()
+		}
+	}
+	return l
 }
 
 // Name implements sketch.Sketch.
@@ -132,9 +171,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 	rng := ctx.RNG(streamLayout)
 
-	paper, tint, bag, ramp := s.inks(byLuminance(ctx.Palette.Colors), rng)
+	l := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill))
+	paper, tint, bag, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors), rng)
 
-	circles := s.plan(rng, aspect, bag, ramp)
+	circles := s.plan(l, rng, aspect, bag, ramp)
 
 	// The canvas starts as bare paper; the ground is glazed onto it, on its
 	// own stream so that changing the marks never repaints the sky.
@@ -151,13 +191,6 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		s.paint(cv, prng, wash, c)
 	}
 	return cv.Image(), nil
-}
-
-// byLuminance copies a palette into darkest-first order.
-func byLuminance(cols []palette.Color) []palette.Color {
-	out := append([]palette.Color(nil), cols...)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Luminance() < out[j].Luminance() })
-	return out
 }
 
 // inks decides the paper and the pigment draw pile. The pile is weighted
@@ -182,19 +215,7 @@ func (s *Sketch) inks(byLum []palette.Color, rng *rand.Rand) (paper, tint palett
 	// keeps them in luminance order, because a banded mark graduates
 	// between neighbours on it — see banded.go.
 	ramp = append([]palette.Color(nil), byLum[:n]...)
-	pick := append([]palette.Color(nil), ramp...)
-	rng.Shuffle(len(pick), func(i, j int) { pick[i], pick[j] = pick[j], pick[i] })
-
-	weights := []int{10, 6, 3, 2, 1, 1}
-	for i, c := range pick {
-		w := 1
-		if i < len(weights) {
-			w = weights[i]
-		}
-		for range w {
-			bag = append(bag, c)
-		}
-	}
+	bag = rnd.Bag(rng, ramp, []int{10, 6, 3, 2, 1, 1})
 	return paper, tint, bag, ramp
 }
 
@@ -218,36 +239,18 @@ func groundTint(byLum []palette.Color) palette.Color {
 	return c.Desaturate(0.3)
 }
 
-// ladder is the size ladder: a geometric run of radii, weighted toward the
-// small end. Discrete rungs rather than a continuous range are the whole
-// point — a scatter of continuously varying radii has no size hierarchy to
-// read, only a spread.
-func (s *Sketch) ladder() (radii []float64, weights []float64) {
-	r := s.Base
-	w := 12.0
-	for range max(s.Rungs, 1) {
-		radii = append(radii, r)
-		weights = append(weights, w)
-		r *= s.Ratio
-		// A gentle falloff. Steeper and the top rungs never come up, which
-		// leaves a field of same-sized specks with no hierarchy to read.
-		w *= 0.7
-	}
-	return radii, weights
-}
-
 // plan places every circle and settles what it is made of, largest first
 // so the paint order lets small marks settle on top.
-func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag, ramp []palette.Color) []circle {
-	radii, weights := s.ladder()
+func (s *Sketch) plan(l layout, rng *rand.Rand, aspect float64, bag, ramp []palette.Color) []circle {
+	radii, weights := l.ladder()
 	maxR := radii[len(radii)-1]
 	index := geom.NewIndex(aspect, 1, maxR)
 
 	var out []circle
-	for range s.Count {
-		rung := weightedPick(rng, weights)
+	for range l.count {
+		rung := rnd.PickIndex(rng, weights)
 		r := radii[rung]
-		x, y, ok := s.bestCandidate(rng, index, aspect, r)
+		x, y, ok := l.bestCandidate(rng, index, aspect, r)
 		if !ok {
 			continue
 		}
@@ -262,7 +265,7 @@ func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag, ramp []palette.Color)
 		// It comes from one rung down, not from the bottom of the ladder:
 		// a speck crossing a large disc shows nothing, and the mixing only
 		// reads when both parties to it are worth looking at.
-		if rng.Float64() >= s.Satellites {
+		if rng.Float64() >= l.satellites {
 			continue
 		}
 		sr := radii[max(rung-1, 0)]
@@ -272,7 +275,7 @@ func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag, ramp []palette.Color)
 		th := rng.Float64() * 2 * math.Pi
 		d := (r + sr) * (0.42 + 0.32*rng.Float64())
 		sc := geom.Circle{X: x + d*math.Cos(th), Y: y + d*math.Sin(th), R: sr}
-		if !s.inPaper(sc, aspect) {
+		if !l.inPaper(sc, aspect) {
 			continue
 		}
 		index.Insert(sc)
@@ -281,48 +284,6 @@ func (s *Sketch) plan(rng *rand.Rand, aspect float64, bag, ramp []palette.Color)
 
 	sort.SliceStable(out, func(i, j int) bool { return out[i].R > out[j].R })
 	return out
-}
-
-// bestCandidate throws darts and keeps the one furthest from what is
-// already on the paper, which spaces the marks without the regularity a
-// grid would impose.
-//
-// Few darts on purpose. Throwing many maximises the spacing, and perfectly
-// spaced marks are as inert as a grid; a handful leaves the sheet with
-// passages that crowd and passages of open paper.
-func (s *Sketch) bestCandidate(rng *rand.Rand, index *geom.Index, aspect, r float64) (x, y float64, ok bool) {
-	bestD := -1.0
-	for range max(s.Candidates, 1) {
-		cx := s.Margin + r + rng.Float64()*(aspect-2*(s.Margin+r))
-		cy := s.Margin + r + rng.Float64()*(1-2*(s.Margin+r))
-		c := geom.Circle{X: cx, Y: cy, R: r}
-		if !index.FitsWithGap(c, r*s.Gap) {
-			continue
-		}
-		d := nearest(index, cx, cy)
-		if d > bestD {
-			bestD, x, y, ok = d, cx, cy, true
-		}
-	}
-	return x, y, ok
-}
-
-// nearest is the distance from a point to the closest circle centre placed
-// so far, or a large number when the paper is still empty.
-func nearest(index *geom.Index, x, y float64) float64 {
-	best := math.Inf(1)
-	for _, c := range index.Circles() {
-		best = math.Min(best, math.Hypot(c.X-x, c.Y-y))
-	}
-	if math.IsInf(best, 1) {
-		return 1e6
-	}
-	return best
-}
-
-func (s *Sketch) inPaper(c geom.Circle, aspect float64) bool {
-	return c.X-c.R > s.Margin*0.5 && c.X+c.R < aspect-s.Margin*0.5 &&
-		c.Y-c.R > s.Margin*0.5 && c.Y+c.R < 1-s.Margin*0.5
 }
 
 // build settles what one placed circle is made of.
@@ -358,9 +319,15 @@ func (s *Sketch) build(rng *rand.Rand, g geom.Circle, bag, ramp []palette.Color)
 
 	// Rings only where they can resolve: on a small circle three of them
 	// merge into a dark disc, which is a worse mark than a plain one.
+	//
+	// The threshold is absolute, not a multiple of the ladder's smallest
+	// rung. Whether three rings can be told apart inside a disc is a fact
+	// about the disc and the paint, not about how crowded the sheet it sits
+	// on is — measured against the ladder, a sparse sheet (whose smallest
+	// circle is already large) would deny rings to every mark on it.
 	if c.kind == kindNested || (c.kind == kindOpen && rng.Float64() < s.Rings) {
 		c.rings = 2 + rng.IntN(2)
-		if g.R < s.Base*2 {
+		if g.R < ringFloor {
 			c.rings = 1
 		}
 	}
@@ -401,23 +368,6 @@ func (s *Sketch) paintRings(cv *paint.Canvas, rng *rand.Rand, w paint.Wash, c ci
 		band := math.Min(limit*0.11, rr*0.9)
 		w.Ring(cv, rng, c.X, c.Y, rr, band, c.second, c.alpha*0.85)
 	}
-}
-
-// weightedPick draws an index with probability proportional to weight.
-func weightedPick(rng *rand.Rand, weights []float64) int {
-	total := 0.0
-	for _, w := range weights {
-		total += w
-	}
-	bisect := rng.Float64() * total
-	cum := 0.0
-	for i, w := range weights {
-		cum += w
-		if cum > bisect {
-			return i
-		}
-	}
-	return len(weights) - 1
 }
 
 // paperTooth is the grain of the sheet, in canvas units. Ground and marks

@@ -16,7 +16,8 @@ make preview-qql # render sketch "qql" at its native 4:5 preview size
 make preview-pools # render sketch "pools" (watercolour circles)
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
-go run ./cmd/staticart traits qql --seed N   # the output-space point a seed lands on
+go run ./cmd/staticart traits <sketch> --seed N  # the output-space point a seed lands on
+go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + contact sheet
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools.
@@ -34,6 +35,25 @@ Tests prove determinism, not beauty. After changing any sketch or color code:
 render a preview (`make preview` or the render command) and **Read the output
 PNG** to look at it. For sketch 001 compare against the target image at
 `docs/reference/target-sketch7.jpg` using its spec's acceptance checklist.
+
+## Judge the space, not the render
+
+One seed says almost nothing about what a change did. Use `sweep`: it
+renders a seed range or a parameter grid in parallel and writes one
+`sheet.png` you can look at in a single Read, plus a `manifest.txt` naming
+each tile.
+
+```sh
+staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+staticart sweep qql --seeds 1-16 --profile preview-tall --out out/qql-sweep
+```
+
+`sweep` passes every flag it does not own straight through to `render`, so
+any sketch knob is sweepable. Calibrating a constant is the same move:
+`--vary band-width=0.008,0.022,0.03` and look at the sheet. Prefer this to
+rendering one image and squinting — it is faster, and it is the only way to
+see whether a change helped the *typical* seed or just the one in front of
+you.
 
 ## Docs map (read before working on the related area)
 
@@ -70,7 +90,10 @@ PNG** to look at it. For sketch 001 compare against the target image at
 
 ```
 cmd/staticart/          CLI (generic wiring only — no sketch specifics)
-internal/mathx/         Clamp01 / Remap / Smoothstep (leaf)
+internal/mathx/         Clamp01 / Remap / Rescale / Smoothstep (leaf)
+internal/rnd/           sampling vocabulary: weighted choice, gaussians,
+                        winnow, weighted bag (leaf)
+internal/opt/           declarative CLI knobs → flags, ranges, name suffix (leaf)
 internal/geom/          circles + spatial collision/containment index (leaf)
 internal/trait/         weighted output-space dimensions, seed → traits, CLI overrides (leaf)
 internal/palette/       Color type + ops, HSB Swatch (clamp box + walk), ColorLisa data
@@ -90,12 +113,18 @@ internal/sketch/<x>/    one package per sketch + its testdata/ goldens
 2. Create `internal/sketch/<name>/` implementing the `sketch.Sketch`
    interface; tunables are struct fields with defaults in `New()`.
 3. Register it in the registry wiring used by `cmd`. Sketch-specific CLI
-   options: implement `sketch.Configurable` in the sketch package (see
-   tapestry's options.go) — never add sketch flags to `cmd`. If the
-   interesting choices are discrete and orthogonal, declare a
-   `trait.Schema` and implement `sketch.Traited` instead (see qql) — you
-   get seed derivation, per-dimension flags, filename/metadata plumbing and
-   the `traits` command for free.
+   options: implement `sketch.Configurable` and declare the knobs with
+   `internal/opt` (see pools/options.go) — never add sketch flags to `cmd`,
+   and never hand-roll range checks. If the interesting choices are
+   discrete and orthogonal, declare a `trait.Schema` and implement
+   `sketch.Traited` too (see qql, and pools' `fill`) — you get seed
+   derivation, per-dimension flags, filename/metadata plumbing and the
+   `traits` command for free.
+
+   **Knobs that only make sense together are one trait, not several
+   flags.** If you find yourself setting five values in lockstep to get a
+   named look, that look is the knob; give it a trait dimension resolving
+   to *ranges*, and keep the five as overrides.
 4. Tests via `sketchtest`: determinism, plan-bounds over many seeds, and a
    golden PNG in `testdata/` (regenerate with `make golden`, eyeball
    before committing).
@@ -105,7 +134,15 @@ internal/sketch/<x>/    one package per sketch + its testdata/ goldens
 
 - TDD for math-heavy code (color, gradient, noise, mapping): table-driven
   tests first. Don't overengineer elsewhere — no abstractions for
-  single-implementation concepts.
+  single-implementation concepts. Extract on the *second* copy, and only
+  where the copies are actually the same thing.
+- Name a test after the claim it defends, not the function it calls
+  (`TestWashesMixWhereTheyCross`), and say in its comment what breaks if it
+  fails. These tests are the spec; goldens only catch that *something*
+  moved.
+- Pixel-exact reproducibility across versions is **not** a goal. If a
+  cleaner design changes what a seed draws, take the cleaner design,
+  regenerate the goldens and eyeball them.
 - `gofumpt` + `goimports` formatting (local prefix
   `github.com/jaminalder/go-graphics`) — `make fmt`.
 - Exported identifiers get doc comments; sketch packages start with a short

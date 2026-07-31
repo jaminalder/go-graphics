@@ -5,7 +5,9 @@ import (
 	"math/rand/v2"
 
 	"github.com/jaminalder/go-graphics/internal/geom"
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
 
@@ -61,7 +63,7 @@ func (p *packer) run(groups [][]pt, ignore []bool) []dot {
 	for gi, group := range groups {
 		// A group is the unit that shares a colour: most of the time it
 		// inherits the last one, and now and then the piece turns a corner.
-		if odds(rng, p.odds.group) {
+		if rnd.Odds(rng, p.odds.group) {
 			primaryIdx = pickNextColor(len(p.scheme.Primary), primaryIdx, rng)
 			secondaryIdx = pickNextColor(len(p.scheme.Secondary), secondaryIdx, rng)
 			groupRings = p.rings.next(rng)
@@ -75,7 +77,7 @@ func (p *packer) buildGroup(dots []dot, group []pt, ignore bool, primaryIdx, sec
 	rng := p.rng
 	f := p.frame
 
-	if odds(rng, p.odds.line) {
+	if rnd.Odds(rng, p.odds.line) {
 		p.scales.change(rng)
 	}
 	// One size for the whole group. The generator keeps being re-rolled per
@@ -117,14 +119,14 @@ func (p *packer) buildGroup(dots []dot, group []pt, ignore bool, primaryIdx, sec
 		}
 
 		p.scales.change(rng)
-		if odds(rng, p.odds.line) {
+		if rnd.Odds(rng, p.odds.line) {
 			primaryIdx = pickNextColor(len(p.scheme.Primary), primaryIdx, rng)
 			// Swapping the swatch but not the current colour lets the walk
 			// cross into the new colour instead of jumping to it.
 			primarySwatch = p.scheme.swatch(p.scheme.Primary[primaryIdx])
 			rings = p.rings.next(rng)
 		}
-		if odds(rng, p.odds.line) {
+		if rnd.Odds(rng, p.odds.line) {
 			secondaryIdx = pickNextColor(len(p.scheme.Secondary), secondaryIdx, rng)
 			secondarySwatch = p.scheme.swatch(p.scheme.Secondary[secondaryIdx])
 		}
@@ -147,9 +149,9 @@ func newPackIndex(f frame) *geom.Index {
 // what holds the whole output space together.
 func (d dot) drawnRings(f frame) int {
 	switch {
-	case d.scale < rescale(d.density, 0.15, 1, f.w(0.0039), f.w(0.001)):
+	case d.scale < mathx.Rescale(d.density, 0.15, 1, f.w(0.0039), f.w(0.001)):
 		return min(d.rings, 1)
-	case d.scale < rescale(d.density, 0.15, 1, f.w(0.0072), f.w(0.0029)):
+	case d.scale < mathx.Rescale(d.density, 0.15, 1, f.w(0.0072), f.w(0.0029)):
 		return min(d.rings, 2)
 	case d.scale < f.w(0.01):
 		return min(d.rings, 3)

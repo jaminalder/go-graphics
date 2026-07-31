@@ -8,6 +8,7 @@
 package shoal
 
 import (
+	"errors"
 	"image"
 	"math"
 	"math/rand/v2"
@@ -16,8 +17,10 @@ import (
 	"github.com/jaminalder/go-graphics/internal/geom"
 	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
+	"github.com/jaminalder/go-graphics/internal/opt"
 	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 )
 
@@ -122,12 +125,19 @@ type Sketch struct {
 	Mark       Mark
 	Ground     Ground
 
-	opts cliOptions
+	// The choice knobs' raw strings; opt writes them and calls back with
+	// the index so the typed constant above gets set.
+	field, grade, mark, ground string
+	knobs                      *opt.Set
 }
+
+// errSmallMax is the one constraint that spans two knobs, so it cannot be
+// a range on either of them.
+var errSmallMax = errors.New("--maxr must not be smaller than --minr")
 
 // New returns the sketch with its defaults.
 func New() *Sketch {
-	return &Sketch{
+	s := &Sketch{
 		MinR:      0.0035,
 		MaxR:      0.0135,
 		Gap:       0.2,
@@ -147,7 +157,13 @@ func New() *Sketch {
 		ColorFlip: 0.06,
 		Field:     FieldFlow,
 		Grade:     GradeVortex,
+		field:     "flow",
+		grade:     "vortex",
+		mark:      "disc",
+		ground:    "light",
 	}
+	s.declare()
+	return s
 }
 
 // Name implements sketch.Sketch.
@@ -175,10 +191,7 @@ type dot struct {
 func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 
-	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
-	sort.SliceStable(byLum, func(i, j int) bool {
-		return byLum[i].Luminance() < byLum[j].Luminance()
-	})
+	byLum := palette.ByLuminance(ctx.Palette.Colors)
 	brng := ctx.RNG(streamPaint)
 	ground, inks, ink := s.palette(byLum, brng)
 
@@ -499,20 +512,7 @@ func fitsChain(c geom.Circle, gap float64, chain []dot) bool {
 // gives every hue equal presence, which reads as confetti; a dominant
 // colour with rare accents is what reads as chosen.
 func weightedBag(rng *rand.Rand, inks []palette.Color) []palette.Color {
-	order := append([]palette.Color(nil), inks...)
-	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
-	weights := []int{14, 8, 5, 4, 3, 2, 2, 1}
-	var bag []palette.Color
-	for i, c := range order {
-		w := 1
-		if i < len(weights) {
-			w = weights[i]
-		}
-		for range w {
-			bag = append(bag, c)
-		}
-	}
-	return bag
+	return rnd.Bag(rng, inks, []int{14, 8, 5, 4, 3, 2, 2, 1})
 }
 
 // chainColor picks the colour a chain starts with: mostly from the

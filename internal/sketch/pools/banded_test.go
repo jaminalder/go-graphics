@@ -3,6 +3,8 @@ package pools
 import (
 	"math"
 	"testing"
+
+	"github.com/jaminalder/go-graphics/internal/palette"
 )
 
 // bandedCircles collects the banded marks a seed produces.
@@ -23,8 +25,7 @@ func bandedCircles(t *testing.T, s *Sketch, seed uint64) []circle {
 // or a pinhole in the middle, and both read as a fault rather than a
 // choice.
 func TestBandsFillTheDisc(t *testing.T) {
-	s := New()
-	s.Banded = 1
+	s := configured(t, "--banded", "1")
 	seen := 0
 	for seed := uint64(1); seed <= 10; seed++ {
 		for _, c := range bandedCircles(t, s, seed) {
@@ -56,8 +57,7 @@ func TestBandsFillTheDisc(t *testing.T) {
 // ring boundary is two transparent glazes passing through one another —
 // butt them together and the mark is a flat gradient with hairline gaps.
 func TestBandsOverlapTheirNeighbours(t *testing.T) {
-	s := New()
-	s.Banded = 1
+	s := configured(t, "--banded", "1")
 	for seed := uint64(1); seed <= 6; seed++ {
 		for _, c := range bandedCircles(t, s, seed) {
 			b := c.bands
@@ -85,9 +85,9 @@ func TestBandsOverlapTheirNeighbours(t *testing.T) {
 // which is what keeps a large disc a few concentric washes rather than a
 // target.
 func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
-	s := New()
+	s := configured(t)
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
+	_, _, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors), rng)
 
 	// The pitch is only free between the two limits: below a couple of
 	// bands a disc still has to come out whole, and above the cap it is the
@@ -127,11 +127,12 @@ func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
 // right, with its own wet edge and rim. So past a point the count stops and
 // the rings widen — measured at the top of the ladder, where it shows.
 func TestBigCircleKeepsFewWideRings(t *testing.T) {
-	s := New()
-	radii, _ := s.ladder()
+	s := configured(t)
+	ctx := testCtx(t, 1)
+	radii, _ := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill)).ladder()
 	big := radii[len(radii)-1]
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, _, ramp := s.inks(byLuminance(testCtx(t, 1).Palette.Colors), rng)
+	_, _, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors), rng)
 
 	p := s.planBands(rng, big, ramp)
 	if n := len(p.mid); n > s.MaxBands {
@@ -150,8 +151,7 @@ func TestBigCircleKeepsFewWideRings(t *testing.T) {
 // between colours from opposite ends of a palette spends most of the mark
 // in the muddy middle.
 func TestBandColoursGraduate(t *testing.T) {
-	s := New()
-	s.Banded = 1
+	s := configured(t, "--banded", "1")
 	for seed := uint64(1); seed <= 8; seed++ {
 		for _, c := range bandedCircles(t, s, seed) {
 			cols := c.bands.colors

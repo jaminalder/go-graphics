@@ -24,6 +24,7 @@ import (
 	"image"
 
 	"github.com/jaminalder/go-graphics/internal/paint"
+	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
@@ -128,7 +129,7 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 	lineRNG := ctx.RNG(streamLines)
 	ignore := make([]bool, len(groups))
 	for i := range ignore {
-		ignore[i] = odds(lineRNG, ignoreOdds)
+		ignore[i] = rnd.Odds(lineRNG, ignoreOdds)
 	}
 
 	sch := newScheme(tr, set, f, ctx.RNG(streamColor))

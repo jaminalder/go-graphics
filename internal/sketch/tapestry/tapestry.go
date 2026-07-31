@@ -15,7 +15,6 @@ import (
 	"image"
 	"math"
 	"math/rand/v2"
-	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/gradient"
 	"github.com/jaminalder/go-graphics/internal/mathx"
@@ -300,10 +299,7 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 	// families; each family's light partner is the remaining palette color
 	// nearest in hue, so one hill reads as exactly two colors (plus their
 	// shades) — no third hue appears along the HSL arc.
-	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
-	sort.SliceStable(byLum, func(i, j int) bool {
-		return byLum[i].Luminance() < byLum[j].Luminance()
-	})
+	byLum := palette.ByLuminance(ctx.Palette.Colors)
 	nL := len(byLum)
 	light0 := byLum[nL-1]
 

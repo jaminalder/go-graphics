@@ -46,7 +46,8 @@ full render recipe (view with `strings file.png | grep staticart`).
 
 ```
 cmd/staticart/     CLI
-internal/          palette, gradient, noise, render, sketch packages
+internal/          mathx, rnd, opt, palette, gradient, noise, geom,
+                   trait, paint, render, sketch packages
 docs/              ARCHITECTURE.md, per-sketch specs, ColorLisa reference data
 out/               rendered images (gitignored)
 ```

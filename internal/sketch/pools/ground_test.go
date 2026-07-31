@@ -5,13 +5,14 @@ import (
 	"math"
 	"testing"
 
+	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch/sketchtest"
 )
 
 // bareGround renders just the ground, with no marks on it.
-func bareGround(t *testing.T, s *Sketch, seed uint64) *image.NRGBA {
+func bareGround(t *testing.T, seed uint64, args ...string) *image.NRGBA {
 	t.Helper()
-	s.Count = 0 // set directly: the CLI floor is 1, but a bare sheet is legal
+	s := configured(t, append([]string{"--count", "0"}, args...)...)
 	return sketchtest.RenderNRGBA(t, s, testCtx(t, seed))
 }
 
@@ -42,15 +43,13 @@ func lumSpread(img *image.NRGBA) float64 {
 // with the unevenness of the process in it. A ground with no variation is
 // a fill, and it gives the marks standing on it away as computed.
 func TestGroundIsPaintedNotFilled(t *testing.T) {
-	painted := lumSpread(bareGround(t, New(), 42))
+	painted := lumSpread(bareGround(t, 42))
 
 	// The floor is not zero: the canvas is dithered on its way to 8 bits,
 	// so even a flat fill carries about one least-significant bit of noise.
 	// Measuring it rather than assuming it keeps this honest if the
 	// quantisation ever changes.
-	flat := New()
-	flat.Ground = 0
-	dither := lumSpread(bareGround(t, flat, 42))
+	dither := lumSpread(bareGround(t, 42, "--ground", "0"))
 
 	if painted < 4*dither {
 		t.Errorf("the painted ground varies by %.5f against a dither floor of %.5f — it is a fill with a name",
@@ -67,10 +66,10 @@ func TestGroundIsPaintedNotFilled(t *testing.T) {
 // the frame; if the grid stopped at the canvas, the corners would be bare
 // paper and the ground would read as a stain rather than as a wash.
 func TestGroundCoversTheWholeSheet(t *testing.T) {
-	s := New()
-	paper, _, _, _ := s.inks(byLuminance(testCtx(t, 42).Palette.Colors),
+	s := configured(t)
+	paper, _, _, _ := s.inks(palette.ByLuminance(testCtx(t, 42).Palette.Colors),
 		testCtx(t, 42).RNG(streamLayout))
-	img := bareGround(t, s, 42)
+	img := bareGround(t, 42)
 	b := img.Bounds()
 
 	for _, p := range []struct {

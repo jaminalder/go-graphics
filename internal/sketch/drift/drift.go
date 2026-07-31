@@ -7,11 +7,11 @@ import (
 	"image"
 	"math"
 	"math/rand/v2"
-	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/geom"
 	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
+	"github.com/jaminalder/go-graphics/internal/opt"
 	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -53,12 +53,13 @@ type Sketch struct {
 	MaxSteps   int     // dots attempted per streamline
 	Style      Style
 
-	opts cliOptions
+	style string
+	knobs *opt.Set
 }
 
 // New returns the sketch with its defaults.
 func New() *Sketch {
-	return &Sketch{
+	s := &Sketch{
 		MinR:       0.007,
 		MaxR:       0.028,
 		Gap:        0.0025,
@@ -70,6 +71,9 @@ func New() *Sketch {
 		MaxSteps:   42,
 		Style:      StyleMix,
 	}
+	s.style = "mix"
+	s.declare()
+	return s
 }
 
 // Name implements sketch.Sketch.
@@ -94,10 +98,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
 	dots := s.place(ctx, aspect)
 
-	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
-	sort.SliceStable(byLum, func(i, j int) bool {
-		return byLum[i].Luminance() < byLum[j].Luminance()
-	})
+	byLum := palette.ByLuminance(ctx.Palette.Colors)
 	paper := byLum[len(byLum)-1].Lighten(0.55).Desaturate(0.4)
 	darkest := byLum[0]
 
@@ -133,10 +134,7 @@ func (s *Sketch) place(ctx sketch.Context, aspect float64) []dot {
 	colorN := noise.New(ctx.Seed ^ saltColor)
 	lrng := ctx.RNG(streamLayout)
 
-	byLum := append([]palette.Color(nil), ctx.Palette.Colors...)
-	sort.SliceStable(byLum, func(i, j int) bool {
-		return byLum[i].Luminance() < byLum[j].Luminance()
-	})
+	byLum := palette.ByLuminance(ctx.Palette.Colors)
 	nCol := len(byLum)
 	darkest, lightest := byLum[0], byLum[nCol-1]
 
