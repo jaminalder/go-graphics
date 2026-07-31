@@ -173,7 +173,12 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 
 	tr := s.Traits(ctx)
 	l := s.layoutFor(tr, ctx.RNG(streamFill))
-	paper, tint, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
+
+	pal, err := colours(tr.Get(dimColourway), ctx.Palette)
+	if err != nil {
+		return nil, err
+	}
+	paper, tint, ramp := s.inks(palette.ByLuminance(pal.Colors))
 
 	circles := s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), rng, aspect, ramp)
 

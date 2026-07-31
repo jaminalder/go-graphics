@@ -35,6 +35,11 @@ var schema = trait.Schema{
 		Values: arrangements,
 	},
 	{
+		Name: dimColourway, Key: "c", InName: true,
+		Doc:    "which palette the pigments come from",
+		Values: colourways,
+	},
+	{
 		Name: dimFlow, Key: "w", InName: true,
 		Doc:    "the field a run of marks follows",
 		Values: flows,

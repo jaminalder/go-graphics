@@ -52,7 +52,7 @@ func plan(t *testing.T, s *Sketch, seed uint64) []circle {
 	rng := ctx.RNG(streamLayout)
 	tr := s.Traits(ctx)
 	l := s.layoutFor(tr, ctx.RNG(streamFill))
-	_, _, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
+	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, ctx).Colors))
 	return s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), rng, 1, ramp)
 }
 
@@ -196,10 +196,11 @@ func TestEveryArrangementFillsTheSheet(t *testing.T) {
 				cs := plan(t, s, seed)
 				// Measured against the level's own budget rather than a flat
 				// number: a sparse sheet is meant to hold six marks and a
-				// packed one sixty, and the failure being guarded against —
-				// an offer so coarse the first few discs invalidate it — took
-				// both to nearly nothing.
-				if want := budget * 2 / 5; len(cs) < want {
+				// packed one sixty. A third is a floor, not a target — a
+				// structure whose rings mostly miss the sheet legitimately
+				// spends less — and it is well above the failures being
+				// guarded against, which took the sheet to nearly nothing.
+				if want := budget / 3; len(cs) < want {
 					t.Errorf("%s/%s seed %d: %d marks against a budget of %d — the structure starved",
 						a, f, seed, len(cs), budget)
 				}
@@ -219,7 +220,7 @@ func TestColourWalksInPassages(t *testing.T) {
 	rng := ctx.RNG(streamLayout)
 	tr := s.Traits(ctx)
 	l := s.layoutFor(tr, ctx.RNG(streamFill))
-	_, _, ramp := s.inks(palette.ByLuminance(ctx.Palette.Colors))
+	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, ctx).Colors))
 	cs := s.plan(l, "orbital", "spiral", rng, 1, ramp)
 
 	// plan sorts by size for painting, so count distinct pigments instead
@@ -239,5 +240,39 @@ func TestColourWalksInPassages(t *testing.T) {
 	if share := float64(most) / float64(len(cs)); share < 0.25 {
 		t.Errorf("the commonest pigment holds %.0f%% of %d marks — the colour is not walking, it is scattering",
 			share*100, len(cs))
+	}
+}
+
+// paletteFor is the palette a seed's colourway resolves to — which, unlike
+// ctx.Palette, is what the render actually paints from.
+func paletteFor(t *testing.T, s *Sketch, ctx sketch.Context) palette.Palette {
+	t.Helper()
+	p, err := colours(s.Traits(ctx).Get(dimColourway), ctx.Palette)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// TestSeedsChooseTheirColours is why the colourway is a trait and not a
+// flag. Sweeping seeds has to give different pictures in different colours;
+// with the palette outside the output space every seed comes out in
+// whatever --palette said, and sweeping the palette instead gives the same
+// composition once per colour — one picture shown five ways.
+func TestSeedsChooseTheirColours(t *testing.T) {
+	s := configured(t)
+	seen := map[string]bool{}
+	for seed := uint64(1); seed <= 30; seed++ {
+		seen[s.Traits(testCtx(t, seed)).Get(dimColourway)] = true
+	}
+	if len(seen) < 6 {
+		t.Errorf("thirty seeds drew only %d colourways — the palette is not varying with the seed", len(seen))
+	}
+	if seen[fromFlag] {
+		t.Error("a seed landed on the from-flag colourway, which carries weight 0")
+	}
+	// And it is still reachable on purpose.
+	if got := configured(t, "--colourway", fromFlag).Traits(testCtx(t, 1)).Get(dimColourway); got != fromFlag {
+		t.Errorf("--colourway %s resolved to %q", fromFlag, got)
 	}
 }

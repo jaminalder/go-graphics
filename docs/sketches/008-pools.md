@@ -75,9 +75,24 @@ a believable third colour wherever two discs cross.
 
 | Flag | Values (weight) |
 |---|---|
+| `--colourway` | 18 curated palettes, **tchelitchew 3**; `from-flag` 0 |
 | `--arrange` | **orbital 3** · **shadows 3** · formation 2 · scatter 1 |
 | `--flow` | horizontal 3 · vertical 2 · diagonal 2 · **spiral 4** · circular 2 · explosive 1 |
 | `--fill` | sparse 1 · open 2 · **medium 3** · **busy 3** · packed 2 |
+
+### `--colourway`: the colours are part of the space
+
+Without this a seed cannot choose a colourway: every seed of a sweep comes
+out in whatever `--palette` said, and sweeping the palette instead gives
+the cartesian product — the same composition repeated once per colour,
+which is one picture shown five ways rather than five pictures. QQL has
+always had this; 008 was the odd one out.
+
+The list is curated rather than the whole ColorLisa set: a transparent wash
+on tinted paper asks something specific of a palette — pigments dark enough
+to read against their own ground, and a lightest colour that can tint the
+sheet. `--colourway from-flag` carries weight 0, so no seed lands on it;
+pass it to hand colour duty back to `--palette`.
 
 ### `--arrange` and `--flow`: where the marks go
 

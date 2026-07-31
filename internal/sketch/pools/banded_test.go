@@ -87,7 +87,7 @@ func TestBandsOverlapTheirNeighbours(t *testing.T) {
 func TestBandPitchHoldsUntilTheCapBinds(t *testing.T) {
 	s := configured(t)
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors))
+	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, testCtx(t, 1)).Colors))
 
 	// The pitch is only free between the two limits: below a couple of
 	// bands a disc still has to come out whole, and above the cap it is the
@@ -132,7 +132,7 @@ func TestBigCircleKeepsFewWideRings(t *testing.T) {
 	radii, _ := s.layoutFor(s.Traits(ctx), ctx.RNG(streamFill)).ladder()
 	big := radii[len(radii)-1]
 	rng := testCtx(t, 1).RNG(streamLayout)
-	_, _, ramp := s.inks(palette.ByLuminance(testCtx(t, 1).Palette.Colors))
+	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, testCtx(t, 1)).Colors))
 
 	p := s.planBands(rng, big, scheme{dir: 1}, ramp)
 	if n := len(p.mid); n > s.MaxBands {
@@ -145,25 +145,43 @@ func TestBigCircleKeepsFewWideRings(t *testing.T) {
 	}
 }
 
-// TestBandColoursGraduate pins the colouring rule. Anchors are neighbours
-// on the luminance-ordered pigments walked in one direction, so successive
-// bands stay related; drawing each band freely gives confetti, and ramping
-// between colours from opposite ends of a palette spends most of the mark
-// in the muddy middle.
-func TestBandColoursGraduate(t *testing.T) {
+// TestBandRampWalksNeighbours pins the colouring rule: a mark's anchors are
+// *consecutive* entries of the luminance-ordered pigments, walked in one
+// direction. A ramp between two colours from opposite ends of a palette
+// spends most of its length in the muddy middle between them, and the mark
+// comes out grey whatever its endpoints were.
+//
+// Checked at the ends, where the interpolation is the identity, so this is
+// exact. Two earlier versions bounded the *step* and then its direction,
+// and both were really testing the palette: neighbours on a five-colour
+// palette can sit far apart in luminance, and interpolating HSL lightness
+// between them does not move luminance monotonically, since hue carries
+// some of it. The endpoints say what the code does regardless.
+func TestBandRampWalksNeighbours(t *testing.T) {
 	s := configured(t, "--banded", "1")
-	for seed := uint64(1); seed <= 8; seed++ {
-		for _, c := range bandedCircles(t, s, seed) {
-			cols := c.bands.colors
-			if len(cols) < 4 {
-				continue
+	ctx := testCtx(t, 1)
+	rng := ctx.RNG(streamLayout)
+	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, ctx).Colors))
+
+	// The anchors round-trip through HSL, so compare within a hair rather
+	// than exactly.
+	near := func(a, b palette.Color) bool {
+		return math.Abs(a.R-b.R) < 1e-9 && math.Abs(a.G-b.G) < 1e-9 && math.Abs(a.B-b.B) < 1e-9
+	}
+	step := func(at, k, dir int) int {
+		return ((at+k*dir)%len(ramp) + len(ramp)) % len(ramp)
+	}
+
+	for at := range ramp {
+		for _, dir := range []int{1, -1} {
+			p := s.planBands(rng, 0.2, scheme{at: at, dir: dir}, ramp)
+			last := step(at, rampAnchors-1, dir)
+			if got := p.colors[0]; !near(got, ramp[at]) {
+				t.Errorf("at=%d dir=%d: the rim band is %v, want the anchor %v", at, dir, got, ramp[at])
 			}
-			for i := 1; i < len(cols); i++ {
-				d := math.Abs(cols[i].Luminance() - cols[i-1].Luminance())
-				if d > 0.3 {
-					t.Errorf("seed %d: bands %d→%d jump %.2f in luminance — the ramp is not graduating",
-						seed, i-1, i, d)
-				}
+			if got := p.colors[len(p.colors)-1]; !near(got, ramp[last]) {
+				t.Errorf("at=%d dir=%d: the centre band is %v, want ramp[%d] = %v — the anchors are not consecutive",
+					at, dir, got, last, ramp[last])
 			}
 		}
 	}
