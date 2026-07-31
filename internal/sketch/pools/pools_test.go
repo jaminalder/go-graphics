@@ -53,7 +53,7 @@ func plan(t *testing.T, s *Sketch, seed uint64) []circle {
 	tr := s.Traits(ctx)
 	l := s.layoutFor(tr, ctx.RNG(streamFill))
 	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, ctx).Colors))
-	return s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), rng, 1, ramp)
+	return s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), tr.Get(dimSizes), rng, 1, ramp)
 }
 
 func TestDeterminism(t *testing.T) {
@@ -221,7 +221,7 @@ func TestColourWalksInPassages(t *testing.T) {
 	tr := s.Traits(ctx)
 	l := s.layoutFor(tr, ctx.RNG(streamFill))
 	_, _, ramp := s.inks(palette.ByLuminance(paletteFor(t, s, ctx).Colors))
-	cs := s.plan(l, "orbital", "spiral", rng, 1, ramp)
+	cs := s.plan(l, "orbital", "spiral", "varied", rng, 1, ramp)
 
 	// plan sorts by size for painting, so count distinct pigments instead
 	// of walking neighbours: a walk visits a few, confetti visits them all

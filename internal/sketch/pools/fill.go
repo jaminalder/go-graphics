@@ -40,6 +40,11 @@ var schema = trait.Schema{
 		Values: colourways,
 	},
 	{
+		Name: dimSizes, Key: "s", InName: true,
+		Doc:    "whether every run is the same size",
+		Values: sizeVarieties,
+	},
+	{
 		Name: dimFlow, Key: "w", InName: true,
 		Doc:    "the field a run of marks follows",
 		Values: flows,
@@ -182,4 +187,12 @@ func (l layout) inPaper(c geom.Circle, aspect float64) bool {
 // commonest mark is the width at which strands read as strands.
 func (l layout) spacing(radii []float64) float64 {
 	return radii[0] * 3
+}
+
+// lattice is the seed spacing when every run is the same size: exactly one
+// mark-pitch, so consecutive walks land shoulder to shoulder and the rows
+// register into a grid. Any wider and the rows read as stripes; any
+// narrower and every second walk is rejected wholesale.
+func (l layout) lattice(r float64) float64 {
+	return 2*r + r*math.Max(l.gap, 0)
 }

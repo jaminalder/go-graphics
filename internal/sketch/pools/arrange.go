@@ -36,7 +36,22 @@ import (
 const (
 	dimArrange = "arrange"
 	dimFlow    = "flow"
+	dimSizes   = "size-variety"
 )
+
+// sizeVariety decides whether each run draws its own size or the whole
+// sheet shares one.
+//
+// Constant is not "less varied": it is a different object. One size across
+// every run, with the walks seeded exactly one mark-pitch apart, makes the
+// runs line up into a lattice — a tessellated field rather than a set of
+// strands. It is the setting QQL's grid pieces are built on, and no amount
+// of tuning the varied path produces it, because rows whose marks differ in
+// size cannot register with each other.
+var sizeVarieties = []trait.Value{
+	{Name: "varied", Weight: 3},
+	{Name: "constant", Weight: 2},
+}
 
 // arrangements are the structures a seed can draw: where the walks begin.
 // Orbital and shadows carry the weight: the sweeping arcs of one and the

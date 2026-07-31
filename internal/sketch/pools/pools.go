@@ -180,7 +180,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	paper, tint, ramp := s.inks(palette.ByLuminance(pal.Colors))
 
-	circles := s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), rng, aspect, ramp)
+	circles := s.plan(l, tr.Get(dimArrange), tr.Get(dimFlow), tr.Get(dimSizes), rng, aspect, ramp)
 
 	// The canvas starts as bare paper; the ground is glazed onto it, on its
 	// own stream so that changing the marks never repaints the sky.
@@ -248,10 +248,24 @@ func groundTint(byLum []palette.Color) palette.Color {
 
 // plan places every circle and settles what it is made of, largest first
 // so the paint order lets small marks settle on top.
-func (s *Sketch) plan(l layout, arrange, flow string, rng *rand.Rand, aspect float64, ramp []palette.Color) []circle {
+func (s *Sketch) plan(l layout, arrange, flow, sizes string, rng *rand.Rand, aspect float64, ramp []palette.Color) []circle {
 	radii, weights := l.ladder()
 	index := geom.NewIndex(aspect, 1, radii[len(radii)-1])
 	walk := newColorWalk(rng, len(ramp))
+
+	// One size for the whole sheet, or one per run. Constant also decides
+	// how the walks are seeded: at exactly a mark-pitch they register into
+	// a lattice, which is the whole point of it.
+	constant := sizes == "constant"
+	// Drawn from the lower rungs only. The ladder reaches a disc of a
+	// quarter of the canvas, and a sheet tiled with those is not a lattice
+	// — it is four marks. A constant size has to be one that can actually
+	// tile, and the variety a big mark brings comes from the varied path.
+	fixed := rnd.PickIndex(rng, weights[:max(len(weights)/2, 1)])
+	seedGap := l.spacing(radii)
+	if constant {
+		seedGap = l.lattice(radii[fixed])
+	}
 
 	var out []circle
 	place := func(c geom.Circle, sc scheme) bool {
@@ -263,9 +277,9 @@ func (s *Sketch) plan(l layout, arrange, flow string, rng *rand.Rand, aspect flo
 		return true
 	}
 
-	groups := startGroups(arrange, rng, aspect, l.spacing(radii))
+	groups := startGroups(arrange, rng, aspect, seedGap)
 	if groups == nil {
-		return s.scatter(l, rng, aspect, ramp, radii, weights, index, walk, place, &out)
+		return s.scatter(l, rng, aspect, ramp, radii, weights, constant, fixed, index, walk, place, &out)
 	}
 
 	f := newField(flow, rng, aspect)
@@ -275,8 +289,14 @@ func (s *Sketch) plan(l layout, arrange, flow string, rng *rand.Rand, aspect flo
 		}
 		// One size and one colour for the whole run. This is the rule the
 		// look turns on: per mark they come out as salt and pepper and no
-		// strand reads as a strand.
+		// strand reads as a strand. Under a constant size variety the size
+		// is held across every run as well, which is what lets the runs
+		// register into a lattice instead of merely lying beside one
+		// another.
 		rung := rnd.PickIndex(rng, weights)
+		if constant {
+			rung = fixed
+		}
 		r := radii[rung]
 		sc := walk.next(rng)
 
@@ -290,13 +310,19 @@ func (s *Sketch) plan(l layout, arrange, flow string, rng *rand.Rand, aspect flo
 				x, y := start.x, start.y
 				for step := 0; step < maxWalk; step++ {
 					if placed := place(geom.Circle{X: x, Y: y, R: r}, sc); placed {
-						s.satellite(l, rng, index, aspect, geom.Circle{X: x, Y: y, R: r}, rung, radii, sc, ramp, &out)
+						s.satellite(l, rng, index, aspect, geom.Circle{X: x, Y: y, R: r}, rung, radii, constant, sc, ramp, &out)
 					}
 					// Advance by this mark's own diameter, which is what
 					// makes consecutive marks touch. A fixed grid cannot:
 					// its step would have to be the size of the mark being
 					// laid, and that changes with every run.
-					adv := 2*r + r*math.Max(l.gap, 0)
+					//
+					// With a hair of clearance on top. Advancing by exactly
+					// the distance the collision test demands puts every
+					// mark precisely on the threshold, where rounding
+					// decides it — half a run is silently dropped and a
+					// dense sheet comes out at a third of its budget.
+					adv := (2*r + r*math.Max(l.gap, 0)) * walkClearance
 					th := f.at(x, y)
 					x += dir * adv * math.Cos(th)
 					y += dir * adv * math.Sin(th)
@@ -316,14 +342,19 @@ func (s *Sketch) plan(l layout, arrange, flow string, rng *rand.Rand, aspect flo
 // cannot spin in place.
 const maxWalk = 400
 
+// walkClearance keeps a run's marks off the exact collision threshold.
+const walkClearance = 1.02
+
 // satellite sometimes lays a companion across a mark. Left to chance the
 // overlaps either never happen or arrive as a pile-up; the crossings are
 // part of the subject, so they are placed on purpose — and from one rung
 // down, because a speck crossing a large disc shows nothing.
 func (s *Sketch) satellite(l layout, rng *rand.Rand, index *geom.Index, aspect float64,
-	c geom.Circle, rung int, radii []float64, sc scheme, ramp []palette.Color, out *[]circle,
+	c geom.Circle, rung int, radii []float64, constant bool, sc scheme, ramp []palette.Color, out *[]circle,
 ) {
-	if rng.Float64() >= l.satellites {
+	// A companion is a mark of another size laid off the lattice, which is
+	// the one thing a lattice cannot have: constant means constant.
+	if constant || rng.Float64() >= l.satellites {
 		return
 	}
 	sr := radii[max(rung-1, 0)]
@@ -343,7 +374,7 @@ func (s *Sketch) satellite(l layout, rng *rand.Rand, index *geom.Index, aspect f
 // scatter is the structureless arrangement: darts rather than walks, and
 // the only one that leaves the sheet with no direction in it at all.
 func (s *Sketch) scatter(l layout, rng *rand.Rand, aspect float64, ramp []palette.Color,
-	radii, weights []float64, index *geom.Index, walk *colorWalk,
+	radii, weights []float64, constant bool, fixed int, index *geom.Index, walk *colorWalk,
 	place func(geom.Circle, scheme) bool, out *[]circle,
 ) []circle {
 	// Attempts, not placements: a dart that lands on an occupied patch has
@@ -351,6 +382,9 @@ func (s *Sketch) scatter(l layout, rng *rand.Rand, aspect float64, ramp []palett
 	// far short of its own budget.
 	for tries := 0; len(*out) < l.count && tries < l.count*4; tries++ {
 		rung := rnd.PickIndex(rng, weights)
+		if constant {
+			rung = fixed
+		}
 		r := radii[rung]
 		x, y, ok := l.bestCandidate(rng, index, aspect, r)
 		if !ok {
@@ -359,7 +393,7 @@ func (s *Sketch) scatter(l layout, rng *rand.Rand, aspect float64, ramp []palett
 		sc := walk.next(rng)
 		c := geom.Circle{X: x, Y: y, R: r}
 		if place(c, sc) {
-			s.satellite(l, rng, index, aspect, c, rung, radii, sc, ramp, out)
+			s.satellite(l, rng, index, aspect, c, rung, radii, constant, sc, ramp, out)
 		}
 	}
 	sort.SliceStable(*out, func(i, j int) bool { return (*out)[i].R > (*out)[j].R })
