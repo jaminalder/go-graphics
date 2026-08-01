@@ -310,10 +310,16 @@ registration error, granulation and wall wetness at once, which is why it is
 one dimension and not five flags.
 
 `water` and `scheme` are **appended** to the schema, and `watercolour` is
-appended to `fills` at **weight 0**, both so that no existing seed is moved:
+appended to `fills` at **weight 0**, so that no existing seed's *draws* move:
 `Derive` consumes one draw per dimension in schema order, and a weight-0
-value does not change a dimension's total. Turning the weight up is one line
-in `traits.go` — and it changes what every seed draws for `fills`.
+value does not change a dimension's total. Every seed therefore keeps the
+structure and the fill styles it had. Turning the weight up is one line in
+`traits.go` — and it does change what every seed draws for `fills`.
+
+`scheme` is not watercolour-only: a colour organisation is a fact about the
+sheet, so the pencil, band and hatch cells take their pigment from it too.
+That is a deliberate change to what an existing seed *looks* like, even
+though what it draws is the same — before this, every sheet was `passage`.
 
 ## Tunables
 
