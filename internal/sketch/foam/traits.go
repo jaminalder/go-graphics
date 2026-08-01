@@ -54,6 +54,7 @@ var schema = trait.Schema{
 			{Name: "mixed", Weight: 3},
 			{Name: "drawn", Weight: 2},
 			{Name: "airy", Weight: 2},
+			{Name: "net", Weight: 0},
 		},
 	},
 	{
@@ -90,6 +91,7 @@ type levels struct {
 	ink   float64 // wall thickness, canvas units
 	swell float64 // extra thickness at a junction, ×ink
 	node  float64 // distance over which a third cell counts as near
+	round float64 // radius a cell's corners are rounded over, canvas units
 
 	// the fills
 	styles [nstyles]float64 // relative weight of each style
@@ -190,11 +192,11 @@ func newLine(level string, rng *rand.Rand, l *levels) {
 	var f float64
 	switch level {
 	case "fine":
-		f, l.swell = rnd.Uniform(rng, 0.05, 0.075), rnd.Uniform(rng, 2.0, 3.0)
+		f, l.swell = rnd.Uniform(rng, 0.05, 0.075), rnd.Uniform(rng, 1.2, 1.9)
 	case "bold":
-		f, l.swell = rnd.Uniform(rng, 0.15, 0.22), rnd.Uniform(rng, 1.8, 2.8)
+		f, l.swell = rnd.Uniform(rng, 0.15, 0.22), rnd.Uniform(rng, 1.0, 1.6)
 	default: // drawn
-		f, l.swell = rnd.Uniform(rng, 0.09, 0.14), rnd.Uniform(rng, 2.0, 3.0)
+		f, l.swell = rnd.Uniform(rng, 0.09, 0.14), rnd.Uniform(rng, 1.2, 1.9)
 	}
 	l.ink = l.base * f
 	// How far from a junction the swelling reaches — a fraction of a cell,
@@ -203,6 +205,18 @@ func newLine(level string, rng *rand.Rand, l *levels) {
 	// counts as a junction, and the swelling that was meant to be a fillet
 	// becomes a uniform dark halo with pebbles floating in it.
 	l.node = l.base * rnd.Uniform(rng, 0.25, 0.45)
+	// How hard the corners are rounded. A cell of a foam meets its
+	// neighbours at 120°, so left alone it is a polygon with curved sides —
+	// and at a glance a polygon is what it reads as, however well the sides
+	// curve. Rounding is what turns it into a pebble.
+	//
+	// It has to stay well under half a cell. Past that the corners eat the
+	// walls between them: the cells come apart into discs floating in ink
+	// rather than sharing a boundary, and a foam whose cells do not touch is
+	// not a foam. It also does the swelling's job at the junctions, which is
+	// why the swell ranges above are half what they were before rounding
+	// existed — run together they gave every node a blot.
+	l.round = l.base * rnd.Uniform(rng, 0.16, 0.28)
 }
 
 // newFills sets the mix of fill styles.
@@ -212,6 +226,13 @@ func newLine(level string, rng *rand.Rand, l *levels) {
 // one cell in six as bare paper.
 func newFills(level string, l *levels) {
 	switch level {
+	case "net":
+		// Bare paper everywhere: the structure with nothing in it. Weight 0
+		// in the schema, so no seed lands on it — an unfilled sheet is a
+		// drawing of the algorithm rather than a picture — but it is one
+		// flag away, and it is the only way to actually look at what the
+		// walls are doing.
+		l.styles = [nstyles]float64{styleEmpty: 1}
 	case "washed":
 		l.styles = [nstyles]float64{styleWash: 10, stylePencil: 1, styleBands: 1, styleHatch: 0.5, styleEmpty: 2.5}
 	case "drawn":
@@ -254,6 +275,7 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 		{"ink", func() { l.ink = s.pin.ink }},
 		{"swell", func() { l.swell = s.pin.swell }},
 		{"node", func() { l.node = s.pin.node }},
+		{"round", func() { l.round = s.pin.round }},
 		{"wash", func() { l.styles[styleWash] = s.pin.styles[styleWash] }},
 		{"pencil", func() { l.styles[stylePencil] = s.pin.styles[stylePencil] }},
 		{"bands", func() { l.styles[styleBands] = s.pin.styles[styleBands] }},
@@ -269,6 +291,9 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 	// seed drew rather than the one that was asked for.
 	if s.knobs.WasSet("base") && !s.knobs.WasSet("node") {
 		l.node = l.base * 0.35
+	}
+	if s.knobs.WasSet("base") && !s.knobs.WasSet("round") {
+		l.round = l.base * 0.22
 	}
 	return l
 }

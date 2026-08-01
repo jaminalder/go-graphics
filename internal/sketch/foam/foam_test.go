@@ -220,6 +220,29 @@ func TestTheWarpMovesTheStructureAndNotTheFrame(t *testing.T) {
 	}
 }
 
+// TestTheNetFillLevelLeavesEveryCellBare. `--fills net` is the only way to
+// actually look at the structure: no seed draws it, because an unfilled
+// sheet is a drawing of the algorithm rather than a picture.
+func TestTheNetFillLevelLeavesEveryCellBare(t *testing.T) {
+	for seed := uint64(1); seed <= 5; seed++ {
+		for _, d := range densities {
+			sh := planned(t, configured(t, "--fills", "net", "--density", d), seed)
+			for i, dr := range sh.skin {
+				if dr.style != styleEmpty {
+					t.Fatalf("%s seed %d: cell %d is filled on a bare net", d, seed, i)
+				}
+			}
+		}
+	}
+	// And no seed lands on it by itself.
+	s := configured(t)
+	for seed := uint64(1); seed <= 60; seed++ {
+		if got := s.Traits(testCtx(t, seed)).Get(dimFills); got == "net" {
+			t.Fatalf("seed %d drew the net fill level, which carries weight 0", seed)
+		}
+	}
+}
+
 func TestConfigureRejectsOutOfRange(t *testing.T) {
 	for _, args := range [][]string{
 		{"--weight", "9"},

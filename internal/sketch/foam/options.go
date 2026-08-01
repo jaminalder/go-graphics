@@ -32,6 +32,7 @@ func (s *Sketch) declare() {
 	o.Float("ink", "wall thickness, canvas units", "ik", 0.0005, 0.05, &s.pin.ink)
 	o.Float("swell", "extra wall thickness at a junction, x ink", "sw", 0, 8, &s.pin.swell)
 	o.Float("node", "distance over which a third cell counts as near", "nd", 0.002, 0.3, &s.pin.node)
+	o.Float("round", "radius a cell corner is rounded over, canvas units", "rd", 0, 0.3, &s.pin.round)
 
 	o.Float("wash", "weight of the wash fill", "fw", 0, 20, &s.pin.styles[styleWash])
 	o.Float("pencil", "weight of the pencil fill", "fp", 0, 20, &s.pin.styles[stylePencil])

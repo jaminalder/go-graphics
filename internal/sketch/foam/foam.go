@@ -141,7 +141,7 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	rng := ctx.RNG(streamLayout)
 	sites := s.pack(l, rng, aspect)
 	group := cells.Merge(rng, sites, l.merge, l.maxLobe)
-	foam := cells.New(sites, group, aspect, cells.Params{Node: l.node, Stat: statRes})
+	foam := cells.New(sites, group, aspect, cells.Params{Node: l.node, Round: l.round, Stat: statRes})
 
 	field := noise.New(ctx.Seed)
 	return &sheet{

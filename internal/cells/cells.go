@@ -50,7 +50,13 @@ type Hit struct {
 	Cell int
 	// Wall is the distance to the nearest wall, in canvas units. Every fill
 	// uses it to know how deep inside its own cell it is; it is +Inf when
-	// only one cell is in range.
+	// only one cell is in range, and negative just inside a rounded corner.
+	//
+	// It is measured against a *soft* minimum over the other cells, so a
+	// cell's corners are rounded off over Params.Round. A hard minimum
+	// leaves every corner sharp — three cells meeting at 120° give a
+	// three-cornered cell, and a sheet of those reads as a cracked pane
+	// whatever the walls between the corners do.
 	Wall float64
 	// Node is how crowded the point is with cells beyond the two whose wall
 	// it is on: near 0 halfway along a wall, and rising toward 1 at a
@@ -71,12 +77,16 @@ type Hit struct {
 type Params struct {
 	// Node is the distance over which a further cell stops counting as near.
 	Node float64
+	// Round is the radius a cell's corners are rounded over. 0 leaves them
+	// sharp; a value approaching the cell size turns the cells into discs
+	// with gaps between them.
+	Round float64
 	// Stat is the number of measuring samples along the canvas height.
 	Stat int
 }
 
 // DefaultParams are sensible for a canvas of a few dozen cells.
-func DefaultParams() Params { return Params{Node: 0.05, Stat: 320} }
+func DefaultParams() Params { return Params{Node: 0.05, Round: 0.02, Stat: 320} }
 
 // Foam is a built partition: sites bucketed into a uniform grid, the
 // site → cell mapping, and the measured cells.
@@ -85,6 +95,7 @@ type Foam struct {
 	group []int
 	cells []Cell
 	node  float64
+	round float64
 
 	// Uniform grid over the sites. Sites may lie outside the canvas, so the
 	// grid covers the sites' own bounds rather than the frame.
@@ -105,7 +116,11 @@ func New(sites []Site, group []int, aspect float64, p Params) *Foam {
 	if len(group) != len(sites) {
 		panic("cells: group length does not match sites")
 	}
-	f := &Foam{sites: sites, group: group, node: math.Max(p.Node, 1e-9)}
+	f := &Foam{
+		sites: sites, group: group,
+		node:  math.Max(p.Node, 1e-9),
+		round: math.Max(p.Round, 0),
+	}
 	f.build(aspect)
 	f.measure(aspect, p.Stat)
 	return f
@@ -188,7 +203,7 @@ func (f *Foam) At(u, v float64) Hit {
 		// exact defect the smooth measure exists to avoid. At six lengths
 		// the step is e⁻⁶, a quarter of a percent of a line width, and the
 		// extra ring costs one bucket row.
-		if nb.n >= 2 && float64(r-1)*f.cell-f.maxW > nb.dist[1]+6*f.node {
+		if nb.n >= 2 && float64(r-1)*f.cell-f.maxW > nb.dist[1]+6*math.Max(f.node, f.round) {
 			break
 		}
 		f.ring(cu, cv, r, u, v, &nb)
@@ -199,7 +214,21 @@ func (f *Foam) At(u, v float64) Hit {
 	}
 	// Halved because d₂ − d₁ closes at twice the rate the point approaches
 	// the wall: both distances move, in opposite directions.
+	//
+	// The second term rounds the corners. Replacing the hard minimum over
+	// the other cells with a soft one — −σ·log Σ exp(−dₖ/σ) — pulls the
+	// wall in wherever two of them are close at once, which is exactly at a
+	// corner and nowhere else: mid-wall the sum has one term and the soft
+	// minimum equals the hard one, so a straight run of wall is untouched
+	// while the corner it runs into is rounded over σ.
 	h.Wall = (nb.dist[1] - nb.dist[0]) / 2
+	if f.round > 0 {
+		crowd := 1.0
+		for k := 2; k < nb.n; k++ {
+			crowd += math.Exp(-(nb.dist[k] - nb.dist[1]) / f.round)
+		}
+		h.Wall -= f.round * math.Log(crowd) / 2
+	}
 	// Every cell past the second contributes, weighted by how far behind
 	// the second it is. The sum is smooth in the position because nothing
 	// in it depends on the *order* of the terms.

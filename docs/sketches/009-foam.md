@@ -91,10 +91,25 @@ route this sketch deliberately does not take.
 5. **Walls and junctions.** With `d₁ ≤ d₂ ≤ …` the nearest *distinct*
    cells:
 
-   - `wall = (d₂ − d₁)/2` — the distance to the nearest wall, and the
-     field every fill uses to know how deep inside its cell it is. Halved
-     because `d₂ − d₁` closes at twice the rate the point approaches the
-     wall.
+   - `wall = (d₂ − d₁)/2 − (Round/2)·log Σ_{k≥2} exp(−(dₖ − d₂)/Round)` —
+     the distance to the nearest wall, and the field every fill uses to
+     know how deep inside its cell it is. Halved because `d₂ − d₁` closes
+     at twice the rate the point approaches the wall.
+
+     The second term **rounds the corners**. A cell of a foam meets its
+     neighbours at 120°, so measured against a hard minimum it is a polygon
+     with curved sides — and at a glance a polygon is what it reads as,
+     however well the sides curve. Replacing that minimum with a soft one
+     pulls the wall in wherever two other cells are close at once, which is
+     at a corner and nowhere else: mid-wall the sum has a single term, the
+     soft minimum equals the hard one, and a straight run of wall is
+     untouched to within a hundredth of `Round`.
+
+     `Round` has to stay well under half a cell. Past that the corners eat
+     the walls between them and the cells come apart into discs floating in
+     ink; a foam whose cells do not touch is not a foam. It also does the
+     swelling's job at the junctions, so `swell` is half what it was before
+     rounding existed — run together they gave every node a blot.
    - `node = 1 − exp(−Σ_{k≥3} exp(−(dₖ − d₂)/Node))` — a smooth count of
      how crowded the point is with cells beyond the two whose wall it is
      on. Near 0 halfway along a wall, rising toward 1 at a junction, and
@@ -158,6 +173,15 @@ without ever seeing a polygon.
 - **empty** — bare paper. Load-bearing: a sheet with every cell filled has
   nowhere to rest, and the reference leaves perhaps one cell in six white.
 
+`--fills net` is every cell empty: the structure with nothing in it. It
+carries weight 0, so no seed draws it — an unfilled sheet is a drawing of
+the algorithm rather than a picture — but it is one flag away, and it is
+the only way to actually look at what the walls are doing.
+
+```sh
+staticart render foam --fills net --density packed --line drawn --seed 7
+```
+
 ## Traits
 
 | dimension | key | values |
@@ -165,7 +189,7 @@ without ever seeing a polygon.
 | `colourway` | c | which palette the sheet is drawn from |
 | `density` | d | sparse, open, medium, busy, packed |
 | `lobes` | l | tidy, few, many, most |
-| `fills` | f | washed, mixed, drawn, airy |
+| `fills` | f | washed, mixed, drawn, airy, net (weight 0) |
 | `line` | n | fine, drawn, bold |
 
 `lobes` carries both ways the sheet can bend — how many cells are merged
@@ -188,6 +212,7 @@ one particular sheet.
 | `--ink` | wall thickness in canvas units |
 | `--swell` | extra thickness at a junction, × `ink` |
 | `--node` | distance over which a further cell counts as near |
+| `--round` | radius a cell's corners are rounded over |
 | `--wobble` | hand wander of the line and the strokes |
 | `--rim`, `--rim-width`, `--mottle`, `--blotch`, `--grain` | the wash's character inside a cell |
 | `--wash`, `--pencil`, `--bands`, `--hatch`, `--empty` | style weights, overriding `fills` |
@@ -201,8 +226,9 @@ gives a hand-set cell size under a line scaled for the one the seed drew.
 
 - Three walls meet at each junction, and the junction is visibly swollen
   while the wall is at its thinnest between two junctions.
-- Walls are curved. If they read as straight segments, `weight` is too low
-  or the size ladder is too flat.
+- Walls are curved and the corners between them are rounded. If the cells
+  read as polygons, `round` is too low; if they float apart into discs with
+  ink between them rather than sharing walls, it is too high.
 - Some cells are concave lobes wrapping around a neighbour.
 - Cell sizes span at least an order of magnitude in area on a `busy` sheet
   — big lobes next to slivers, as in the reference.

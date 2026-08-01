@@ -22,7 +22,7 @@ func scatter(rng *rand.Rand, n int, aspect float64) []Site {
 }
 
 // slowAt is the definition the grid walk has to match: scan every site.
-func slowAt(sites []Site, group []int, node, u, v float64) Hit {
+func slowAt(sites []Site, group []int, p Params, u, v float64) Hit {
 	var nb near
 	for i, s := range sites {
 		nb.add(group[i], math.Hypot(s.X-u, s.Y-v)-s.W)
@@ -32,10 +32,12 @@ func slowAt(sites []Site, group []int, node, u, v float64) Hit {
 		return h
 	}
 	h.Wall = (nb.dist[1] - nb.dist[0]) / 2
-	soft := 0.0
+	crowd, soft := 1.0, 0.0
 	for k := 2; k < nb.n; k++ {
-		soft += math.Exp(-(nb.dist[k] - nb.dist[1]) / node)
+		crowd += math.Exp(-(nb.dist[k] - nb.dist[1]) / p.Round)
+		soft += math.Exp(-(nb.dist[k] - nb.dist[1]) / p.Node)
 	}
+	h.Wall -= p.Round * math.Log(crowd) / 2
 	h.Node = 1 - math.Exp(-soft)
 	return h
 }
@@ -53,11 +55,14 @@ func TestTheGridWalkFindsWhatABruteForceScanFinds(t *testing.T) {
 		f := New(sites, group, 1.25, p)
 		for range 2000 {
 			u, v := rng.Float64()*1.25, rng.Float64()
-			got, want := f.At(u, v), slowAt(sites, group, p.Node, u, v)
+			got, want := f.At(u, v), slowAt(sites, group, p, u, v)
 			if got.Cell != want.Cell {
 				t.Fatalf("n=%d at (%.4f,%.4f): cell %d, want %d", n, u, v, got.Cell, want.Cell)
 			}
-			if math.Abs(got.Wall-want.Wall) > 1e-9 && !(math.IsInf(got.Wall, 1) && math.IsInf(want.Wall, 1)) {
+			// Wall carries the same search-cutoff approximation as Node —
+			// through the corner rounding, which is a sum over the same
+			// cells. The cell, which decides what is drawn where, is exact.
+			if math.Abs(got.Wall-want.Wall) > 1e-4 && !(math.IsInf(got.Wall, 1) && math.IsInf(want.Wall, 1)) {
 				t.Fatalf("n=%d at (%.4f,%.4f): wall %v, want %v", n, u, v, got.Wall, want.Wall)
 			}
 			// Node is exact only up to the search cutoff: a cell more than
@@ -125,6 +130,46 @@ func TestJunctionsReadAsJunctions(t *testing.T) {
 	mx, my = mx+ox/l*0.22, my+oy/l*0.22
 	if got := f.At(mx, my).Node; got > 0.05 {
 		t.Errorf("node mid-wall is %.3f, want ~0 — the ink will not taper", got)
+	}
+}
+
+// TestCornersAreRounded is what stops a cell reading as a polygon. Three
+// cells meet at 120°, so a cell of a foam has corners; a hard minimum over
+// the neighbours leaves them sharp, and a sheet of sharp-cornered cells
+// reads as a cracked pane however well the walls between the corners curve.
+//
+// The rounding has to be local: a straight run of wall, where only one
+// other cell is anywhere near, must come out untouched.
+func TestCornersAreRounded(t *testing.T) {
+	const r = 0.25
+	var sites []Site
+	for i := range 3 {
+		a := float64(i)*2*math.Pi/3 + 0.3
+		sites = append(sites, Site{X: 0.5 + r*math.Cos(a), Y: 0.5 + r*math.Sin(a), W: 0.02})
+	}
+	sharp := New(sites, Identity(3), 1, Params{Node: 0.05, Round: 0, Stat: 64})
+	round := New(sites, Identity(3), 1, Params{Node: 0.05, Round: 0.03, Stat: 64})
+
+	// Just inside a cell, a little way out from the junction at the centre:
+	// the corner. Rounding must pull the wall in toward the site.
+	cx, cy := 0.5+0.06*math.Cos(0.3), 0.5+0.06*math.Sin(0.3)
+	a, b := sharp.At(cx, cy).Wall, round.At(cx, cy).Wall
+	if b >= a {
+		t.Errorf("at the corner the wall is %.5f rounded against %.5f sharp — nothing was rounded off", b, a)
+	}
+
+	// Mid-wall, well away from the junction, where only one other cell is
+	// near. The soft minimum has a single term there and must equal the hard
+	// one, or the rounding is thinning every wall rather than its corners.
+	mx, my := (sites[0].X+sites[1].X)/2, (sites[0].Y+sites[1].Y)/2
+	ox, oy := mx-0.5, my-0.5
+	l := math.Hypot(ox, oy)
+	mx, my = mx+ox/l*0.22, my+oy/l*0.22
+	a, b = sharp.At(mx, my).Wall, round.At(mx, my).Wall
+	// Under a hundredth of the rounding radius, against the σ·ln2/2 it
+	// takes off at the corner.
+	if math.Abs(a-b) > 0.01*0.03 {
+		t.Errorf("mid-wall the rounding moved the wall from %.6f to %.6f", a, b)
 	}
 }
 
@@ -231,8 +276,9 @@ func TestMergeIsDeterministic(t *testing.T) {
 // from the rest. On an evenly packed sheet nearly all of them should have
 // real area, and the areas should account for the whole canvas.
 func TestEveryCellIsMeasured(t *testing.T) {
+	p := DefaultParams()
 	sites := scatter(rngFor(5), 50, 1.2)
-	f := New(sites, Identity(50), 1.2, DefaultParams())
+	f := New(sites, Identity(50), 1.2, p)
 	total, empty := 0.0, 0
 	for _, c := range f.Cells() {
 		total += c.Area
@@ -240,7 +286,11 @@ func TestEveryCellIsMeasured(t *testing.T) {
 			empty++
 			continue
 		}
-		if c.Inradius <= 0 {
+		// A cell can hold area and still have no interior: the rounding is
+		// taken off the wall distance, so a cell smaller than the rounding
+		// radius lies entirely inside its own corners. Anything comfortably
+		// larger than that has to have somewhere to put a fill.
+		if c.Inradius <= 0 && c.Area > 4*p.Round*p.Round {
 			t.Errorf("cell %d has area %.4f but no inradius", c.ID, c.Area)
 		}
 		if c.CX < 0 || c.CX > 1.2 || c.CY < 0 || c.CY > 1 {
