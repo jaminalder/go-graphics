@@ -21,6 +21,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/contour"
 	"github.com/jaminalder/go-graphics/internal/sketch/drift"
 	"github.com/jaminalder/go-graphics/internal/sketch/foam"
+	"github.com/jaminalder/go-graphics/internal/sketch/hatchbook"
 	"github.com/jaminalder/go-graphics/internal/sketch/pools"
 	"github.com/jaminalder/go-graphics/internal/sketch/qql"
 	"github.com/jaminalder/go-graphics/internal/sketch/rounds"
@@ -34,6 +35,7 @@ func registry() *sketch.Registry {
 		contour.New(),
 		drift.New(),
 		foam.New(),
+		hatchbook.New(),
 		pools.New(),
 		qql.New(),
 		rounds.New(),

@@ -38,6 +38,7 @@ The first sketch reproduces
 | Noise / field | Deterministic scalar fields `f(x, y) → float64`, e.g. Perlin + fBm octaves. Seedable, no global state. | `internal/noise` |
 | `Sketch` | One artwork algorithm: deterministic function of (params, seed, size) → `image.Image`. | `internal/sketch`, one subpackage per sketch |
 | `Swatch` | A colour with room to move: an HSB base plus a per-channel spread and a clamp box it may never leave. Drawing from one repeatedly gives a family; stepping from the previous draw walks that family. | `internal/palette` |
+| Hatch | A region filled with repeated marks: a coverage function of a point *and* the region containing it. The arranging rule (parallel, contour, radial, flow, …) is a parameter, not a type; colour is the caller's. | `internal/hatch` |
 | Partition / foam | The canvas divided into curved-walled cells, each addressable: which cell a point is in, its distance to the nearest wall, how crowded it is with further cells. Per cell: area, centroid, inscribed radius. A distance *field* (Worley) cannot be filled; a partition can. | `internal/cells` |
 | Trait / output space | A sketch's space of outcomes as orthogonal, weighted, discrete dimensions derived from the seed and overridable per render. The idea behind QQL; the machinery is sketch-agnostic. | `internal/trait` |
 | Render | Pixel-loop execution (parallel), size profiles, PNG/JPEG encoding. | `internal/render` |
@@ -58,6 +59,8 @@ internal/
   geom/                   circles + spatial index            → (stdlib only)
   cells/                  weighted partition of the canvas
                           into fillable cells (foam)         → (stdlib only)
+  hatch/                  filling a region with repeated
+                          marks: coverage functions          → mathx, noise
   noise/                  Perlin, fBm, Worley, Hash01        → (stdlib only)
   trait/                  weighted output-space dimensions,
                           seed derivation, CLI overrides     → (stdlib only)
@@ -70,6 +73,8 @@ internal/
     sketchtest/           shared test helpers (goldens etc.) → sketch
     contour/, tapestry/, circles/, drift/, rounds/,
     shoal/, qql/, pools/, foam/             the sketches     → all of the above
+    hatchbook/            specimen sheet for hatch (a
+                          catalogue, not an artwork)         → hatch, palette
 docs/                     this file, sketch specs, idea backlog, reference data
 tools/                    code generators (palette data)
 out/                      rendered images (gitignored)
@@ -84,7 +89,8 @@ cmd → sketch (registry) → {gradient, noise, render, trait} → palette → m
 Rules:
 
 - `mathx`, `geom`, `noise`, `trait`, `rnd`, `opt` and `cells` are leaf
-  packages: stdlib imports only.
+  packages: stdlib imports only. `hatch` sits in the same tier but imports
+  `mathx` and `noise` (see decision 38).
 - Sketches live in subpackages of `internal/sketch`; `cmd` discovers them
   only through the registry. Sketch-specific CLI options are owned by the
   sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
@@ -303,6 +309,10 @@ type Traited interface {
 | 34 | A partition (`internal/cells`), not another distance field | Sketch 009 needed regions that could be *filled* — a wash in one, hatching in the next — and `noise.Worley` answers only "how far to the nearest site". The addition is small (which cell won the argmin, plus one measuring pass for area/centroid/inradius) and it is what turns cell noise into a structure a sketch can address. It is a leaf package rather than sketch-private because filling a partition is a whole family of sketches, not one. The metric is additively weighted (Apollonius) so the walls are arcs; sites may be merged so a cell can be a concave lobe. |
 | 35 | The junction measure is a smooth crowding count, not "how near is the third cell" | The ink swells where cells meet, which needs a number that is 1 at a junction and 0 mid-wall. Ranking gives one for free — but ranking is not smooth in position: the identity of the third-nearest cell swaps along rays running out of every junction, and the measure creases along them. Fed into the line width the creases came out as sharp spikes radiating from every node, invisible at 600px and unmissable at 6000. Summing `exp(−(dₖ−d₂)/σ)` over *every* further cell depends on no ordering at all, and the same sum makes a four-way junction swell more than a three-way one, which is correct. |
 | 36 | Sketch 009 bends the plane rather than only the metric | A weighted diagram curves a wall only where the two sites either side of it differ sharply in weight, and in a packed sheet most neighbours are the same size — the result reads as a cracked pane. A curl-noise domain warp, wavelength many cells long and displacement a fraction of one, curves every wall for two noise samples. Curl rather than a plain gradient because it is divergence-free: it shears the plane without compressing it, so cells come out bent rather than squeezed. It is bounded by a tanh limiter and by widening the pack's overscan, so a displaced lookup still lands among sites. |
+| 38 | Hatching is a coverage function of a point *and* its region (`internal/hatch`) | The repo renders by evaluating a pure function per pixel, so the natural primitive for "fill this region with marks" is `Sample → [0,1]`, not a stroker or a path list. Colour stays outside, which is what makes it general: one function serves ink on paper, two-colour cross-hatching, a tonal screen and a mask for a wash. The structures — parallel, contour, concentric, radial, fan, flow, scribble, stipple, chord — are *changes of coordinates* feeding one shared mark-maker, so a parameter added to the mark-maker (dashes, jitter, tonal thinning) applies to all nine at once; cross-hatching, weave and nesting are combinators over coverage functions rather than structures of their own. `Sample` is a bundle of numbers (centre, axis, wall distance, reach, tone) rather than a shape interface, so `internal/cells` satisfies it exactly without `hatch` depending on it, and so can a circle or a quarter of a square. It imports `mathx` and `noise` — noise because flow hatching is the level sets of a Perlin stream function and the jitter and dash phases are hash lookups; both are stdlib-only leaves, so the leaf tier is intact. |
+| 39 | Mark thickness is a fraction of the spacing, and a density gradient thins by halving | Two decisions that make hatching *fit* a region. An absolute width turns a hatch fitted to a small cell solid as the cell shrinks; the line-to-gap ratio is what an engraver actually controls, and it scales for free. And a tonal gradient cannot stretch the pitch: a lattice whose pitch varies with position has to split or merge marks somewhere and both are visible, so tone instead drops every other mark and then every other survivor, which leaves every surviving mark exactly where it was at full tone. |
+| 40 | Flow and scribble divide the coverage distance by the field's gradient | Their across coordinate is a noise field rather than a distance, so consecutive level sets are pitch/|∇ψ| apart. Widths taken as a fraction of *that* gap come out as blobs where the field is slack and vanish where it is steep — the first specimen sheet showed both. Dividing the distance by the gradient and leaving the width alone gives marks of one width that converge and diverge, which is what a flow field looks like. It costs two extra field evaluations per sample and is applied to those two structures only. |
+| 41 | The specimen sheet is a registered sketch (`hatchbook`), with its manifest generated by `tools/hatchbook` | A catalogue is not an artwork, but making it a sketch gets the size profiles, palettes, supersampling and embedded recipe for nothing, and — the part that matters — it drives `internal/hatch` through exactly the pipeline a real sketch uses, so `TestASheetIsIdenticalAtAnyResolution` is evidence about the invariant rather than about a bespoke harness. It is the one sketch that deliberately ignores its seed: every square is pinned, because a specimen that redrew itself per seed could not be cited. The squares carry no labels (no fonts, no third-party dependencies), so the row/column key is printed by a tool reading the same tables the sketch draws from. |
 | 37 | The wall distance is measured against a *soft* minimum | The partition's cells meet at 120°, so against a hard minimum every cell is a polygon with curved sides — and at a glance a polygon is what it reads as, however well the sides curve. A soft minimum over the other cells (`−σ·log Σ exp(−dₖ/σ)`) pulls the wall in wherever two of them are close at once, which is at a corner and nowhere else: mid-wall the sum has one term and the two minima agree, so straight runs of wall are untouched while the corners they run into are rounded over σ. It costs one more accumulation in the same loop that already computes the crowding, and it does enough of the junction swelling's job that `swell` halved. |
 
 ## 9. Roadmap
