@@ -48,14 +48,17 @@ type Cell struct {
 type Hit struct {
 	// Cell is the id of the region containing the point.
 	Cell int
-	// Near is the cell on the other side of the nearest wall — the second
-	// nearest distinct region, and the one the point would fall into if it
-	// stepped over that wall. −1 when only one cell is in range.
+	// Next is the id of the cell across the nearest wall — the region the
+	// point would belong to if its own were not there, and the one it would
+	// fall into if it stepped over that wall. −1 when only one cell is in
+	// range, so an absent neighbour has to be handled rather than silently
+	// read as the point's own cell.
 	//
-	// It is the companion of Wall: Wall says how far the boundary is, Near
-	// says what is behind it. A fill that wants to know whose neighbour it
-	// is standing next to cannot get that from the containing cell alone.
-	Near int
+	// Wall says how far the boundary is; Next says whose boundary it is.
+	// That is what a fill needs before it can reach across a wall: bleeding
+	// pigment into a neighbour, failing to register with the drawn line, or
+	// simply asking whose company it is keeping.
+	Next int
 	// Wall is the distance to the nearest wall, in canvas units. Every fill
 	// uses it to know how deep inside its own cell it is; it is +Inf when
 	// only one cell is in range, and negative just inside a rounded corner.
@@ -216,11 +219,11 @@ func (f *Foam) At(u, v float64) Hit {
 		}
 		f.ring(cu, cv, r, u, v, &nb)
 	}
-	h := Hit{Cell: nb.cell[0], Near: -1, Wall: math.Inf(1)}
+	h := Hit{Cell: nb.cell[0], Next: -1, Wall: math.Inf(1)}
 	if nb.n < 2 {
 		return h
 	}
-	h.Near = nb.cell[1]
+	h.Next = nb.cell[1]
 	// Halved because d₂ − d₁ closes at twice the rate the point approaches
 	// the wall: both distances move, in opposite directions.
 	//

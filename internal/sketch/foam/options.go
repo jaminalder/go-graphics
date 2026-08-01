@@ -40,12 +40,24 @@ func (s *Sketch) declare() {
 	o.Float("hatch", "weight of the hatched fill", "fh", 0, 20, &s.pin.styles[styleHatch])
 	o.Float("empty", "weight of leaving a cell as bare paper", "fe", 0, 20, &s.pin.styles[styleEmpty])
 
+	// The paint. These are overrides on what the `water` trait drew — the
+	// manner weights themselves are the trait and have no flags, because
+	// they only mean anything set together.
+	o.Float("load", "pigment laid in a typical cell", "ld", 0.05, 8, &s.pin.water.load)
+	o.Float("tonal", "how far the load swings with a cell's tone", "tn", 0, 2, &s.pin.water.spread)
+	o.Float("overshoot", "how badly the paint registers with the line, x ink", "os", 0, 12, &s.pin.water.over)
+	o.Float("granulate", "heavy pigment settling into the paper's tooth", "gr", 0, 2.5, &s.pin.water.grain)
+	o.Float("bleed", "share of walls whose two cells were painted wet", "bd", 0, 1, &s.pin.water.bleed)
+	o.Float("seep", "how far a bleed carries, x the cell's own size", "sp", 0, 2, &s.pin.water.seep)
+	o.Float("scatter", "light scattered back off the pigment", "sc", 0, 1, &s.Scatter)
+	o.Float("tooth", "paper tooth the pigment granulates into, canvas units", "th", 0.0004, 0.05, &s.Tooth)
+
 	o.Float("weight", "how strongly a site radius bends the walls; 0 is straight", "wt", 0, 2, &s.Weight)
 	o.Float("wobble", "hand wander of the line and the strokes, x width", "wb", 0, 1, &s.Wobble)
 	o.Float("rim", "strength of the wash's dried rim", "rm", 0, 1, &s.Rim)
 	o.Float("rim-width", "how far in from the wall the rim reaches", "rw", 0.001, 0.2, &s.RimWide)
 	o.Float("mottle", "wavelength of the wash's unevenness, canvas units", "mo", 0.02, 2, &s.Mottle)
-	o.Float("blotch", "strength of that unevenness", "bl", 0, 0.6, &s.Blotch)
+	o.Float("blotch", "strength of that unevenness", "bl", 0, 1.5, &s.Blotch)
 	o.Float("grain", "paper tooth", "gn", 0, 0.4, &s.Grain)
 	o.Float("accent", "share of cells taking a colour from outside their passage", "ac", 0, 1, &s.Accent)
 	o.Float("passage", "wavelength of the colour field, canvas units", "pa", 0.1, 4, &s.Passage)

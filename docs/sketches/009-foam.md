@@ -154,9 +154,8 @@ The point of the sketch. Every style is a function of the cell's dressing
 and the `wall` field, which is what lets a fill know where its own edge is
 without ever seeing a polygon.
 
-- **wash** — flat pigment with a watercolour rim: the pigment concentrates
-  in the last stretch before the wall, the way a drying pool deposits at
-  its edge. Mottled at a broad scale and granulated at the paper's tooth.
+- **wash** — watercolour. A *quantity of pigment* rather than a colour, set
+  out in full under "The watercolour" below.
 - **pencil** — directional strokes at a per-cell angle, warped slightly so
   the hatching is not mechanical, laid over paper so the tooth shows
   through. The reference's dominant treatment.
@@ -182,82 +181,110 @@ the only way to actually look at what the walls are doing.
 staticart render foam --fills net --density packed --line drawn --seed 7
 ```
 
-## The mosaic — subdividing a cell
+`--fills watercolour` is the opposite: every cell painted, bar the handful
+left as bare paper. It also carries weight 0 — see the note under Traits.
 
-A second, much finer partition is laid over the *whole canvas*, so a point's
-identity becomes the pair (outer cell, inner tile). Both are looked up at
-the same warped coordinate, the tile decides the colour, and the outer ink
-goes on top afterwards — so the heavy line clips the fine net for free, with
-no clipping code anywhere. Per-cell site sets would need a foam per cell
-(forty measuring passes instead of one) and would still have to solve the
-same clipping problem at every border.
+## The watercolour
 
-The one thing a single global foam apparently cannot do is give a big lobe
-and a sliver comparable tile counts, since one site spacing serves the whole
-sheet. It can: the inner pack is a **variable-radius dart throw**, and each
-dart's radius is a fixed fraction of the inradius of whichever outer cell it
-lands in. The spacing follows the outer structure while the partition stays
-global — and that is the second thing `cells.Cell.Inradius` is for.
+`internal/sketch/foam/watercolour.go`, and the reason the sketch exists in
+the form it does.
 
-The inner sites carry **weight 0**, so the inner metric is an ordinary
-Voronoi: straight bisectors, sharp corners, bent only by the shared warp.
-That is deliberate contrast. A second bubble cluster inside the first gives
-one texture at two scales and the sheet reads as a blur; crystal inside
-organic reads as two things.
+**A wash is not a colour, it is a quantity of pigment that dried
+somewhere.** Every cue that makes one read as watercolour — the dark ring at
+the edge, the pale hole a backrun leaves, grit in the paper's tooth, a
+second pigment bleeding in — is a variation in *how much* pigment reached a
+point. So the fill computes one number, the **load**, and hands it to
+`paint.Glaze`, which composites it as absorption in linear light. Nothing
+lerps two colours together: two pigments in one cell are two loads, and
+their meeting is a believable third because absorption stacks.
 
-Only a *share* of cells are subdivided (`--tiled`), so a sheet has plain
-passages — a wash, a hatched cell, bare paper — next to busy ones. That
-contrast is most of the point; at share 1 the mosaic is a wallpaper.
+### Why not `paint.Wash`
 
-### Where a tile gets its colour — the `mosaic` trait
+Sketch 008's watercolour is not reusable here, for two reasons that are both
+about *shape*.
 
-| level | the rule |
+- It is **stamp-based**: it writes pixels into a `paint.Canvas`, in pixel
+  coordinates, sequentially. This sketch is one pure per-pixel function,
+  which is what makes it resolution-independent by construction. Using
+  `Wash` would mean giving that up for the whole sketch.
+- It is **radial**: a pool is a star-shaped blob described by one radius per
+  angle. A foam cell is an arbitrary curved region and frequently a concave
+  lobe, which no radius table can express — and the silhouette is most of
+  what `Wash` *is*.
+
+And what `Wash` has to synthesise, a foam cell already has exactly and for
+free: `Hit.Wall` is a real signed distance to the cell's own boundary,
+whatever its shape. The rim, the overshoot, the bleed and the backrun front
+are therefore one-line functions of `Wall`, and they work inside a crescent
+because `Wall` does.
+
+The pigment *maths* is reused, as **`paint.Glaze`** — the continuous limit
+of `Wash`'s deposit stack (`T = exp(−load·(1−L))` in linear light, with the
+same back-scatter floor). A foam wash and a pools wash of one pigment agree
+about what that pigment looks like.
+
+### What the paint does
+
+- **The edge is not the line.** Each cell draws a signed `reach`: positive
+  runs the paint past the ink, negative stops it short and leaves a rind of
+  white paper inside the wall. The offset wanders along the boundary. Hand
+  painted work almost never registers, and the failure to register is a
+  large part of why a picture reads as painted rather than filled.
+- **The rim** is a ridge peaking a little way inside the *paint's* edge, not
+  a ramp climbing to the wall — coverage is already falling away there, so a
+  rim that only rises toward the boundary multiplies a number on its way to
+  zero. Its strength varies around the perimeter, because a wash that rims
+  evenly all the way round is an outlined shape rather than a dried pool.
+  A wash that overshot carries its rim out past the ink with it.
+- **Pooling** at two scales: one broad enough that a whole passage of cells
+  shares it (the paper was wetter here), one at cell scale.
+- **Granulation** in patches, gated on how much pigment is present. Applied
+  at one strength everywhere it reads as sandpaper over the picture rather
+  than as grit inside the paint.
+- **Crossing a wall** — overshoot and bleed are the *same* mechanism: the
+  neighbour's dressing evaluated at the mirrored wall distance, since this
+  point is as far outside the neighbour as it is inside its own cell. A
+  bleed is simply deeper, softer and rimless — a rim is what a wash leaves
+  where it *stopped*. Which walls bleed is a property of the **pair**
+  (`Hit.Next` is what made this expressible at all).
+
+### The manners
+
+What happened in one cell while it dried. Each is a modulation of the load,
+so all of them keep the same edge, rim and granulation.
+
+| manner | what it is |
 | --- | --- |
-| `plain` | not subdivided at all; the sketch as it was |
-| `family` | the tile's centroid projected on a per-cell axis walks two or three steps along the ramp, so a cell reads as one family of related pigments |
-| `strata` | hue from where the tile is on the *sheet* (a field that crosses the walls), value from the tile's area against the median |
-| `tonal` | one hue per outer cell; the tiles differ only in lightness |
-| `soloist` | one cell — large, and near the middle — in full colour, everything else drained to near-neutral |
-| `neighbour` | a tile wears the pigment of the cell across its nearest *outer* wall, in proportion to how near that wall it is: a cell's rim belongs to what it touches, its core keeps its own |
+| flat | one pigment laid once |
+| charged | wet-in-wet: a second pigment on a fingered front, both loads present where they meet |
+| bloom | a backrun — pale interior, hard scalloped ridge at the front it stopped at |
+| glaze | a second transparent layer over part of the cell, with its own wet edge and rim |
 
-`neighbour` is what `cells.Hit.Near` was added for. Its reach is measured
-against the containing cell's **own inradius**; a fixed reach is longer than
-a small cell is wide, and then every tile is a half-and-half mix of two
-pigments, which reads as mud.
+The backrun's front is a **level set of the cell's own wall distance**,
+tilted off centre and warped at two well-separated scales. That is what
+makes it work in a lobe, and the scale separation is what separates a
+backrun from lichen: one broad term makes the front lobed, one fine term
+scallops it. Warped at a single middling scale it fragments into a spatter
+and the cell reads as mould.
 
-## The relief — lighting one foam field
+### Colour organisation
 
-`Wall` is a real signed distance field, not a mask, so it can be
-differenced: a height built from it has a slope, a slope is a normal, and a
-normal can be lit. The sheet gets a surface without anything being
-modelled, and the partition's own creases become the surface's edges.
+`internal/sketch/foam/scheme.go`. At a hundred and fifty cells, *how colour
+is distributed* matters more than what any one cell is painted with. A
+scheme answers three questions per cell — the pigment, the pigment it is
+charged with, and a **tone** (how heavily it was loaded). The tone is the
+important one: a hue arrangement with no value structure has nothing to read
+from across the room.
 
-Height is in **canvas units of rise** and the difference step is a canvas
-length, which is what keeps the lighting resolution-independent — a step of
-"one pixel" gives a chamfer that hardens as the render grows. The outer
-cells carry the large form and the tiles carry the facets on top of it, at
-half the rise: one foam field with relief at two scales.
-
-One light, one direction, drawn once per sheet within twenty degrees of
-up-and-left. Inconsistent lighting is the single thing that makes fake depth
-read as fake.
-
-| level | what it does |
+| scheme | what it does |
 | --- | --- |
-| `flat` | no surface |
-| `bevel` | a chamfer at every wall — the sheet as cut and inlaid tiles |
-| `cushion` | a dome per cell and per tile, height `√(t(2−t))` of the wall distance over the cell's inradius: inflated |
-| `occlude` | no light at all, only the darkening that collects in a crease. One extra lookup instead of ten, and it can never blow a pale pigment out |
-| `terrace` | cells at one of four depths, casting soft shadows on each other, higher cards catching more light |
-| `glass` | lit from behind: pigment at its most saturated where the glass is thin, going to the lead where it thickens |
-
-`terrace` needs both cues. Lambert alone says nothing: the top of a slab is
-flat, so every slab is lit identically however high it stands. The cast
-shadow says which cell is *behind* another and the tone says which is
-*above*. The shadow march is as long as the tallest step can reach
-(`3·depth / light slope`) and its taps are **averaged**, not maximised — a
-max switches each tap's whole contribution on at once and the shadow's edge
-comes out as a staircase.
+| `passage` | passages of related hue with sparse accents |
+| `anchor` | a cluster of dark cells anchoring the composition |
+| `quiet` | near-monochrome on dilution, with one or two saturated cells |
+| `weather` | a warm-to-cool gradient across the sheet, value on its own field |
+| `duet` | two pigments; every colour on the sheet is a mix of them |
+| `by-size` | colour follows the cell's *size*, not its position |
+| `by-darkness` | hue from the field, tone from the cell's size |
 
 ## Traits
 
@@ -266,22 +293,10 @@ comes out as a staircase.
 | `colourway` | c | which palette the sheet is drawn from |
 | `density` | d | sparse, open, medium, busy, packed |
 | `lobes` | l | tidy, few, many, most |
-| `fills` | f | washed, mixed, drawn, airy, net (weight 0) |
+| `fills` | f | washed, mixed, drawn, airy, net (0), watercolour (0) |
 | `line` | n | fine, drawn, bold |
-| `mosaic` | m | plain, family, strata, tonal, soloist, neighbour (all but `plain` weight 0) |
-| `relief` | r | flat, bevel, cushion, occlude, terrace, glass (all but `flat` weight 0) |
-
-`mosaic` and `relief` are **appended** to the schema, and everything but
-their neutral value carries weight 0. `Derive` draws in schema order, so the
-five dimensions above them are untouched and every existing seed still lands
-on exactly the sheet it drew before — the same argument decision 21 makes
-for QQL's wash medium. They are two dimensions rather than one because they
-are genuinely orthogonal: a plain foam can be lit, and a mosaic can be flat.
-
-Subdivision and colouring, on the other hand, are one dimension, because
-they are one decision: a walk along the ramp needs enough tiles in a cell
-for the walk to be a walk, and colouring by tile area needs tiles whose
-areas differ.
+| `water` | w | plain, charged, blooms, glazed, sedimentary, bled, studio |
+| `scheme` | s | passage, anchor, quiet, weather, duet, by-size, by-darkness |
 
 `lobes` carries both ways the sheet can bend — how many cells are merged
 *and* how hard the plane is warped. They belong on one axis because they
@@ -290,7 +305,21 @@ as inconsistent as the reverse.
 
 `density` resolves to *ranges* — count, size ladder, clearance and overscan
 together — for the reason set out in 008: a level is a kind of sheet, not
-one particular sheet.
+one particular sheet. `water` does the same: it is manner weights, load,
+registration error, granulation and wall wetness at once, which is why it is
+one dimension and not five flags.
+
+`water` and `scheme` are **appended** to the schema, and `watercolour` is
+appended to `fills` at **weight 0**, so that no existing seed's *draws* move:
+`Derive` consumes one draw per dimension in schema order, and a weight-0
+value does not change a dimension's total. Every seed therefore keeps the
+structure and the fill styles it had. Turning the weight up is one line in
+`traits.go` — and it does change what every seed draws for `fills`.
+
+`scheme` is not watercolour-only: a colour organisation is a fact about the
+sheet, so the pencil, band and hatch cells take their pigment from it too.
+That is a deliberate change to what an existing seed *looks* like, even
+though what it draws is the same — before this, every sheet was `passage`.
 
 ## Tunables
 
@@ -306,14 +335,12 @@ one particular sheet.
 | `--round` | radius a cell's corners are rounded over |
 | `--wobble` | hand wander of the line and the strokes |
 | `--rim`, `--rim-width`, `--mottle`, `--blotch`, `--grain` | the wash's character inside a cell |
+| `--load`, `--tonal` | how much pigment a typical cell took, and how far that swings with its tone |
+| `--overshoot` | how badly the paint registers with the line, × ink |
+| `--granulate`, `--tooth`, `--scatter` | the pigment's own character |
+| `--bleed`, `--seep` | share of walls painted wet, and how far a bleed carries |
 | `--wash`, `--pencil`, `--bands`, `--hatch`, `--empty` | style weights, overriding `fills` |
 | `--accent`, `--passage`, `--stroke` | colour spread, colour wavelength, stroke pitch |
-| `--tile` | inner tile size, × the outer cell's inradius; smaller means more tiles per cell |
-| `--tiled` | share of cells subdivided at all; below 1 the sheet has plain and busy passages |
-| `--fine` | inner net width, × the outer ink |
-| `--spread` | ramp steps a cell's family of tiles walks |
-| `--depth`, `--bevel` | the relief's rise and the run it happens over, × smallest cell |
-| `--light` | the light's bearing in degrees; 90 is from the top, 135 the default up-and-left |
 
 The pack overrides are applied *before* the line is drawn, because the ink
 width is a fraction of the smallest site: applied afterwards, `--base`
@@ -334,28 +361,10 @@ gives a hand-set cell size under a line scaled for the one the seed drew.
 - Some cells are bare paper.
 - Preview and print of one seed are the same picture, and no spikes radiate
   from the junctions at print size.
-
-For the mosaic and the relief:
-
-- A quarter-canvas lobe and a cell an order of magnitude smaller hold tile
-  counts within a factor of five of each other.
-- The outer ink runs unbroken over the inner net, and the inner net is
-  visibly the lighter line of the two.
-- With `--tiled` below 1 the sheet has plain cells — a wash, hatching, bare
-  paper — sitting against tiled ones.
-- Every highlight on the sheet is on the same side of its bump, and every
-  cast shadow falls the same way.
-- `--profile preview` and `--profile print` of one seed have the same
-  chamfer width relative to a cell.
-
-### Where to start looking
-
-```sh
-staticart render foam --density open --lobes few --line drawn \
-  --fills washed --mosaic tonal --relief cushion --seed 7
-staticart render foam --density open --lobes few --line drawn \
-  --fills net --mosaic soloist --relief bevel --seed 12
-staticart sweep foam --seeds 5,7,12 \
-  --vary mosaic=plain,family,strata,tonal,soloist,neighbour \
-  --density open --lobes few --line drawn --fills washed --relief cushion
-```
+- On a watercolour sheet: some washes run past the ink and some stop short
+  of it, and no cell's paint meets its wall exactly.
+- The rim is a ring inside the paint's own edge, uneven around the
+  perimeter — not a stroke drawn round the cell.
+- A backrun has a pale middle *and* a hard scalloped ring, not one or the
+  other.
+- No cell dries to black. A heavy passage reads as its own pigment.

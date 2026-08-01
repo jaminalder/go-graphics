@@ -40,32 +40,26 @@ type dress struct {
 	pitch    float64       // band spacing, canvas units
 	stroke   float64       // stroke spacing, canvas units
 	press    float64       // how hard the pencil was leaning
+	water    waterDress    // what the paint did, if this cell was washed
 }
 
 // dress settles every cell's pigment and style.
 func (s *Sketch) dress(f *cells.Foam, l levels, rng *rand.Rand, field *noise.Perlin, aspect float64, paper palette.Color, ramp []palette.Color) []dress {
+	// How colour is organised over the whole sheet is settled once, before
+	// any cell is dressed: a scheme is a property of the sheet, not of a
+	// cell (see scheme.go).
+	m := s.mixFor(f, l, rng, field, ramp, aspect)
 	out := make([]dress, f.Len())
 	for i, c := range f.Cells() {
-		out[i] = s.dressOne(c, l, rng, field, aspect, paper, ramp)
+		out[i] = s.dressOne(c, l, rng, m, aspect, paper)
 	}
 	return out
 }
 
-func (s *Sketch) dressOne(c cells.Cell, l levels, rng *rand.Rand, field *noise.Perlin, aspect float64, paper palette.Color, ramp []palette.Color) dress {
-	// Colour comes from a low-frequency field sampled at the cell's own
-	// centroid, so the sheet has *passages* — a green corner, a brown
-	// corner — the way the reference does. Drawing each cell's colour freely
-	// gives every pigment equal presence everywhere, which reads as
-	// confetti; the accents are what stop the passages becoming zones.
-	// The field's swing is nowhere near ±1, so it is stretched before it is
-	// read: sampled raw, every centroid lands in the middle of the ramp and
-	// the sheet comes out in two colours out of nine.
-	t := mathx.Clamp01(0.5 + 1.5*field.FBM(c.CX/s.Passage, c.CY/s.Passage, 3))
-	idx := min(int(t*float64(len(ramp))), len(ramp)-1)
-	if rng.Float64() < s.Accent {
-		idx = rng.IntN(len(ramp))
-	}
-	base := ramp[idx]
+func (s *Sketch) dressOne(c cells.Cell, l levels, rng *rand.Rand, m *mixer, aspect float64, paper palette.Color) dress {
+	// The pigment, the pigment a wet-in-wet cell is charged with, and how
+	// heavily this cell was loaded, all from the sheet's colour scheme.
+	base, second, tone := m.draw(c, rng)
 
 	d := dress{
 		pigment: base,
@@ -102,6 +96,7 @@ func (s *Sketch) dressOne(c cells.Cell, l levels, rng *rand.Rand, field *noise.P
 	if d.style == styleBands && roundness(c, aspect) > 1.8 {
 		d.style = styleWash
 	}
+	d.water = s.dressWater(c, l, rng, second, tone)
 	return d
 }
 
@@ -127,18 +122,11 @@ func (s *Sketch) fill(d dress, h cells.Hit, field *noise.Perlin, seed uint64, u,
 	case styleEmpty:
 		col = paper
 	default:
-		col = s.wash(d, h, field, u, v)
+		// The wash is the watercolour engine (watercolour.go), which is a
+		// load of pigment rather than a colour, composited as absorption.
+		col = s.watercolour(d, h.Wall, field, seed, u, v, paper)
 	}
 	return shade(col, 1+s.grain(seed, u, v))
-}
-
-// wash is transparent pigment that dried in place: uneven at a broad scale
-// where the water pooled, and denser in the last stretch before the wall,
-// which is where a drying pool leaves its pigment.
-func (s *Sketch) wash(d dress, h cells.Hit, field *noise.Perlin, u, v float64) palette.Color {
-	col := shade(d.pigment, 1+s.Blotch*field.FBM(u/s.Mottle, v/s.Mottle, 3))
-	rim := 1 - mathx.Smoothstep(0, s.RimWide, h.Wall)
-	return palette.Lerp(col, d.deep, rim*s.Rim)
 }
 
 // pencil is directional strokes laid over the paper, wandering slightly so

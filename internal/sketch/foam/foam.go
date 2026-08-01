@@ -68,6 +68,10 @@ type Sketch struct {
 	Bevel   float64 // run that rise happens over, ×smallest cell
 	Light   float64 // the light's bearing, degrees
 
+	// The watercolour (watercolour.go).
+	Scatter float64 // light scattered back off the pigment rather than through it
+	Tooth   float64 // the paper's tooth for granulation, canvas units
+
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
 	pin levels
@@ -81,10 +85,10 @@ func New() *Sketch {
 	s := &Sketch{
 		Weight:  1.1,
 		Wobble:  0.28,
-		Rim:     0.42,
-		RimWide: 0.018,
+		Rim:     0.9,
+		RimWide: 0.014,
 		Mottle:  0.22,
-		Blotch:  0.1,
+		Blotch:  0.24,
 		Grain:   0.05,
 		Accent:  0.22,
 		Passage: 0.75,
@@ -92,6 +96,8 @@ func New() *Sketch {
 		Depth:   0.12,
 		Bevel:   0.2,
 		Light:   135,
+		Scatter: 0.28,
+		Tooth:   0.003,
 		traits:  trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
@@ -177,10 +183,14 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	return sketch.Raster(ctx, func(u, v float64) palette.Color {
 		wu, wv := s.warp(sh.field, sh.level, u, v)
 		h := sh.foam.At(wu, wv)
-		c := s.fill(sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
-		// The mosaic replaces the fill wherever a cell was subdivided; the
-		// relief lights whatever came out. Both run *before* the ink, so the
-		// heavy outer line clips the fine net and is never itself lit.
+		// paint, not fill: a wash may cross the wall into this cell, either
+		// because it failed to register with the line or because the two
+		// were painted while both were wet (watercolour.go).
+		c := s.paint(sh, h, ctx.Seed, u, v)
+		// The mosaic replaces what the paint laid down wherever a cell was
+		// subdivided; the relief lights whatever came out. Both run *before*
+		// the ink, so the heavy outer line clips the fine net and is never
+		// itself lit.
 		c = s.tile(sh, h, u, v, wu, wv, c, ctx.Seed)
 		c = s.relief(sh, h, u, v, c, ctx.Seed)
 		return s.lay(c, h, sh.level, sh.field, ctx.Seed, sh.ink, u, v)

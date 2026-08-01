@@ -193,8 +193,8 @@ func (t *tiling) measure(inner *cells.Foam, sites []cells.Site, outer *cells.Foa
 		// to the outer structure is a property of the tile, not of the point.
 		oh := outer.At(t.cx[i], t.cy[i])
 		t.near[i] = int32(oh.Cell) //nolint:gosec // cell counts are small
-		if oh.Near >= 0 {
-			t.near[i] = int32(oh.Near) //nolint:gosec // cell counts are small
+		if oh.Next >= 0 {
+			t.near[i] = int32(oh.Next) //nolint:gosec // cell counts are small
 		}
 		// Measured against the *containing cell's* own size, not against a
 		// fixed length. A fixed one is longer than a small cell is wide, so

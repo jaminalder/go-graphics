@@ -8,3 +8,6 @@
 # OS / editor noise
 .DS_Store
 *.swp
+
+# Agent worktrees live inside the repo; they are checkouts, not content.
+.claude/worktrees/

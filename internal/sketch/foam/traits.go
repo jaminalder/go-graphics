@@ -19,6 +19,8 @@ const (
 	dimLine    = "line"
 	dimMosaic  = "mosaic"
 	dimRelief  = "relief"
+	dimWater   = "water"
+	dimScheme  = "scheme"
 )
 
 var schema = trait.Schema{
@@ -57,6 +59,8 @@ var schema = trait.Schema{
 			{Name: "drawn", Weight: 2},
 			{Name: "airy", Weight: 2},
 			{Name: "net", Weight: 0},
+			// Weight 0, appended: see the note on the dimension below.
+			{Name: "watercolour", Weight: 0},
 		},
 	},
 	{
@@ -96,6 +100,48 @@ var schema = trait.Schema{
 			{Name: "glass", Weight: 0},
 		},
 	},
+	// The two watercolour dimensions are *appended*, which is what keeps
+	// every existing seed drawing the piece it drew before: Derive consumes
+	// one draw per dimension in schema order, so the dimensions above are
+	// untouched by adding to the end (the argument is decision 21 in
+	// docs/ARCHITECTURE.md, made for QQL's wash medium).
+	//
+	// `watercolour` is added to `fills` at weight 0 for the other half of
+	// the same argument: a value with weight 0 does not change the
+	// dimension's total, so no seed's `fills` draw moves either.
+	{
+		Name: dimWater, Key: "w", InName: true,
+		Doc: "what the paint did while it dried",
+		Values: []trait.Value{
+			{Name: waterPlain, Weight: 2},
+			{Name: waterCharge, Weight: 3},
+			{Name: waterBloom, Weight: 2},
+			{Name: waterGlaze, Weight: 2},
+			{Name: waterSed, Weight: 2},
+			{Name: waterBled, Weight: 2},
+			{Name: waterStudio, Weight: 3},
+		},
+	},
+	{
+		Name: dimScheme, Key: "s", InName: true,
+		Doc: "how colour is organised over the sheet",
+		Values: []trait.Value{
+			// Weight 0 on everything but passage, which is what every sheet
+			// was implicitly painted with before the schemes existed. The
+			// scheme drives pencil, hatch and band cells as well as
+			// watercolour ones, so giving the others weight here would
+			// change what every existing seed looks like — the one thing
+			// appending a dimension is supposed to avoid. Promoting them is
+			// this block, and nothing else.
+			{Name: schemePassage, Weight: 1},
+			{Name: schemeAnchor, Weight: 0},
+			{Name: schemeQuiet, Weight: 0},
+			{Name: schemeWeather, Weight: 0},
+			{Name: schemeDuet, Weight: 0},
+			{Name: schemeByScale, Weight: 0},
+			{Name: schemeFromLum, Weight: 0},
+		},
+	},
 }
 
 // levels is everything the traits resolve to: the site pack, the merging,
@@ -129,6 +175,9 @@ type levels struct {
 	// the mosaic and the light (subdivide.go, shade.go)
 	sub sublevels
 	rel reliefLevels
+	// the paint (watercolour.go, scheme.go)
+	water  waterLevels
+	scheme string
 }
 
 // defaults are the levels shown in --help. What a render actually uses is
@@ -140,6 +189,8 @@ func defaults(rng *rand.Rand) levels {
 	newFills("mixed", &l)
 	newMosaic("family", rng, &l)
 	newRelief("bevel", rng, &l)
+	newWater(waterStudio, rng, &l)
+	l.scheme = schemePassage
 	return l
 }
 
@@ -275,6 +326,12 @@ func newFills(level string, l *levels) {
 		l.styles = [nstyles]float64{styleWash: 2, stylePencil: 8, styleBands: 2, styleHatch: 2.5, styleEmpty: 3}
 	case "airy":
 		l.styles = [nstyles]float64{styleWash: 4, stylePencil: 4, styleBands: 1, styleHatch: 1, styleEmpty: 6}
+	case "watercolour":
+		// A painted sheet: every cell a wash, bar the few left as paper.
+		// Those few are still load-bearing — a sheet with every cell filled
+		// has nowhere to rest — but the pencil has no place on a sheet that
+		// is about what the water did.
+		l.styles = [nstyles]float64{styleWash: 14, styleEmpty: 2}
 	default: // mixed
 		l.styles = [nstyles]float64{styleWash: 6, stylePencil: 5, styleBands: 2, styleHatch: 1.5, styleEmpty: 3}
 	}
@@ -305,6 +362,8 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 	newMosaic(tr.Get(dimMosaic), rng, &l)
 	newRelief(tr.Get(dimRelief), rng, &l)
 	s.overrideLook(&l)
+	newWater(tr.Get(dimWater), rng, &l)
+	l.scheme = tr.Get(dimScheme)
 
 	s.override([]knob{
 		{"merge", func() { l.merge = s.pin.merge }},
@@ -320,6 +379,12 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 		{"bands", func() { l.styles[styleBands] = s.pin.styles[styleBands] }},
 		{"hatch", func() { l.styles[styleHatch] = s.pin.styles[styleHatch] }},
 		{"empty", func() { l.styles[styleEmpty] = s.pin.styles[styleEmpty] }},
+		{"load", func() { l.water.load = s.pin.water.load }},
+		{"tonal", func() { l.water.spread = s.pin.water.spread }},
+		{"overshoot", func() { l.water.over = s.pin.water.over }},
+		{"granulate", func() { l.water.grain = s.pin.water.grain }},
+		{"bleed", func() { l.water.bleed = s.pin.water.bleed }},
+		{"seep", func() { l.water.seep = s.pin.water.seep }},
 	})
 	// The warp displaces every lookup, so the pack has to reach far enough
 	// that a displaced point still lands among sites. Drawn with the density
