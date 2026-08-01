@@ -182,6 +182,83 @@ the only way to actually look at what the walls are doing.
 staticart render foam --fills net --density packed --line drawn --seed 7
 ```
 
+## The mosaic — subdividing a cell
+
+A second, much finer partition is laid over the *whole canvas*, so a point's
+identity becomes the pair (outer cell, inner tile). Both are looked up at
+the same warped coordinate, the tile decides the colour, and the outer ink
+goes on top afterwards — so the heavy line clips the fine net for free, with
+no clipping code anywhere. Per-cell site sets would need a foam per cell
+(forty measuring passes instead of one) and would still have to solve the
+same clipping problem at every border.
+
+The one thing a single global foam apparently cannot do is give a big lobe
+and a sliver comparable tile counts, since one site spacing serves the whole
+sheet. It can: the inner pack is a **variable-radius dart throw**, and each
+dart's radius is a fixed fraction of the inradius of whichever outer cell it
+lands in. The spacing follows the outer structure while the partition stays
+global — and that is the second thing `cells.Cell.Inradius` is for.
+
+The inner sites carry **weight 0**, so the inner metric is an ordinary
+Voronoi: straight bisectors, sharp corners, bent only by the shared warp.
+That is deliberate contrast. A second bubble cluster inside the first gives
+one texture at two scales and the sheet reads as a blur; crystal inside
+organic reads as two things.
+
+Only a *share* of cells are subdivided (`--tiled`), so a sheet has plain
+passages — a wash, a hatched cell, bare paper — next to busy ones. That
+contrast is most of the point; at share 1 the mosaic is a wallpaper.
+
+### Where a tile gets its colour — the `mosaic` trait
+
+| level | the rule |
+| --- | --- |
+| `plain` | not subdivided at all; the sketch as it was |
+| `family` | the tile's centroid projected on a per-cell axis walks two or three steps along the ramp, so a cell reads as one family of related pigments |
+| `strata` | hue from where the tile is on the *sheet* (a field that crosses the walls), value from the tile's area against the median |
+| `tonal` | one hue per outer cell; the tiles differ only in lightness |
+| `soloist` | one cell — large, and near the middle — in full colour, everything else drained to near-neutral |
+| `neighbour` | a tile wears the pigment of the cell across its nearest *outer* wall, in proportion to how near that wall it is: a cell's rim belongs to what it touches, its core keeps its own |
+
+`neighbour` is what `cells.Hit.Near` was added for. Its reach is measured
+against the containing cell's **own inradius**; a fixed reach is longer than
+a small cell is wide, and then every tile is a half-and-half mix of two
+pigments, which reads as mud.
+
+## The relief — lighting one foam field
+
+`Wall` is a real signed distance field, not a mask, so it can be
+differenced: a height built from it has a slope, a slope is a normal, and a
+normal can be lit. The sheet gets a surface without anything being
+modelled, and the partition's own creases become the surface's edges.
+
+Height is in **canvas units of rise** and the difference step is a canvas
+length, which is what keeps the lighting resolution-independent — a step of
+"one pixel" gives a chamfer that hardens as the render grows. The outer
+cells carry the large form and the tiles carry the facets on top of it, at
+half the rise: one foam field with relief at two scales.
+
+One light, one direction, drawn once per sheet within twenty degrees of
+up-and-left. Inconsistent lighting is the single thing that makes fake depth
+read as fake.
+
+| level | what it does |
+| --- | --- |
+| `flat` | no surface |
+| `bevel` | a chamfer at every wall — the sheet as cut and inlaid tiles |
+| `cushion` | a dome per cell and per tile, height `√(t(2−t))` of the wall distance over the cell's inradius: inflated |
+| `occlude` | no light at all, only the darkening that collects in a crease. One extra lookup instead of ten, and it can never blow a pale pigment out |
+| `terrace` | cells at one of four depths, casting soft shadows on each other, higher cards catching more light |
+| `glass` | lit from behind: pigment at its most saturated where the glass is thin, going to the lead where it thickens |
+
+`terrace` needs both cues. Lambert alone says nothing: the top of a slab is
+flat, so every slab is lit identically however high it stands. The cast
+shadow says which cell is *behind* another and the tone says which is
+*above*. The shadow march is as long as the tallest step can reach
+(`3·depth / light slope`) and its taps are **averaged**, not maximised — a
+max switches each tap's whole contribution on at once and the shadow's edge
+comes out as a staircase.
+
 ## Traits
 
 | dimension | key | values |
@@ -191,6 +268,20 @@ staticart render foam --fills net --density packed --line drawn --seed 7
 | `lobes` | l | tidy, few, many, most |
 | `fills` | f | washed, mixed, drawn, airy, net (weight 0) |
 | `line` | n | fine, drawn, bold |
+| `mosaic` | m | plain, family, strata, tonal, soloist, neighbour (all but `plain` weight 0) |
+| `relief` | r | flat, bevel, cushion, occlude, terrace, glass (all but `flat` weight 0) |
+
+`mosaic` and `relief` are **appended** to the schema, and everything but
+their neutral value carries weight 0. `Derive` draws in schema order, so the
+five dimensions above them are untouched and every existing seed still lands
+on exactly the sheet it drew before — the same argument decision 21 makes
+for QQL's wash medium. They are two dimensions rather than one because they
+are genuinely orthogonal: a plain foam can be lit, and a mosaic can be flat.
+
+Subdivision and colouring, on the other hand, are one dimension, because
+they are one decision: a walk along the ramp needs enough tiles in a cell
+for the walk to be a walk, and colouring by tile area needs tiles whose
+areas differ.
 
 `lobes` carries both ways the sheet can bend — how many cells are merged
 *and* how hard the plane is warped. They belong on one axis because they
@@ -217,6 +308,12 @@ one particular sheet.
 | `--rim`, `--rim-width`, `--mottle`, `--blotch`, `--grain` | the wash's character inside a cell |
 | `--wash`, `--pencil`, `--bands`, `--hatch`, `--empty` | style weights, overriding `fills` |
 | `--accent`, `--passage`, `--stroke` | colour spread, colour wavelength, stroke pitch |
+| `--tile` | inner tile size, × the outer cell's inradius; smaller means more tiles per cell |
+| `--tiled` | share of cells subdivided at all; below 1 the sheet has plain and busy passages |
+| `--fine` | inner net width, × the outer ink |
+| `--spread` | ramp steps a cell's family of tiles walks |
+| `--depth`, `--bevel` | the relief's rise and the run it happens over, × smallest cell |
+| `--light` | the light's bearing in degrees; 90 is from the top, 135 the default up-and-left |
 
 The pack overrides are applied *before* the line is drawn, because the ink
 width is a fraction of the smallest site: applied afterwards, `--base`
@@ -237,3 +334,28 @@ gives a hand-set cell size under a line scaled for the one the seed drew.
 - Some cells are bare paper.
 - Preview and print of one seed are the same picture, and no spikes radiate
   from the junctions at print size.
+
+For the mosaic and the relief:
+
+- A quarter-canvas lobe and a cell an order of magnitude smaller hold tile
+  counts within a factor of five of each other.
+- The outer ink runs unbroken over the inner net, and the inner net is
+  visibly the lighter line of the two.
+- With `--tiled` below 1 the sheet has plain cells — a wash, hatching, bare
+  paper — sitting against tiled ones.
+- Every highlight on the sheet is on the same side of its bump, and every
+  cast shadow falls the same way.
+- `--profile preview` and `--profile print` of one seed have the same
+  chamfer width relative to a cell.
+
+### Where to start looking
+
+```sh
+staticart render foam --density open --lobes few --line drawn \
+  --fills washed --mosaic tonal --relief cushion --seed 7
+staticart render foam --density open --lobes few --line drawn \
+  --fills net --mosaic soloist --relief bevel --seed 12
+staticart sweep foam --seeds 5,7,12 \
+  --vary mosaic=plain,family,strata,tonal,soloist,neighbour \
+  --density open --lobes few --line drawn --fills washed --relief cushion
+```

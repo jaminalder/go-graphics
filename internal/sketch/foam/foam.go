@@ -37,6 +37,7 @@ const (
 	streamDress  = 2 // what each cell is filled with
 	streamTraits = 3 // which point of the output space this seed is
 	streamLevels = 4 // the trait levels made numeric
+	streamTiles  = 5 // where the mosaic's tiles go
 )
 
 // saltPaper salts the paper's grain lattice so the tooth of the sheet is
@@ -63,6 +64,9 @@ type Sketch struct {
 	Accent  float64 // share of cells taking a colour from outside their passage
 	Passage float64 // wavelength of the colour field, canvas units
 	Stroke  float64 // pencil stroke pitch, canvas units
+	Depth   float64 // rise of the relief, ×smallest cell (shade.go)
+	Bevel   float64 // run that rise happens over, ×smallest cell
+	Light   float64 // the light's bearing, degrees
 
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
@@ -85,6 +89,9 @@ func New() *Sketch {
 		Accent:  0.22,
 		Passage: 0.75,
 		Stroke:  0.0045,
+		Depth:   0.12,
+		Bevel:   0.2,
+		Light:   135,
 		traits:  trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
@@ -123,6 +130,8 @@ type sheet struct {
 	field *noise.Perlin
 	paper palette.Color
 	ink   palette.Color
+	ramp  []palette.Color // the pigments, ordered light to dark
+	tiles *tiling         // the mosaic layer; nil when nothing is subdivided
 }
 
 // plan builds the sheet for one context.
@@ -144,13 +153,16 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	foam := cells.New(sites, group, aspect, cells.Params{Node: l.node, Round: l.round, Stat: statRes})
 
 	field := noise.New(ctx.Seed)
+	skin := s.dress(foam, l, ctx.RNG(streamDress), field, aspect, paper, ramp)
 	return &sheet{
 		foam:  foam,
-		skin:  s.dress(foam, l, ctx.RNG(streamDress), field, aspect, paper, ramp),
+		skin:  skin,
 		level: l,
 		field: field,
 		paper: paper,
 		ink:   ink,
+		ramp:  ramp,
+		tiles: s.subdivide(foam, l, ctx.RNG(streamTiles), aspect, skin, ramp),
 	}, nil
 }
 
@@ -163,8 +175,14 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		return nil, err
 	}
 	return sketch.Raster(ctx, func(u, v float64) palette.Color {
-		h := sh.foam.At(s.warp(sh.field, sh.level, u, v))
+		wu, wv := s.warp(sh.field, sh.level, u, v)
+		h := sh.foam.At(wu, wv)
 		c := s.fill(sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
+		// The mosaic replaces the fill wherever a cell was subdivided; the
+		// relief lights whatever came out. Both run *before* the ink, so the
+		// heavy outer line clips the fine net and is never itself lit.
+		c = s.tile(sh, h, u, v, wu, wv, c, ctx.Seed)
+		c = s.relief(sh, h, u, v, c, ctx.Seed)
 		return s.lay(c, h, sh.level, sh.field, ctx.Seed, sh.ink, u, v)
 	}), nil
 }
