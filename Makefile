@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools preview-foam sweep
+.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools preview-foam hatchbook sweep
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -45,6 +45,17 @@ preview-pools: ## Render the pools sketch at preview size into out/
 
 preview-foam: ## Render the foam sketch at preview size into out/
 	go run ./cmd/staticart render foam --profile preview --out out
+
+HATCHBOOK_OUT ?= out/agent-hatch
+HATCHBOOK_ARGS = --aa 3 --palette hopper-night-windows --out $(HATCHBOOK_OUT)
+
+hatchbook: ## Render the internal/hatch specimen sheets + manifest into $(HATCHBOOK_OUT)
+	go run ./cmd/staticart render hatchbook --page structures --width 2000 --height 2000 $(HATCHBOOK_ARGS)
+	go run ./cmd/staticart render hatchbook --page parameters --width 2400 --height 1620 $(HATCHBOOK_ARGS)
+	go run ./cmd/staticart render hatchbook --page variation  --width 2400 --height 1620 $(HATCHBOOK_ARGS)
+	go run ./cmd/staticart render hatchbook --page colour     --width 2000 --height 2000 $(HATCHBOOK_ARGS)
+	go run ./cmd/staticart render hatchbook --page shapes     --width 2400 --height 1820 $(HATCHBOOK_ARGS)
+	go run ./tools/hatchbook > $(HATCHBOOK_OUT)/manifest.txt
 
 sweep: ## Sweep 12 seeds of a sketch into a contact sheet (S=pools)
 	go run ./cmd/staticart sweep $(or $(S),pools) --seeds 1-12 --out out/sweep
