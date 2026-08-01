@@ -154,9 +154,8 @@ The point of the sketch. Every style is a function of the cell's dressing
 and the `wall` field, which is what lets a fill know where its own edge is
 without ever seeing a polygon.
 
-- **wash** — flat pigment with a watercolour rim: the pigment concentrates
-  in the last stretch before the wall, the way a drying pool deposits at
-  its edge. Mottled at a broad scale and granulated at the paper's tooth.
+- **wash** — watercolour. A *quantity of pigment* rather than a colour, set
+  out in full under "The watercolour" below.
 - **pencil** — directional strokes at a per-cell angle, warped slightly so
   the hatching is not mechanical, laid over paper so the tooth shows
   through. The reference's dominant treatment.
@@ -182,6 +181,111 @@ the only way to actually look at what the walls are doing.
 staticart render foam --fills net --density packed --line drawn --seed 7
 ```
 
+`--fills watercolour` is the opposite: every cell painted, bar the handful
+left as bare paper. It also carries weight 0 — see the note under Traits.
+
+## The watercolour
+
+`internal/sketch/foam/watercolour.go`, and the reason the sketch exists in
+the form it does.
+
+**A wash is not a colour, it is a quantity of pigment that dried
+somewhere.** Every cue that makes one read as watercolour — the dark ring at
+the edge, the pale hole a backrun leaves, grit in the paper's tooth, a
+second pigment bleeding in — is a variation in *how much* pigment reached a
+point. So the fill computes one number, the **load**, and hands it to
+`paint.Glaze`, which composites it as absorption in linear light. Nothing
+lerps two colours together: two pigments in one cell are two loads, and
+their meeting is a believable third because absorption stacks.
+
+### Why not `paint.Wash`
+
+Sketch 008's watercolour is not reusable here, for two reasons that are both
+about *shape*.
+
+- It is **stamp-based**: it writes pixels into a `paint.Canvas`, in pixel
+  coordinates, sequentially. This sketch is one pure per-pixel function,
+  which is what makes it resolution-independent by construction. Using
+  `Wash` would mean giving that up for the whole sketch.
+- It is **radial**: a pool is a star-shaped blob described by one radius per
+  angle. A foam cell is an arbitrary curved region and frequently a concave
+  lobe, which no radius table can express — and the silhouette is most of
+  what `Wash` *is*.
+
+And what `Wash` has to synthesise, a foam cell already has exactly and for
+free: `Hit.Wall` is a real signed distance to the cell's own boundary,
+whatever its shape. The rim, the overshoot, the bleed and the backrun front
+are therefore one-line functions of `Wall`, and they work inside a crescent
+because `Wall` does.
+
+The pigment *maths* is reused, as **`paint.Glaze`** — the continuous limit
+of `Wash`'s deposit stack (`T = exp(−load·(1−L))` in linear light, with the
+same back-scatter floor). A foam wash and a pools wash of one pigment agree
+about what that pigment looks like.
+
+### What the paint does
+
+- **The edge is not the line.** Each cell draws a signed `reach`: positive
+  runs the paint past the ink, negative stops it short and leaves a rind of
+  white paper inside the wall. The offset wanders along the boundary. Hand
+  painted work almost never registers, and the failure to register is a
+  large part of why a picture reads as painted rather than filled.
+- **The rim** is a ridge peaking a little way inside the *paint's* edge, not
+  a ramp climbing to the wall — coverage is already falling away there, so a
+  rim that only rises toward the boundary multiplies a number on its way to
+  zero. Its strength varies around the perimeter, because a wash that rims
+  evenly all the way round is an outlined shape rather than a dried pool.
+  A wash that overshot carries its rim out past the ink with it.
+- **Pooling** at two scales: one broad enough that a whole passage of cells
+  shares it (the paper was wetter here), one at cell scale.
+- **Granulation** in patches, gated on how much pigment is present. Applied
+  at one strength everywhere it reads as sandpaper over the picture rather
+  than as grit inside the paint.
+- **Crossing a wall** — overshoot and bleed are the *same* mechanism: the
+  neighbour's dressing evaluated at the mirrored wall distance, since this
+  point is as far outside the neighbour as it is inside its own cell. A
+  bleed is simply deeper, softer and rimless — a rim is what a wash leaves
+  where it *stopped*. Which walls bleed is a property of the **pair**
+  (`Hit.Next` is what made this expressible at all).
+
+### The manners
+
+What happened in one cell while it dried. Each is a modulation of the load,
+so all of them keep the same edge, rim and granulation.
+
+| manner | what it is |
+| --- | --- |
+| flat | one pigment laid once |
+| charged | wet-in-wet: a second pigment on a fingered front, both loads present where they meet |
+| bloom | a backrun — pale interior, hard scalloped ridge at the front it stopped at |
+| glaze | a second transparent layer over part of the cell, with its own wet edge and rim |
+
+The backrun's front is a **level set of the cell's own wall distance**,
+tilted off centre and warped at two well-separated scales. That is what
+makes it work in a lobe, and the scale separation is what separates a
+backrun from lichen: one broad term makes the front lobed, one fine term
+scallops it. Warped at a single middling scale it fragments into a spatter
+and the cell reads as mould.
+
+### Colour organisation
+
+`internal/sketch/foam/scheme.go`. At a hundred and fifty cells, *how colour
+is distributed* matters more than what any one cell is painted with. A
+scheme answers three questions per cell — the pigment, the pigment it is
+charged with, and a **tone** (how heavily it was loaded). The tone is the
+important one: a hue arrangement with no value structure has nothing to read
+from across the room.
+
+| scheme | what it does |
+| --- | --- |
+| `passage` | passages of related hue with sparse accents |
+| `anchor` | a cluster of dark cells anchoring the composition |
+| `quiet` | near-monochrome on dilution, with one or two saturated cells |
+| `weather` | a warm-to-cool gradient across the sheet, value on its own field |
+| `duet` | two pigments; every colour on the sheet is a mix of them |
+| `by-size` | colour follows the cell's *size*, not its position |
+| `by-darkness` | hue from the field, tone from the cell's size |
+
 ## Traits
 
 | dimension | key | values |
@@ -189,8 +293,10 @@ staticart render foam --fills net --density packed --line drawn --seed 7
 | `colourway` | c | which palette the sheet is drawn from |
 | `density` | d | sparse, open, medium, busy, packed |
 | `lobes` | l | tidy, few, many, most |
-| `fills` | f | washed, mixed, drawn, airy, net (weight 0) |
+| `fills` | f | washed, mixed, drawn, airy, net (0), watercolour (0) |
 | `line` | n | fine, drawn, bold |
+| `water` | w | plain, charged, blooms, glazed, sedimentary, bled, studio |
+| `scheme` | s | passage, anchor, quiet, weather, duet, by-size, by-darkness |
 
 `lobes` carries both ways the sheet can bend — how many cells are merged
 *and* how hard the plane is warped. They belong on one axis because they
@@ -199,7 +305,15 @@ as inconsistent as the reverse.
 
 `density` resolves to *ranges* — count, size ladder, clearance and overscan
 together — for the reason set out in 008: a level is a kind of sheet, not
-one particular sheet.
+one particular sheet. `water` does the same: it is manner weights, load,
+registration error, granulation and wall wetness at once, which is why it is
+one dimension and not five flags.
+
+`water` and `scheme` are **appended** to the schema, and `watercolour` is
+appended to `fills` at **weight 0**, both so that no existing seed is moved:
+`Derive` consumes one draw per dimension in schema order, and a weight-0
+value does not change a dimension's total. Turning the weight up is one line
+in `traits.go` — and it changes what every seed draws for `fills`.
 
 ## Tunables
 
@@ -215,6 +329,10 @@ one particular sheet.
 | `--round` | radius a cell's corners are rounded over |
 | `--wobble` | hand wander of the line and the strokes |
 | `--rim`, `--rim-width`, `--mottle`, `--blotch`, `--grain` | the wash's character inside a cell |
+| `--load`, `--tonal` | how much pigment a typical cell took, and how far that swings with its tone |
+| `--overshoot` | how badly the paint registers with the line, × ink |
+| `--granulate`, `--tooth`, `--scatter` | the pigment's own character |
+| `--bleed`, `--seep` | share of walls painted wet, and how far a bleed carries |
 | `--wash`, `--pencil`, `--bands`, `--hatch`, `--empty` | style weights, overriding `fills` |
 | `--accent`, `--passage`, `--stroke` | colour spread, colour wavelength, stroke pitch |
 
@@ -237,3 +355,10 @@ gives a hand-set cell size under a line scaled for the one the seed drew.
 - Some cells are bare paper.
 - Preview and print of one seed are the same picture, and no spikes radiate
   from the junctions at print size.
+- On a watercolour sheet: some washes run past the ink and some stop short
+  of it, and no cell's paint meets its wall exactly.
+- The rim is a ring inside the paint's own edge, uneven around the
+  perimeter — not a stroke drawn round the cell.
+- A backrun has a pale middle *and* a hard scalloped ring, not one or the
+  other.
+- No cell dries to black. A heavy passage reads as its own pigment.

@@ -23,6 +23,12 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam.
 
+`foam` has a watercolour layer: `--fills watercolour` paints every cell,
+`--water` says what the paint did (blooms, bleeding, glazing, …) and
+`--scheme` how colour is spread over the sheet — see
+`docs/sketches/009-foam.md`. The `watercolour` fill level carries weight 0,
+so a painted sheet is always a deliberate act.
+
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so
 pair it with `--ring-size large` and/or `--spacing sparse`.

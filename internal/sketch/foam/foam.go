@@ -64,6 +64,10 @@ type Sketch struct {
 	Passage float64 // wavelength of the colour field, canvas units
 	Stroke  float64 // pencil stroke pitch, canvas units
 
+	// The watercolour (watercolour.go).
+	Scatter float64 // light scattered back off the pigment rather than through it
+	Tooth   float64 // the paper's tooth for granulation, canvas units
+
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
 	pin levels
@@ -77,14 +81,16 @@ func New() *Sketch {
 	s := &Sketch{
 		Weight:  1.1,
 		Wobble:  0.28,
-		Rim:     0.42,
-		RimWide: 0.018,
+		Rim:     0.9,
+		RimWide: 0.014,
 		Mottle:  0.22,
-		Blotch:  0.1,
+		Blotch:  0.24,
 		Grain:   0.05,
 		Accent:  0.22,
 		Passage: 0.75,
 		Stroke:  0.0045,
+		Scatter: 0.28,
+		Tooth:   0.003,
 		traits:  trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
@@ -164,7 +170,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	return sketch.Raster(ctx, func(u, v float64) palette.Color {
 		h := sh.foam.At(s.warp(sh.field, sh.level, u, v))
-		c := s.fill(sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
+		// paint, not fill: a wash may cross the wall into this cell, either
+		// because it failed to register with the line or because the two
+		// were painted while both were wet (watercolour.go).
+		c := s.paint(sh, h, ctx.Seed, u, v)
 		return s.lay(c, h, sh.level, sh.field, ctx.Seed, sh.ink, u, v)
 	}), nil
 }

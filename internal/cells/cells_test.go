@@ -27,10 +27,11 @@ func slowAt(sites []Site, group []int, p Params, u, v float64) Hit {
 	for i, s := range sites {
 		nb.add(group[i], math.Hypot(s.X-u, s.Y-v)-s.W)
 	}
-	h := Hit{Cell: nb.cell[0], Wall: math.Inf(1)}
+	h := Hit{Cell: nb.cell[0], Next: nb.cell[0], Wall: math.Inf(1)}
 	if nb.n < 2 {
 		return h
 	}
+	h.Next = nb.cell[1]
 	h.Wall = (nb.dist[1] - nb.dist[0]) / 2
 	crowd, soft := 1.0, 0.0
 	for k := 2; k < nb.n; k++ {
@@ -97,6 +98,38 @@ func TestWallDistanceVanishesAtTheBoundary(t *testing.T) {
 	}
 	if !crossed {
 		t.Fatal("never left the first cell")
+	}
+}
+
+// TestTheCellAcrossTheWallIsTheOneYouCrossInto. Next names the region on
+// the other side of the nearest wall, which is what lets paint cross that
+// wall — a wash that overshoots the drawn line, or two cells bleeding into
+// each other, both have to know whose paint is arriving. If Next ever named
+// some third cell, pigment would appear from a region the point does not
+// border and the leak would land in the wrong place on the sheet.
+func TestTheCellAcrossTheWallIsTheOneYouCrossInto(t *testing.T) {
+	rng := rngFor(11)
+	sites := scatter(rng, 60, 1)
+	f := New(sites, Identity(len(sites)), 1, DefaultParams())
+
+	const step = 0.002
+	for v := 0.05; v < 0.95; v += 0.01 {
+		prev := f.At(0.02, v)
+		for u := 0.02 + step; u < 0.98; u += step {
+			h := f.At(u, v)
+			// Away from the junctions, where the two samples straddle one
+			// plain wall. At a junction a step of this length can clear a
+			// sliver of a third cell entirely, and then the two samples do
+			// not share a wall at all — Node is what says so.
+			if h.Cell != prev.Cell && h.Node < 0.05 && prev.Node < 0.05 {
+				// Each side's Next must name the other side's Cell.
+				if prev.Next != h.Cell || h.Next != prev.Cell {
+					t.Fatalf("crossing at u=%.3f v=%.3f went %d→%d, but Next said %d→%d",
+						u, v, prev.Cell, h.Cell, prev.Next, h.Next)
+				}
+			}
+			prev = h
+		}
 	}
 }
 
