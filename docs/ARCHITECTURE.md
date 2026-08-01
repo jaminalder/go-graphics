@@ -38,6 +38,7 @@ The first sketch reproduces
 | Noise / field | Deterministic scalar fields `f(x, y) → float64`, e.g. Perlin + fBm octaves. Seedable, no global state. | `internal/noise` |
 | `Sketch` | One artwork algorithm: deterministic function of (params, seed, size) → `image.Image`. | `internal/sketch`, one subpackage per sketch |
 | `Swatch` | A colour with room to move: an HSB base plus a per-channel spread and a clamp box it may never leave. Drawing from one repeatedly gives a family; stepping from the previous draw walks that family. | `internal/palette` |
+| Partition / foam | The canvas divided into curved-walled cells, each addressable: which cell a point is in, its distance to the nearest wall, how crowded it is with further cells. Per cell: area, centroid, inscribed radius. A distance *field* (Worley) cannot be filled; a partition can. | `internal/cells` |
 | Trait / output space | A sketch's space of outcomes as orthogonal, weighted, discrete dimensions derived from the seed and overridable per render. The idea behind QQL; the machinery is sketch-agnostic. | `internal/trait` |
 | Render | Pixel-loop execution (parallel), size profiles, PNG/JPEG encoding. | `internal/render` |
 
@@ -55,6 +56,8 @@ internal/
   palette/                Color type, manipulation, data     → mathx
   gradient/               Gradient implementations           → palette, mathx
   geom/                   circles + spatial index            → (stdlib only)
+  cells/                  weighted partition of the canvas
+                          into fillable cells (foam)         → (stdlib only)
   noise/                  Perlin, fBm, Worley, Hash01        → (stdlib only)
   trait/                  weighted output-space dimensions,
                           seed derivation, CLI overrides     → (stdlib only)
@@ -66,7 +69,7 @@ internal/
                           Context, registry, Raster helper   → palette, render, trait
     sketchtest/           shared test helpers (goldens etc.) → sketch
     contour/, tapestry/, circles/, drift/, rounds/,
-    shoal/, qql/, pools/                    the sketches     → all of the above
+    shoal/, qql/, pools/, foam/             the sketches     → all of the above
 docs/                     this file, sketch specs, idea backlog, reference data
 tools/                    code generators (palette data)
 out/                      rendered images (gitignored)
@@ -80,8 +83,8 @@ cmd → sketch (registry) → {gradient, noise, render, trait} → palette → m
 
 Rules:
 
-- `mathx`, `geom`, `noise`, `trait`, `rnd` and `opt` are leaf packages:
-  stdlib imports only.
+- `mathx`, `geom`, `noise`, `trait`, `rnd`, `opt` and `cells` are leaf
+  packages: stdlib imports only.
 - Sketches live in subpackages of `internal/sketch`; `cmd` discovers them
   only through the registry. Sketch-specific CLI options are owned by the
   sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
@@ -297,6 +300,9 @@ type Traited interface {
 | 32 | Sketch 008 borrows QQL's structures *and* its walk | The first attempt took only the seeding, on QQL's own note that the structure matters more than the field. That is true of the composition and false of the surface: what makes a QQL piece recognisable is that its marks touch — contiguous strands that curve, each holding one size and one whole colour scheme for its length. A structured grid of scattered marks has the same large-scale arrangement and reads as a scatter, which is what a review caught. Marks now advance by their own diameter along a field, which a fixed candidate grid cannot do, since the step has to follow the size of the mark being laid. Reimplemented in the sketch rather than extracted from `qql`: QQL's versions are entangled with its `frame`, its spec machinery and its tracer, so sharing would have meant retrofitting the port and risking its output for a third caller that does not exist. |
 
 | 33 | Sketch 008's palette is a trait, not just the `--palette` flag | A sketch whose colours sit outside its output space cannot be swept: every seed comes out in whatever `--palette` said, and varying the palette instead gives the cartesian product — one composition repeated once per colour, which is one picture shown five ways rather than five pictures. QQL always had this (`--qql-palette`); 008 was the odd one out, and a review of a 45-piece sweep is what made it obvious. The list is curated rather than the whole ColorLisa set, because a transparent wash on tinted paper needs pigments dark enough to read against their own ground; `from-flag` carries weight 0 and hands colour duty back to `--palette` for anything outside it. |
+| 34 | A partition (`internal/cells`), not another distance field | Sketch 009 needed regions that could be *filled* — a wash in one, hatching in the next — and `noise.Worley` answers only "how far to the nearest site". The addition is small (which cell won the argmin, plus one measuring pass for area/centroid/inradius) and it is what turns cell noise into a structure a sketch can address. It is a leaf package rather than sketch-private because filling a partition is a whole family of sketches, not one. The metric is additively weighted (Apollonius) so the walls are arcs; sites may be merged so a cell can be a concave lobe. |
+| 35 | The junction measure is a smooth crowding count, not "how near is the third cell" | The ink swells where cells meet, which needs a number that is 1 at a junction and 0 mid-wall. Ranking gives one for free — but ranking is not smooth in position: the identity of the third-nearest cell swaps along rays running out of every junction, and the measure creases along them. Fed into the line width the creases came out as sharp spikes radiating from every node, invisible at 600px and unmissable at 6000. Summing `exp(−(dₖ−d₂)/σ)` over *every* further cell depends on no ordering at all, and the same sum makes a four-way junction swell more than a three-way one, which is correct. |
+| 36 | Sketch 009 bends the plane rather than only the metric | A weighted diagram curves a wall only where the two sites either side of it differ sharply in weight, and in a packed sheet most neighbours are the same size — the result reads as a cracked pane. A curl-noise domain warp, wavelength many cells long and displacement a fraction of one, curves every wall for two noise samples. Curl rather than a plain gradient because it is divergence-free: it shears the plane without compressing it, so cells come out bent rather than squeezed. It is bounded by a tanh limiter and by widening the pack's overscan, so a displaced lookup still lands among sites. |
 
 ## 9. Roadmap
 

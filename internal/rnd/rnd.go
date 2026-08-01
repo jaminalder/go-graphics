@@ -150,3 +150,23 @@ func Bag[T any](rng *rand.Rand, xs []T, weights []int) []T {
 	}
 	return bag
 }
+
+// Ladder is a geometric run of sizes with a weight per rung, weighted
+// toward the small end: rung i is base·ratio^i and carries falloff^i of the
+// weight of the smallest.
+//
+// Discrete rungs rather than a continuous range are the point. A scatter of
+// continuously varying sizes has no size hierarchy to read, only a spread —
+// it is the gaps between the rungs that let an eye see "small, medium,
+// large" at all. The falloff wants to be gentle: steeper and the top rungs
+// never come up, which leaves a field of same-sized specks.
+func Ladder(base, ratio float64, rungs int, falloff float64) (sizes, weights []float64) {
+	v, w := base, 1.0
+	for range max(rungs, 1) {
+		sizes = append(sizes, v)
+		weights = append(weights, w)
+		v *= ratio
+		w *= falloff
+	}
+	return sizes, weights
+}

@@ -14,13 +14,14 @@ make lint       # golangci-lint (v2.12 local; config .golangci.yml)
 make preview    # render sketch "contour" at preview size into out/
 make preview-qql # render sketch "qql" at its native 4:5 preview size
 make preview-pools # render sketch "pools" (watercolour circles)
+make preview-foam # render sketch "foam" (inked cells with pluggable fills)
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
 go run ./cmd/staticart traits <sketch> --seed N  # the output-space point a seed lands on
 go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + contact sheet
 ```
 
-Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools.
+Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so
@@ -95,6 +96,8 @@ internal/rnd/           sampling vocabulary: weighted choice, gaussians,
                         winnow, weighted bag (leaf)
 internal/opt/           declarative CLI knobs → flags, ranges, name suffix (leaf)
 internal/geom/          circles + spatial collision/containment index (leaf)
+internal/cells/         weighted partition of the canvas into addressable,
+                        fillable cells: a foam (leaf)
 internal/trait/         weighted output-space dimensions, seed → traits, CLI overrides (leaf)
 internal/palette/       Color type + ops, HSB Swatch (clamp box + walk), ColorLisa data
 internal/gradient/      cosine / HSL / discrete / terraced gradients

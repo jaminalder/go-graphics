@@ -117,22 +117,10 @@ func newFill(level string, rng *rand.Rand) layout {
 	return l
 }
 
-// ladder is the size ladder: a geometric run of radii, weighted toward the
-// small end. Discrete rungs rather than a continuous range are the whole
-// point — a scatter of continuously varying radii has no size hierarchy to
-// read, only a spread.
+// ladder is the size ladder this sheet's marks come off — see rnd.Ladder
+// for why the rungs are discrete.
 func (l layout) ladder() (radii, weights []float64) {
-	r := l.base
-	w := 12.0
-	for range max(l.rungs, 1) {
-		radii = append(radii, r)
-		weights = append(weights, w)
-		r *= l.ratio
-		// A gentle falloff. Steeper and the top rungs never come up, which
-		// leaves a field of same-sized specks with no hierarchy to read.
-		w *= 0.7
-	}
-	return radii, weights
+	return rnd.Ladder(l.base, l.ratio, l.rungs, 0.7)
 }
 
 // bestCandidate throws darts and keeps the one furthest from what is
