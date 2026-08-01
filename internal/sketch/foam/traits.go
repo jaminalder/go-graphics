@@ -17,6 +17,8 @@ const (
 	dimLobes   = "lobes"
 	dimFills   = "fills"
 	dimLine    = "line"
+	dimMosaic  = "mosaic"
+	dimRelief  = "relief"
 )
 
 var schema = trait.Schema{
@@ -66,6 +68,34 @@ var schema = trait.Schema{
 			{Name: "bold", Weight: 2},
 		},
 	},
+	// Appended, and appended deliberately. Derive draws in schema order, so
+	// the five dimensions above are untouched and every existing seed still
+	// lands on the sheet it always did (decision 21 in ARCHITECTURE.md made
+	// the same argument for QQL's wash medium).
+	{
+		Name: dimMosaic, Key: "m",
+		Doc: "how the cells are subdivided into tiles, and where a tile's colour comes from",
+		Values: []trait.Value{
+			{Name: "plain", Weight: 1},
+			{Name: "family", Weight: 0},
+			{Name: "strata", Weight: 0},
+			{Name: "tonal", Weight: 0},
+			{Name: "soloist", Weight: 0},
+			{Name: "neighbour", Weight: 0},
+		},
+	},
+	{
+		Name: dimRelief, Key: "r",
+		Doc: "how the sheet is lit",
+		Values: []trait.Value{
+			{Name: "flat", Weight: 1},
+			{Name: "bevel", Weight: 0},
+			{Name: "cushion", Weight: 0},
+			{Name: "occlude", Weight: 0},
+			{Name: "terrace", Weight: 0},
+			{Name: "glass", Weight: 0},
+		},
+	},
 }
 
 // levels is everything the traits resolve to: the site pack, the merging,
@@ -95,6 +125,10 @@ type levels struct {
 
 	// the fills
 	styles [nstyles]float64 // relative weight of each style
+
+	// the mosaic and the light (subdivide.go, shade.go)
+	sub sublevels
+	rel reliefLevels
 }
 
 // defaults are the levels shown in --help. What a render actually uses is
@@ -104,6 +138,8 @@ func defaults(rng *rand.Rand) levels {
 	newLobes("few", rng, &l)
 	newLine("drawn", rng, &l)
 	newFills("mixed", &l)
+	newMosaic("family", rng, &l)
+	newRelief("bevel", rng, &l)
 	return l
 }
 
@@ -266,6 +302,9 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 	newLobes(tr.Get(dimLobes), rng, &l)
 	newLine(tr.Get(dimLine), rng, &l)
 	newFills(tr.Get(dimFills), &l)
+	newMosaic(tr.Get(dimMosaic), rng, &l)
+	newRelief(tr.Get(dimRelief), rng, &l)
+	s.overrideLook(&l)
 
 	s.override([]knob{
 		{"merge", func() { l.merge = s.pin.merge }},

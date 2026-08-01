@@ -51,6 +51,8 @@ func (s *Sketch) declare() {
 	o.Float("passage", "wavelength of the colour field, canvas units", "pa", 0.1, 4, &s.Passage)
 	o.Float("stroke", "pencil stroke pitch, canvas units", "st", 0.001, 0.1, &s.Stroke)
 
+	s.declareLook(o)
+
 	s.knobs = o
 }
 
