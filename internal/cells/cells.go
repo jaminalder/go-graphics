@@ -42,6 +42,13 @@ type Cell struct {
 	Area     float64 // share of the canvas, in [0,1]
 	CX, CY   float64 // centroid of the part inside the frame
 	Inradius float64 // largest wall distance found inside it
+
+	// MinX..MaxY bound the part of the cell inside the frame, in canvas
+	// units. A caller that wants to *cover* a cell — stamping paint over it
+	// rather than answering per pixel — needs somewhere to aim, and a
+	// centroid and an area do not give it: a long lobe and a disc of the
+	// same area want very different boxes.
+	MinX, MinY, MaxX, MaxY float64
 }
 
 // Hit is what the foam knows about one point.
@@ -171,6 +178,8 @@ func (f *Foam) build(aspect float64) {
 	f.cells = make([]Cell, ncell)
 	for i := range f.cells {
 		f.cells[i].ID = i
+		f.cells[i].MinX, f.cells[i].MinY = math.Inf(1), math.Inf(1)
+		f.cells[i].MaxX, f.cells[i].MaxY = math.Inf(-1), math.Inf(-1)
 	}
 	for _, g := range f.group {
 		f.cells[g].Sites++
@@ -341,6 +350,8 @@ func (f *Foam) measure(aspect float64, res int) {
 			sumX[h.Cell] += u
 			sumY[h.Cell] += v
 			count[h.Cell]++
+			c.MinX, c.MinY = math.Min(c.MinX, u), math.Min(c.MinY, v)
+			c.MaxX, c.MaxY = math.Max(c.MaxX, u), math.Max(c.MaxY, v)
 			total++
 			if !math.IsInf(h.Wall, 1) && h.Wall > c.Inradius {
 				c.Inradius = h.Wall
@@ -349,8 +360,18 @@ func (f *Foam) measure(aspect float64, res int) {
 	}
 	for i := range f.cells {
 		if count[i] == 0 {
+			f.cells[i].MinX, f.cells[i].MinY = 0, 0
+			f.cells[i].MaxX, f.cells[i].MaxY = 0, 0
 			continue
 		}
+		// The box is measured on a sample grid, so it is inset by up to half
+		// a step. Grown by one step it contains the cell rather than most of
+		// it, which is what a caller covering it needs.
+		step := 1 / float64(res)
+		f.cells[i].MinX -= step
+		f.cells[i].MinY -= step
+		f.cells[i].MaxX += step
+		f.cells[i].MaxY += step
 		f.cells[i].Area = count[i] / total
 		f.cells[i].CX = sumX[i] / count[i]
 		f.cells[i].CY = sumY[i] / count[i]

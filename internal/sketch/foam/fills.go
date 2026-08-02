@@ -42,7 +42,6 @@ type dress struct {
 	stroke   float64       // stroke spacing, canvas units
 	press    float64       // how hard the pencil was leaning
 	tone     float64       // the scheme's value for this cell, 0 pale .. 1 full
-	water    waterDress    // what the paint did, if this cell was washed
 }
 
 // dress settles every cell's pigment and style.
@@ -61,7 +60,7 @@ func (s *Sketch) dress(f *cells.Foam, l levels, rng *rand.Rand, aspect float64, 
 func (s *Sketch) dressOne(i int, c cells.Cell, l levels, rng *rand.Rand, m *mixer, aspect float64, paper palette.Color) dress {
 	// The pigment, the pigment a wet-in-wet cell is charged with, and how
 	// heavily this cell was loaded, all from the sheet's colour scheme.
-	base, second, tone := m.draw(i)
+	base, _, tone := m.draw(i)
 
 	d := dress{
 		tone:    tone,
@@ -99,7 +98,6 @@ func (s *Sketch) dressOne(i int, c cells.Cell, l levels, rng *rand.Rand, m *mixe
 	if d.style == styleBands && roundness(c, aspect) > 1.8 {
 		d.style = styleWash
 	}
-	d.water = s.dressWater(c, l, rng, second, tone)
 	return d
 }
 
@@ -146,9 +144,10 @@ func (s *Sketch) fill(d dress, h cells.Hit, field *noise.Perlin, seed uint64, u,
 			col = palette.Lerp(paper, d.pigment, mathx.Clamp01(0.2+1.6*d.tone))
 		}
 	default:
-		// The wash is the watercolour engine (watercolour.go), which is a
-		// load of pigment rather than a colour, composited as absorption.
-		col = s.watercolour(d, h.Wall, field, seed, u, v, paper)
+		// A washed cell is not drawn here at all: the wash is stamped, not
+		// answered per pixel (paint.Wash.Fill), so by the time this runs the
+		// paint is already on the canvas underneath.
+		col = paper
 	}
 	return shade(col, 1+s.grain(seed, u, v))
 }

@@ -19,7 +19,6 @@ const (
 	dimLine    = "line"
 	dimMosaic  = "mosaic"
 	dimRelief  = "relief"
-	dimWater   = "water"
 	dimScheme  = "scheme"
 )
 
@@ -115,19 +114,6 @@ var schema = trait.Schema{
 	// the same argument: a value with weight 0 does not change the
 	// dimension's total, so no seed's `fills` draw moves either.
 	{
-		Name: dimWater, Key: "w", InName: true,
-		Doc: "what the paint did while it dried",
-		Values: []trait.Value{
-			{Name: waterPlain, Weight: 2},
-			{Name: waterCharge, Weight: 3},
-			{Name: waterBloom, Weight: 2},
-			{Name: waterGlaze, Weight: 2},
-			{Name: waterSed, Weight: 2},
-			{Name: waterBled, Weight: 2},
-			{Name: waterStudio, Weight: 3},
-		},
-	},
-	{
 		Name: dimScheme, Key: "s", InName: true,
 		Doc: "how colour is organised over the sheet",
 		Values: []trait.Value{
@@ -189,7 +175,6 @@ type levels struct {
 	sub sublevels
 	rel reliefLevels
 	// the paint (watercolour.go, scheme.go)
-	water  waterLevels
 	scheme string
 }
 
@@ -202,7 +187,6 @@ func defaults(rng *rand.Rand) levels {
 	newFills("mixed", &l)
 	newMosaic("family", rng, &l)
 	newRelief("bevel", rng, &l)
-	newWater(waterStudio, rng, &l)
 	l.scheme = schemePassage
 	return l
 }
@@ -388,7 +372,6 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 	newMosaic(tr.Get(dimMosaic), rng, &l)
 	newRelief(tr.Get(dimRelief), rng, &l)
 	s.overrideLook(&l)
-	newWater(tr.Get(dimWater), rng, &l)
 	l.scheme = tr.Get(dimScheme)
 
 	s.override([]knob{
@@ -405,12 +388,6 @@ func (s *Sketch) levelsFor(tr trait.Set, rng *rand.Rand) levels {
 		{"bands", func() { l.styles[styleBands] = s.pin.styles[styleBands] }},
 		{"hatch", func() { l.styles[styleHatch] = s.pin.styles[styleHatch] }},
 		{"empty", func() { l.styles[styleEmpty] = s.pin.styles[styleEmpty] }},
-		{"load", func() { l.water.load = s.pin.water.load }},
-		{"tonal", func() { l.water.spread = s.pin.water.spread }},
-		{"overshoot", func() { l.water.over = s.pin.water.over }},
-		{"granulate", func() { l.water.grain = s.pin.water.grain }},
-		{"bleed", func() { l.water.bleed = s.pin.water.bleed }},
-		{"seep", func() { l.water.seep = s.pin.water.seep }},
 	})
 	// The warp displaces every lookup, so the pack has to reach far enough
 	// that a displaced point still lands among sites. Drawn with the density

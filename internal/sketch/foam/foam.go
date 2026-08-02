@@ -37,6 +37,7 @@ const (
 	streamDress  = 2 // what each cell is filled with
 	streamTraits = 3 // which point of the output space this seed is
 	streamLevels = 4 // the trait levels made numeric
+	streamPaint  = 5 // the per-pool deformation of a stamped wash
 	streamTiles  = 5 // where the mosaic's tiles go
 )
 
@@ -70,9 +71,10 @@ type Sketch struct {
 	Bevel   float64 // run that rise happens over, ×smallest cell
 	Light   float64 // the light's bearing, degrees
 
-	// The watercolour (watercolour.go).
-	Scatter float64 // light scattered back off the pigment rather than through it
-	Tooth   float64 // the paper's tooth for granulation, canvas units
+	// The wash, stamped rather than answered per pixel (wash.go).
+	Ragged float64 // pool edge deviation; 0 is a true circle, 0.22 a blob
+	Load   float64 // strength of one touch of the brush
+	Reach  float64 // how far a pool sits past its cell's edge, ×depth
 
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
@@ -100,8 +102,9 @@ func New() *Sketch {
 		Depth:   0.12,
 		Bevel:   0.2,
 		Light:   135,
-		Scatter: 0.28,
-		Tooth:   0.003,
+		Ragged:  0.2,
+		Load:    0.42,
+		Reach:   1.3,
 		traits:  trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
@@ -184,13 +187,16 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A sheet with any washed cell on it is painted rather than rastered:
+	// a pool is a stack of forty stamped deposits, not a function of
+	// position (wash.go).
+	if sh.washes() {
+		return s.paintSheet(ctx, sh), nil
+	}
 	return sketch.Raster(ctx, func(u, v float64) palette.Color {
 		wu, wv := s.warp(sh.field, sh.level, u, v)
 		h := sh.foam.At(wu, wv)
-		// paint, not fill: a wash may cross the wall into this cell, either
-		// because it failed to register with the line or because the two
-		// were painted while both were wet (watercolour.go).
-		c := s.paint(sh, h, ctx.Seed, u, v)
+		c := s.fill(sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
 		// The mosaic replaces what the paint laid down wherever a cell was
 		// subdivided; the relief lights whatever came out. Both run *before*
 		// the ink, so the heavy outer line clips the fine net and is never
