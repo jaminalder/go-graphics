@@ -51,6 +51,9 @@ var schema = trait.Schema{
 			{Name: "few", Weight: 3},
 			{Name: "many", Weight: 3},
 			{Name: "most", Weight: 1},
+			// Past what a foam does. Weight 0: it is a deliberate departure
+			// from the reference, not an outcome to land on.
+			{Name: "molten", Weight: 0},
 		},
 	},
 	{
@@ -134,6 +137,7 @@ var schema = trait.Schema{
 			{Name: schemeTriad, Weight: 0},
 			{Name: schemeQuiet, Weight: 0},
 			{Name: schemeNotan, Weight: 0},
+			{Name: schemeTerrace, Weight: 0},
 			{Name: schemeAnchor, Weight: 0},
 			{Name: schemeWeather, Weight: 0},
 			{Name: schemeDuet, Weight: 0},
@@ -261,9 +265,16 @@ func newLobes(level string, rng *rand.Rand, l *levels) {
 	case "many":
 		l.merge, l.maxLobe = rnd.Uniform(rng, 0.32, 0.48), 3
 		l.warp = rnd.Uniform(rng, 0.85, 1.35)
-	default: // most
+	case "most":
 		l.merge, l.maxLobe = rnd.Uniform(rng, 0.55, 0.75), 3
 		l.warp = rnd.Uniform(rng, 1.1, 1.7)
+	default: // molten
+		// Lobes of four and five sites, bent hard. A cell stops being a
+		// bubble and becomes a run that wanders across its neighbours — the
+		// walls interlock rather than meeting at junctions, which is no
+		// longer a foam and is exactly the point of it.
+		l.merge, l.maxLobe = rnd.Uniform(rng, 0.80, 0.95), 5
+		l.warp = rnd.Uniform(rng, 1.9, 2.8)
 	}
 	l.swirl = rnd.Uniform(rng, 20, 32)
 }

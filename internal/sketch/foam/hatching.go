@@ -164,8 +164,31 @@ func (s *Sketch) hatchFor(look string, rng *rand.Rand) hatching {
 			// vanish in the middle of itself.
 			p.ToneWidth = 1.35
 			p.ToneDensity = 0
-			p.Jitter = 0.07
 			p.Softness = 0.35
+
+			// One fineness over the whole sheet: an absolute spacing, not a
+			// count fitted to each cell. Fit gives every region the same
+			// *number* of marks, so a quarter-canvas lobe is combed with
+			// half a dozen fat spikes while a chip beside it gets six fine
+			// ones — the mark size then reads as a property of the cell
+			// rather than of the hand holding the pen.
+			p.Fit = 0
+			p.Spacing = s.HatchPitch
+
+			// And an irregular hand. Jitter moves each spike off the lattice,
+			// and breaking the marks gives them uneven lengths — each one
+			// carries its own dash phase, so they do not line up into rows.
+			// Without both, a constant spacing reads as a printed screen,
+			// which is exactly what the fitted version never did.
+			p.Jitter = 0.38 * s.HatchVary
+			p.Continuity = 1 - 0.32*s.HatchVary
+			// The break is far longer than a cell is wide, on purpose. A
+			// dash comparable to the spacing chops every spike into a row of
+			// equal blocks and the whole cell reads as dither; a dash of
+			// several cell-widths means a given spike is simply present,
+			// absent, or cut short — which is what varies the lengths. Each
+			// mark carries its own phase, so they never line up.
+			p.Dash = s.HatchPitch * 40
 		})), tone: toneLit}
 
 	case hatchStipple:

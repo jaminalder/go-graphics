@@ -85,6 +85,8 @@ type Sketch struct {
 	Hatching    float64 // how hard the marks are pressed
 	HatchFit    int     // marks across a cell, whatever its size
 	HatchWeight float64 // mark thickness, as a share of the spacing
+	HatchPitch  float64 // mark spacing in canvas units, for looks that keep one fineness
+	HatchVary   float64 // how irregular the marks are in spacing and in length
 
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
@@ -128,6 +130,8 @@ func New() *Sketch {
 		Hatching:    0.62,
 		HatchFit:    7,
 		HatchWeight: 0.34,
+		HatchPitch:  0.0075,
+		HatchVary:   0.7,
 		traits:      trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is

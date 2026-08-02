@@ -36,6 +36,7 @@ const (
 	schemeTriad      = scheme.Triad
 	schemeQuiet      = scheme.Monochrome
 	schemeNotan      = scheme.Notan
+	schemeTerrace    = scheme.Terrace
 	schemeAnchor     = scheme.Anchor
 	schemeWeather    = scheme.Temperature
 	schemeDuet       = scheme.Duet

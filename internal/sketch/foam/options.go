@@ -50,6 +50,8 @@ func (s *Sketch) declare() {
 	o.Choice("hatching", "family of marks laid over each cell", "ht", hatchNames, &s.Look, nil)
 	o.Float("hatch-press", "how hard the marks are pressed", "hp", 0, 1, &s.Hatching)
 	o.Int("hatch-fit", "marks across a cell, whatever its size", "hf", 2, 40, &s.HatchFit)
+	o.Float("hatch-pitch", "mark spacing in canvas units, for looks that keep one fineness", "hz", 0.001, 0.06, &s.HatchPitch)
+	o.Float("hatch-vary", "how irregular the marks are in spacing and in length", "hv", 0, 1, &s.HatchVary)
 	o.Float("hatch-weight", "mark thickness, as a share of the spacing", "hw", 0.05, 0.9, &s.HatchWeight)
 
 	o.Float("weight", "how strongly a site radius bends the walls; 0 is straight", "wt", 0, 2, &s.Weight)

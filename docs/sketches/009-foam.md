@@ -337,7 +337,7 @@ neutral hatch over a coloured fill reads as a screen laid on the picture.
 | --- | --- | --- |
 | `colourway` | c | which palette the sheet is drawn from |
 | `density` | d | sparse, open, medium, busy, packed, fine (weight 0) |
-| `lobes` | l | tidy, few, many, most |
+| `lobes` | l | tidy, few, many, most, molten (weight 0) |
 | `fills` | f | washed, mixed, drawn, airy, net (0), watercolour (0) |
 | `line` | n | fine, drawn, bold |
 | `water` | w | plain, charged, blooms, glazed, sedimentary, bled, studio |
@@ -347,6 +347,12 @@ neutral hatch over a coloured fill reads as a screen laid on the picture.
 *and* how hard the plane is warped. They belong on one axis because they
 are one decision: a sheet that bends its walls and never merges a cell is
 as inconsistent as the reverse.
+
+`molten` is past what a foam does: lobes of four and five sites, bent hard,
+so a cell stops being a bubble and becomes a run that wanders across its
+neighbours. The walls interlock rather than meeting at junctions. Weight 0,
+because it is a deliberate departure from the reference rather than an
+outcome to land on.
 
 `fine` is a step below `packed` — a cell is a chip rather than a shape. It
 carries weight 0, so no seed lands on it: at that size the sheet is a

@@ -43,6 +43,7 @@ const (
 	Triad       = "triad"       // three hues round the wheel, unequal proportion
 	Monochrome  = "quiet"       // one pigment at every dilution, plus one spark
 	Notan       = "notan"       // two or three values only, hue nearly constant
+	Terrace     = "terrace"     // the ramp cut into flat steps, like a contour map
 	Anchor      = "anchor"      // a cluster of dark regions anchoring the frame
 	Temperature = "weather"     // warm-to-cool along a direction, value on its own field
 	Duet        = "duet"        // two pigments, every colour a mix of them
@@ -54,7 +55,7 @@ const (
 func Names() []string {
 	return []string{
 		Passage, Gradient, Sequence, Inherit, Dominance, Complement,
-		Analogous, Triad, Monochrome, Notan, Anchor, Temperature, Duet,
+		Analogous, Triad, Monochrome, Notan, Terrace, Anchor, Temperature, Duet,
 		BySize, ByDarkness,
 	}
 }

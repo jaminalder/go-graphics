@@ -139,6 +139,30 @@ func (s *state) one(r Region) Colour {
 			return Colour{Fill: s.lum[len(s.lum)/2], Accent: s.chroma[0], Tone: 0.5}
 		}
 
+	case Terrace:
+		// Notan's idea with more steps: a field, quantised, so the sheet
+		// comes out in flat layers of one grade each rather than in a
+		// gradation. It is what a contour map does, and what a paper-cut
+		// does — and the reason it reads so strongly is that the eye finds
+		// an edge wherever the level changes, so a smooth field acquires
+		// *shapes* it never had.
+		//
+		// The steps are read off the luminance ramp, so consecutive layers
+		// agree about lightness and differ in hue: layers of colour grade
+		// rather than a grey staircase.
+		const steps = 5
+		g := s.patch(r, 1.25, 61.3, -27.8)
+		k := min(int(g*steps), steps-1)
+		t := (float64(k) + 0.5) / steps
+		return Colour{
+			Fill:   pick(s.lum, t),
+			Accent: away(s.lum, t, s.rng),
+			// The tone steps with the layer rather than running on its own
+			// field: a terrace whose value drifts inside a layer is no
+			// longer a layer.
+			Tone: 0.12 + 0.8*(1-t),
+		}
+
 	case Anchor:
 		// A value structure with the dark regions arriving in a *cluster*
 		// rather than scattered, which is what gives the composition
