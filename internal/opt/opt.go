@@ -116,7 +116,12 @@ func (s *Set) Choice(name, doc, tag string, values []string, dst *string, apply 
 		check: func() error {
 			for i, v := range values {
 				if v == *dst {
-					apply(i)
+					// A knob whose whole answer is the string itself has
+					// nothing to apply, and passing a no-op closure to say so
+					// is noise at every call site.
+					if apply != nil {
+						apply(i)
+					}
 					return nil
 				}
 			}

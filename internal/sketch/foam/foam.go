@@ -38,7 +38,7 @@ const (
 	streamDress  = 2 // what each cell is filled with
 	streamTraits = 3 // which point of the output space this seed is
 	streamLevels = 4 // the trait levels made numeric
-	streamPaint  = 5 // the per-pool deformation of a stamped wash
+	streamHatch  = 5 // the family of marks each cell is hatched with
 	streamTiles  = 5 // where the mosaic's tiles go
 )
 
@@ -77,7 +77,13 @@ type Sketch struct {
 	Load   float64 // pigment in a cell at full tone
 	Pool   float64 // wavelength of the pigment's pooling, canvas units
 	Uneven float64 // how strongly it pools
-	Dry    float64 // extra pigment gathered at the cell's edge as it dried
+	Dry    float64 // extra pigment gathered at the cell's edge as it dried; 0 is even
+
+	// The hatching laid over the paint (hatching.go).
+	Look        string  // which family of marks, or "none"
+	Hatching    float64 // how hard the marks are pressed
+	HatchFit    int     // marks across a cell, whatever its size
+	HatchWeight float64 // mark thickness, as a share of the spacing
 
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
@@ -114,8 +120,13 @@ func New() *Sketch {
 		// lines round every cell instead of one. The knob is kept because
 		// on an open sheet, where a cell is large enough for the rim to be
 		// a small part of it, it is worth having.
-		Dry:    0,
-		traits: trait.NewOptions(schema),
+		Dry: 0,
+
+		Look:        hatchNone,
+		Hatching:    0.62,
+		HatchFit:    7,
+		HatchWeight: 0.34,
+		traits:      trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
 	// taken from the trait level, not from here.
@@ -147,15 +158,16 @@ func (s *Sketch) TraitSuffix(set trait.Set) string { return s.traits.NameSuffix(
 // pixel is drawn. Kept as a value so the tests can inspect a composition
 // without rasterising it.
 type sheet struct {
-	foam  *cells.Foam
-	skin  []dress
-	level levels
-	field *noise.Perlin
-	wash  paint.FlatWash
-	paper palette.Color
-	ink   palette.Color
-	ramp  []palette.Color // the pigments, ordered light to dark
-	tiles *tiling         // the mosaic layer; nil when nothing is subdivided
+	foam    *cells.Foam
+	skin    []dress
+	level   levels
+	field   *noise.Perlin
+	wash    paint.FlatWash
+	paper   palette.Color
+	ink     palette.Color
+	ramp    []palette.Color // the pigments, ordered light to dark
+	hatches []hatching      // one family of marks per cell
+	tiles   *tiling         // the mosaic layer; nil when nothing is subdivided
 }
 
 // plan builds the sheet for one context.
@@ -182,15 +194,16 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	wash.Tooth, wash.Grain = paperTooth, s.Grain*7
 	skin := s.dress(foam, l, ctx.RNG(streamDress), aspect, paper, ramp)
 	return &sheet{
-		foam:  foam,
-		skin:  skin,
-		level: l,
-		field: field,
-		wash:  wash,
-		paper: paper,
-		ink:   ink,
-		ramp:  ramp,
-		tiles: s.subdivide(foam, l, ctx.RNG(streamTiles), aspect, skin, ramp),
+		foam:    foam,
+		skin:    skin,
+		level:   l,
+		field:   field,
+		wash:    wash,
+		hatches: s.hatchAll(foam, s.Look, ctx.RNG(streamHatch)),
+		paper:   paper,
+		ink:     ink,
+		ramp:    ramp,
+		tiles:   s.subdivide(foam, l, ctx.RNG(streamTiles), aspect, skin, ramp),
 	}, nil
 }
 
@@ -211,6 +224,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// the ink, so the heavy outer line clips the fine net and is never
 		// itself lit.
 		c = s.tile(sh, h, u, v, wu, wv, c, ctx.Seed)
+		// After the mosaic, so the marks lie on whatever colour the cell
+		// ended up with, and before the ink, which stays on top of
+		// everything.
+		c = s.hatchOver(sh, h, c, u, v)
 		c = s.relief(sh, h, u, v, c, ctx.Seed)
 		return s.lay(c, h, sh.level, sh.field, ctx.Seed, sh.ink, u, v)
 	}), nil

@@ -286,6 +286,37 @@ from across the room.
 | `by-size` | colour follows the cell's *size*, not its position |
 | `by-darkness` | hue from the field, tone from the cell's size |
 
+## Hatching
+
+`--hatching <look>` lays a family of marks over every cell, from
+`internal/hatch`. The structures are that package's; what this sketch
+decides is which family a cell gets and what *tone* the marks encode.
+
+The tone is where the third dimension comes from. An engraver cannot make
+ink darker, so they make it denser, and density reads as light. Give every
+cell one consistent light bearing — `--light`, shared with the relief — let
+the hatch thin toward it and crowd away from it, and flat tiles come up off
+the page as rounded stones. Nothing computes a normal or traces a ray.
+
+| look | marks | encodes |
+| --- | --- | --- |
+| `parallel`, `cross`, `contour`, `wave`, `flow`, `weave`, `fan` | one or two families | nothing; even |
+| `shade` | straight | light across the cell |
+| `dome` | following the cell's outline | light across the cell |
+| `sphere` | rings about the centre | light across the cell |
+| `engrave` | two families, the second only in the shadow | light across the cell |
+| `stipple` | dots | light across the cell |
+| `hollow` | following the outline | distance to the rim — a dish, not a stone |
+
+Two things had to be turned up together for the light to read at cell size.
+`hatch`'s tonal thinning drops marks by whole octaves, so on its own the lit
+side goes from eight lines to four to two — a change in *texture* long before
+it is a change in tone. Pressing the marks lighter as well as spacing them
+wider is what closes the gap.
+
+The marks are the cell's own pigment gone over twice, not a separate ink: a
+neutral hatch over a coloured fill reads as a screen laid on the picture.
+
 ## Traits
 
 | dimension | key | values |
