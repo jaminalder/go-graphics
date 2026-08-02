@@ -64,6 +64,7 @@ type Sketch struct {
 	Accent  float64 // share of cells taking a colour from outside their passage
 	Passage float64 // wavelength of the colour field, canvas units
 	Stroke  float64 // pencil stroke pitch, canvas units
+	Flat    float64 // how far a flat fill deepens at full tone; 1 is no deepening
 	Depth   float64 // rise of the relief, ×smallest cell (shade.go)
 	Bevel   float64 // run that rise happens over, ×smallest cell
 	Light   float64 // the light's bearing, degrees
@@ -93,6 +94,7 @@ func New() *Sketch {
 		Accent:  0.22,
 		Passage: 0.75,
 		Stroke:  0.0045,
+		Flat:    0.76,
 		Depth:   0.12,
 		Bevel:   0.2,
 		Light:   135,
@@ -159,7 +161,7 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	foam := cells.New(sites, group, aspect, cells.Params{Node: l.node, Round: l.round, Stat: statRes})
 
 	field := noise.New(ctx.Seed)
-	skin := s.dress(foam, l, ctx.RNG(streamDress), field, aspect, paper, ramp)
+	skin := s.dress(foam, l, ctx.RNG(streamDress), aspect, paper, ramp)
 	return &sheet{
 		foam:  foam,
 		skin:  skin,

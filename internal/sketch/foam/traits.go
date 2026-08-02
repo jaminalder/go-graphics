@@ -61,6 +61,7 @@ var schema = trait.Schema{
 			{Name: "net", Weight: 0},
 			// Weight 0, appended: see the note on the dimension below.
 			{Name: "watercolour", Weight: 0},
+			{Name: "flat", Weight: 0},
 		},
 	},
 	{
@@ -134,8 +135,16 @@ var schema = trait.Schema{
 			// appending a dimension is supposed to avoid. Promoting them is
 			// this block, and nothing else.
 			{Name: schemePassage, Weight: 1},
-			{Name: schemeAnchor, Weight: 0},
+			{Name: schemeGradient, Weight: 0},
+			{Name: schemeSequence, Weight: 0},
+			{Name: schemeInherit, Weight: 0},
+			{Name: schemeDominance, Weight: 0},
+			{Name: schemeComplement, Weight: 0},
+			{Name: schemeAnalogous, Weight: 0},
+			{Name: schemeTriad, Weight: 0},
 			{Name: schemeQuiet, Weight: 0},
+			{Name: schemeNotan, Weight: 0},
+			{Name: schemeAnchor, Weight: 0},
 			{Name: schemeWeather, Weight: 0},
 			{Name: schemeDuet, Weight: 0},
 			{Name: schemeByScale, Weight: 0},
@@ -326,6 +335,11 @@ func newFills(level string, l *levels) {
 		l.styles = [nstyles]float64{styleWash: 2, stylePencil: 8, styleBands: 2, styleHatch: 2.5, styleEmpty: 3}
 	case "airy":
 		l.styles = [nstyles]float64{styleWash: 4, stylePencil: 4, styleBands: 1, styleHatch: 1, styleEmpty: 6}
+	case "flat":
+		// Every cell one flat colour. The plainest possible fill, and the
+		// right one for judging a colour scheme: any texture on top of the
+		// arrangement is a second thing to look at.
+		l.styles = [nstyles]float64{styleFlat: 1}
 	case "watercolour":
 		// A painted sheet: every cell a wash, bar the few left as paper.
 		// Those few are still load-bearing — a sheet with every cell filled

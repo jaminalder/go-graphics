@@ -22,6 +22,7 @@ const (
 	styleBands         // rings following the cell's own outline
 	styleHatch         // thin parallel lines on bare paper
 	styleEmpty         // nothing; bare paper
+	styleFlat          // one flat colour, edge to edge
 	nstyles
 )
 
@@ -40,28 +41,30 @@ type dress struct {
 	pitch    float64       // band spacing, canvas units
 	stroke   float64       // stroke spacing, canvas units
 	press    float64       // how hard the pencil was leaning
+	tone     float64       // the scheme's value for this cell, 0 pale .. 1 full
 	water    waterDress    // what the paint did, if this cell was washed
 }
 
 // dress settles every cell's pigment and style.
-func (s *Sketch) dress(f *cells.Foam, l levels, rng *rand.Rand, field *noise.Perlin, aspect float64, paper palette.Color, ramp []palette.Color) []dress {
+func (s *Sketch) dress(f *cells.Foam, l levels, rng *rand.Rand, aspect float64, paper palette.Color, ramp []palette.Color) []dress {
 	// How colour is organised over the whole sheet is settled once, before
 	// any cell is dressed: a scheme is a property of the sheet, not of a
 	// cell (see scheme.go).
-	m := s.mixFor(f, l, rng, field, ramp, aspect)
+	m := s.mixFor(f, l, rng, ramp, aspect)
 	out := make([]dress, f.Len())
 	for i, c := range f.Cells() {
-		out[i] = s.dressOne(c, l, rng, m, aspect, paper)
+		out[i] = s.dressOne(i, c, l, rng, m, aspect, paper)
 	}
 	return out
 }
 
-func (s *Sketch) dressOne(c cells.Cell, l levels, rng *rand.Rand, m *mixer, aspect float64, paper palette.Color) dress {
+func (s *Sketch) dressOne(i int, c cells.Cell, l levels, rng *rand.Rand, m *mixer, aspect float64, paper palette.Color) dress {
 	// The pigment, the pigment a wet-in-wet cell is charged with, and how
 	// heavily this cell was loaded, all from the sheet's colour scheme.
-	base, second, tone := m.draw(c, rng)
+	base, second, tone := m.draw(i)
 
 	d := dress{
+		tone:    tone,
 		pigment: base,
 		deep:    shade(base, 0.74),
 		light:   palette.Lerp(paper, base, 0.62),
@@ -121,6 +124,27 @@ func (s *Sketch) fill(d dress, h cells.Hit, field *noise.Perlin, seed uint64, u,
 		col = s.hatch(d, h, field, u, v, paper)
 	case styleEmpty:
 		col = paper
+	case styleFlat:
+		// Direct colour, edge to edge. No rim, no stroke, no granulation —
+		// the cell *is* its colour, which is the only way to look at what a
+		// colour arrangement is actually doing without a texture arguing
+		// with it.
+		//
+		// The scheme's tone is spent on the cell's *value*, because a hue
+		// arrangement with no value structure has nothing to look at from
+		// across the room — and half of what a scheme decided is its tone.
+		//
+		// It has to run both ways from the pigment. Letting the colour down
+		// toward the paper alone gives a range from pale to plain, and a
+		// sheet whose darkest note is the raw palette colour has no bottom
+		// end; deepening the other half of the range is what gives the
+		// arrangement somewhere to sit.
+		switch {
+		case d.tone >= 0.5:
+			col = shade(d.pigment, 1-(1-s.Flat)*(d.tone-0.5)*2)
+		default:
+			col = palette.Lerp(paper, d.pigment, mathx.Clamp01(0.2+1.6*d.tone))
+		}
 	default:
 		// The wash is the watercolour engine (watercolour.go), which is a
 		// load of pigment rather than a colour, composited as absorption.

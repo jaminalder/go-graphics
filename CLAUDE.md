@@ -110,6 +110,8 @@ internal/cells/         weighted partition of the canvas into addressable,
                         fillable cells: a foam (leaf)
 internal/hatch/         filling a region with repeated marks: structures,
                         parameters and coverage functions (mathx + noise)
+internal/scheme/        colour arrangement over a set of regions: 15 strategies,
+                        each answering hue *and* value (leaf)
 internal/trait/         weighted output-space dimensions, seed → traits, CLI overrides (leaf)
 internal/palette/       Color type + ops, HSB Swatch (clamp box + walk), ColorLisa data
 internal/gradient/      cosine / HSL / discrete / terraced gradients
