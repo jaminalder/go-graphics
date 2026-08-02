@@ -15,7 +15,7 @@ var update = flag.Bool("update", false, "regenerate golden files")
 
 // densities is every level of the density axis, so tests sweep the whole
 // axis rather than whichever one seed 42 happens to draw.
-var densities = []string{"sparse", "open", "medium", "busy", "packed"}
+var densities = []string{"sparse", "open", "medium", "busy", "packed", "fine"}
 
 func testCtx(t *testing.T, seed uint64) sketch.Context {
 	t.Helper()
@@ -75,6 +75,7 @@ func TestEveryDensityDividesTheSheet(t *testing.T) {
 		"medium": {22, 70},
 		"busy":   {40, 120},
 		"packed": {65, 220},
+		"fine":   {130, 380},
 	}
 	for _, d := range densities {
 		for seed := uint64(1); seed <= 4; seed++ {

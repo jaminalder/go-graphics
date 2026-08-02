@@ -38,6 +38,10 @@ var schema = trait.Schema{
 			{Name: "medium", Weight: 3},
 			{Name: "busy", Weight: 3},
 			{Name: "packed", Weight: 2},
+			// Finer than packed, and weight 0 so no seed draws it: at this
+			// size a cell is a chip rather than a shape, which is a texture
+			// to reach for on purpose rather than one to land on.
+			{Name: "fine", Weight: 0},
 		},
 	},
 	{
@@ -229,6 +233,14 @@ func newDensity(level string, rng *rand.Rand) levels {
 		l.count = 85 + rng.IntN(26)
 		l.rungs, l.base = 5, rnd.Uniform(rng, 0.032, 0.040)
 		l.ratio, l.gap = rnd.Uniform(rng, 1.36, 1.55), rnd.Uniform(rng, 0.04, 0.11)
+	case "fine":
+		// A step finer again. The ladder keeps its five rungs so the big
+		// lobes survive — a sheet of uniformly tiny cells is a texture, and
+		// what makes this read as a foam rather than as gravel is that a
+		// quarter-canvas shape still sits among the chips.
+		l.count = 260 + rng.IntN(70)
+		l.rungs, l.base = 5, rnd.Uniform(rng, 0.016, 0.021)
+		l.ratio, l.gap = rnd.Uniform(rng, 1.30, 1.46), rnd.Uniform(rng, 0.01, 0.06)
 	default: // packed
 		l.count = 140 + rng.IntN(41)
 		l.rungs, l.base = 5, rnd.Uniform(rng, 0.024, 0.030)

@@ -291,7 +291,7 @@ from across the room.
 | dimension | key | values |
 | --- | --- | --- |
 | `colourway` | c | which palette the sheet is drawn from |
-| `density` | d | sparse, open, medium, busy, packed |
+| `density` | d | sparse, open, medium, busy, packed, fine (weight 0) |
 | `lobes` | l | tidy, few, many, most |
 | `fills` | f | washed, mixed, drawn, airy, net (0), watercolour (0) |
 | `line` | n | fine, drawn, bold |
@@ -302,6 +302,12 @@ from across the room.
 *and* how hard the plane is warped. They belong on one axis because they
 are one decision: a sheet that bends its walls and never merges a cell is
 as inconsistent as the reverse.
+
+`fine` is a step below `packed` — a cell is a chip rather than a shape. It
+carries weight 0, so no seed lands on it: at that size the sheet is a
+texture, which is something to reach for on purpose rather than to draw. Its
+ladder keeps all five rungs, because what stops it reading as gravel is that
+a quarter-canvas lobe still sits among the chips.
 
 `density` resolves to *ranges* — count, size ladder, clearance and overscan
 together — for the reason set out in 008: a level is a kind of sheet, not
