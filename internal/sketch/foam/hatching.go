@@ -40,13 +40,14 @@ const (
 	hatchWeave    = "weave"    // over-under, flat
 	hatchFan      = "fan"      // arcs between two poles
 	hatchWave     = "wave"     // wavy parallels
+	hatchSpike    = "spike"    // tapered marks pointing into the light
 )
 
 // hatchNames are the looks, in the order they read best on a contact sheet.
 var hatchNames = []string{
 	hatchNone, hatchParallel, hatchCross, hatchContour, hatchWave,
 	hatchShade, hatchDome, hatchSphere, hatchEngrave, hatchStipple,
-	hatchHollow, hatchFlow, hatchWeave, hatchFan,
+	hatchHollow, hatchFlow, hatchWeave, hatchFan, hatchSpike,
 }
 
 // How a cell's hatching decides what it is encoding at a point.
@@ -141,6 +142,31 @@ func (s *Sketch) hatchFor(look string, rng *rand.Rand) hatching {
 			p.ToneWidth = 0.6
 		})
 		return hatching{f: hatch.Over(hatch.Of(one), hatch.Of(two)), tone: toneLit}
+
+	case hatchSpike:
+		// The marks run *along* the light rather than across it, and that
+		// single choice is what makes them spikes: the width follows the
+		// tone, the tone changes along the light, so each mark is fat at its
+		// shadow end and tapers to nothing at its lit end. Every spike on
+		// the sheet therefore points the same way — into the light — and the
+		// cells read as lit from that side without anything being shaded.
+		//
+		// One angle for the whole sheet, not one per cell. A per-cell angle
+		// is right for hatching that only has to sit *in* a shape; here the
+		// marks are describing where the light comes from, and a light that
+		// changes direction from cell to cell is not a light.
+		return hatching{f: hatch.Of(base.With(func(p *hatch.Spec) {
+			p.Angle = s.Light * math.Pi / 180
+			p.Thickness = s.HatchWeight * 1.5
+			// Width alone does the taper. Thinning as well would drop a mark
+			// out from under its own point — the density rule works on whole
+			// marks, and a mark whose tone varies along its length would
+			// vanish in the middle of itself.
+			p.ToneWidth = 1.35
+			p.ToneDensity = 0
+			p.Jitter = 0.07
+			p.Softness = 0.35
+		})), tone: toneLit}
 
 	case hatchStipple:
 		return hatching{f: hatch.Of(base.With(func(p *hatch.Spec) {

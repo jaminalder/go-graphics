@@ -61,6 +61,7 @@ func (s *Sketch) declare() {
 	o.Float("grain", "paper tooth", "gn", 0, 0.4, &s.Grain)
 	o.Float("accent", "share of cells taking a colour from outside their passage", "ac", 0, 1, &s.Accent)
 	o.Float("passage", "wavelength of the colour field, canvas units", "pa", 0.1, 4, &s.Passage)
+	o.Float("saturate", "lift on every pigment saturation; 0 is the palette as mixed", "sa", 0, 2, &s.Sat)
 	o.Float("shades", "how far a cell wanders from its palette swatch; 0 is the bare palette", "sh", 0, 2, &s.Shades)
 	o.Float("flat", "how far a flat fill deepens at full tone; 1 is no deepening", "fl", 0.2, 1, &s.Flat)
 	o.Float("stroke", "pencil stroke pitch, canvas units", "st", 0.001, 0.1, &s.Stroke)

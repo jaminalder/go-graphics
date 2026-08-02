@@ -60,13 +60,14 @@ func (s *Sketch) mixFor(f *cells.Foam, l levels, rng *rand.Rand, ramp []palette.
 	// so the arrangement is determined by the same stream as the dressing and
 	// nothing upstream has to be threaded through.
 	return &mixer{m: scheme.New(scheme.Spec{
-		Name:    l.scheme,
-		Palette: ramp,
-		Seed:    rng.Uint64(),
-		Aspect:  aspect,
-		Passage: s.Passage,
-		Accent:  s.Accent,
-		Shades:  s.Shades,
+		Name:     l.scheme,
+		Palette:  ramp,
+		Seed:     rng.Uint64(),
+		Aspect:   aspect,
+		Passage:  s.Passage,
+		Accent:   s.Accent,
+		Shades:   s.Shades,
+		Saturate: s.Sat,
 	}, regions)}
 }
 

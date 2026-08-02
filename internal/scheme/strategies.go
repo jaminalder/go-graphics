@@ -37,17 +37,19 @@ func (s *state) resolve() {
 // it is the value structure the arrangement decided, and letting a shade
 // jitter move it would blur exactly the thing that carries the composition.
 func (s *state) shades() {
-	if s.spec.Shades <= 0 {
+	k, sat0 := s.spec.Shades, s.spec.Saturate
+	if k <= 0 && sat0 == 0 {
 		return
 	}
-	k := s.spec.Shades
 	for i := range s.out {
 		h, sat, l := s.out[i].Fill.HSL()
-		s.out[i].Fill = palette.FromHSL(
-			h+rnd.Gauss(s.rng, 0, 4*k),
-			mathx.Clamp01(sat*(1+rnd.Gauss(s.rng, 0, 0.28*k))),
-			mathx.Clamp01(l+rnd.Gauss(s.rng, 0, 0.10*k)),
-		)
+		sat *= 1 + sat0
+		if k > 0 {
+			h += rnd.Gauss(s.rng, 0, 4*k)
+			sat *= 1 + rnd.Gauss(s.rng, 0, 0.28*k)
+			l += rnd.Gauss(s.rng, 0, 0.10*k)
+		}
+		s.out[i].Fill = palette.FromHSL(h, mathx.Clamp01(sat), mathx.Clamp01(l))
 	}
 }
 

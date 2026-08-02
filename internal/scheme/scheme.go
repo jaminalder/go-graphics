@@ -118,6 +118,15 @@ type Spec struct {
 	// large hue jitter stops being a shade of the colour and becomes a
 	// different colour, which is the arrangement's business, not this.
 	Shades float64
+	// Saturate lifts every fill's saturation by this share: 0 leaves the
+	// palette as its painter mixed it, 1 doubles it.
+	//
+	// It is deliberately a separate lever from Shades. Shades spreads a
+	// swatch into a family and keeps its character; this changes the
+	// character, and a palette pushed far enough stops being the painting it
+	// came from. Worth having anyway, because a wash lays pigment down
+	// transparently and everything comes out a step quieter than the swatch.
+	Saturate float64
 }
 
 // Mixer is a resolved arrangement: every region already has its colour.

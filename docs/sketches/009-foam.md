@@ -307,6 +307,20 @@ the page as rounded stones. Nothing computes a normal or traces a ray.
 | `engrave` | two families, the second only in the shadow | light across the cell |
 | `stipple` | dots | light across the cell |
 | `hollow` | following the outline | distance to the rim — a dish, not a stone |
+| `spike` | straight, running *along* the light | light across the cell |
+
+`spike` is the one that turns the rule sideways. Every other lit look runs
+its marks *across* the light and shades by spacing them; this one runs them
+along it, so the width follows the tone *down the length of each mark* and
+every mark is fat at its shadow end and tapers to a point at its lit one.
+Every spike on the sheet then points the same way, and the cells read as lit
+without anything being shaded. It takes one angle for the whole sheet rather
+than one per cell: a per-cell angle is right for marks that only have to sit
+in a shape, but these are describing where the light is, and a light that
+changes direction from cell to cell is not a light.
+
+`--light 45` puts the light at the top left and the shadow at the bottom
+right, with the spikes pointing up and to the left.
 
 Two things had to be turned up together for the light to read at cell size.
 `hatch`'s tonal thinning drops marks by whole octaves, so on its own the lit
@@ -377,6 +391,7 @@ though what it draws is the same — before this, every sheet was `passage`.
 | `--granulate`, `--tooth`, `--scatter` | the pigment's own character |
 | `--bleed`, `--seep` | share of walls painted wet, and how far a bleed carries |
 | `--wash`, `--pencil`, `--bands`, `--hatch`, `--empty` | style weights, overriding `fills` |
+| `--saturate` | lift on every pigment's saturation; a wash lays pigment down transparently, so everything comes out a step quieter than the swatch |
 | `--accent`, `--passage`, `--stroke` | colour spread, colour wavelength, stroke pitch |
 
 The pack overrides are applied *before* the line is drawn, because the ink
