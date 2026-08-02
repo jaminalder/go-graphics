@@ -245,15 +245,37 @@ func TestEachColourSchemeOrganisesTheSheetDifferently(t *testing.T) {
 			t.Errorf("--scheme %s gives %.0f%% of its cells the same pigment as passage does", sc, share*100)
 		}
 	}
-	hues := func(cs []palette.Color) int {
-		seen := map[palette.Color]bool{}
+	// Measured as how tightly the sheet huddles round one hue, not as a
+	// count of distinct colours. Every cell is a shade of its scheme's
+	// answer — a tint or a deepening, the way real paint has tints and
+	// shades of every pigment — so no two cells hold exactly the same
+	// colour, and counting them would say a monochrome sheet uses a hundred.
+	// What "near-monochrome" means is one hue at many strengths.
+	huddle := func(cs []palette.Color) float64 {
+		hs := make([]float64, 0, len(cs))
 		for _, c := range cs {
-			seen[c] = true
+			if h, sat, _ := c.HSL(); sat >= 0.1 {
+				hs = append(hs, h)
+			}
 		}
-		return len(seen)
+		if len(hs) == 0 {
+			return 1
+		}
+		best := 0
+		for _, centre := range hs {
+			n := 0
+			for _, h := range hs {
+				d := math.Mod(math.Abs(h-centre), 360)
+				if math.Min(d, 360-d) <= 20 {
+					n++
+				}
+			}
+			best = max(best, n)
+		}
+		return float64(best) / float64(len(hs))
 	}
-	if q, p := hues(sheets[schemeQuiet]), hues(sheets[schemePassage]); q >= p {
-		t.Errorf("the quiet sheet uses %d pigments and the passage sheet %d — it is not near-monochrome", q, p)
+	if q, p := huddle(sheets[schemeQuiet]), huddle(sheets[schemePassage]); q <= p {
+		t.Errorf("the quiet sheet huddles %.0f%% within one hue and the passage sheet %.0f%% — it is not near-monochrome", q*100, p*100)
 	}
 }
 

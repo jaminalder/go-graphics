@@ -47,6 +47,37 @@ func fills(m *Mixer) []palette.Color {
 	return out
 }
 
+// huddle is the share of colours sitting within tol degrees of the commonest
+// hue among them — how tightly the set huddles round one colour.
+//
+// Buckets are the wrong instrument once Shades is on. A few degrees of drift
+// never changes the colour anyone sees, but it straddles whatever bucket
+// boundary it happens to sit near, so a genuinely monochrome set counts as
+// four "families" for reasons that are about the ruler, not the paint.
+func huddle(cs []palette.Color, tol float64) float64 {
+	hs := make([]float64, 0, len(cs))
+	for _, c := range cs {
+		h, sat, _ := c.HSL()
+		if sat >= 0.1 { // a near-neutral has no hue to be near
+			hs = append(hs, h)
+		}
+	}
+	if len(hs) == 0 {
+		return 1
+	}
+	best := 0
+	for _, centre := range hs {
+		n := 0
+		for _, h := range hs {
+			if hueGap(h, centre) <= tol {
+				n++
+			}
+		}
+		best = max(best, n)
+	}
+	return float64(best) / float64(len(hs))
+}
+
 func distinct(cs []palette.Color) int {
 	seen := map[palette.Color]bool{}
 	for _, c := range cs {
@@ -265,6 +296,48 @@ func TestAnUnknownStrategyIsPassage(t *testing.T) {
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("region %d: %v, want passage's %v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestShadesSpreadTheColourWithoutLosingTheArrangement. A palette is a
+// handful of colours, and a hundred regions painted in exactly those reads as
+// a chart of them; real paint has tints and shades of every pigment. But the
+// spread has to stay *within* what the scheme decided — a jitter wide enough
+// to change which hue family a region belongs to has stopped shading the
+// arrangement and started overwriting it.
+func TestShadesSpreadTheColourWithoutLosingTheArrangement(t *testing.T) {
+	regions := scatter(11, 200)
+	spec := Spec{Name: Monochrome, Palette: testPalette(t), Seed: 3, Aspect: 1.25, Passage: 0.75, Accent: 0.2}
+
+	plain := New(spec, regions)
+	spec.Shades = 0.7
+	shaded := New(spec, regions)
+
+	// The spread is real: the bare palette repeats a couple of swatches, the
+	// shaded one gives nearly every region its own value.
+	if distinct(fills(plain)) >= 5 || distinct(fills(shaded)) < len(regions)/2 {
+		t.Errorf("plain uses %d colours and shaded %d of %d regions — the shading is not spreading them",
+			distinct(fills(plain)), distinct(fills(shaded)), len(regions))
+	}
+	// And it is still near-monochrome: the arrangement survives. Nearly
+	// every region has to sit within a narrow band of one hue; the handful
+	// outside it are the sparks the scheme puts there on purpose.
+	if h := huddle(fills(shaded), 20); h < 0.85 {
+		t.Errorf("only %.0f%% of the shaded monochrome sheet is within 20° of one hue — the shading overwrote the scheme", h*100)
+	}
+	// Against a scheme that is meant to range: the comparison is relative
+	// because how tightly *any* scheme huddles is partly a fact about the
+	// palette, and this one is mostly golds and olives.
+	loose := New(Spec{Name: Passage, Palette: testPalette(t), Seed: 3, Aspect: 1.25, Passage: 0.75, Accent: 0.2, Shades: 0.7}, regions)
+	if a, b := huddle(fills(shaded), 20), huddle(fills(loose), 20); a <= b+0.1 {
+		t.Errorf("monochrome huddles %.0f%% and passage %.0f%% — the monochrome is not the tighter of the two", a*100, b*100)
+	}
+	// The value structure is untouched, because shading moves the Fill and
+	// never the Tone: blurring the tone would blur what carries the piece.
+	for i := range regions {
+		if plain.At(i).Tone != shaded.At(i).Tone {
+			t.Fatalf("region %d: shading moved the tone from %v to %v", i, plain.At(i).Tone, shaded.At(i).Tone)
 		}
 	}
 }

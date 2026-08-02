@@ -59,6 +59,32 @@ nothing left to read.
 field at the same scale and offset produce the same picture with a different
 caption. Offset and rescale per strategy, or you will ship one idea twice.
 
+## Shades, not swatches
+
+A palette is a handful of colours, and a hundred regions painted in exactly
+those reads as a *chart* of the palette. Real paint has tints and shades of
+every pigment, and it is the within-hue spread that makes a composition look
+mixed rather than sampled.
+
+Apply it as a **pass over the finished arrangement**, not inside each
+strategy: that way it reaches every strategy including the order-dependent
+ones, and no strategy has to think about it. Drift mostly in lightness and
+saturation, only a few degrees in hue — a large hue jitter has stopped being
+a shade of the colour and become a different colour, which is the
+arrangement's decision, not the shading's.
+
+**Never let it touch the value structure.** Shade the fill, leave the tone
+alone; blurring the tone blurs the one thing carrying the piece.
+
+Testing this needs care. Once shading is on, no two regions hold exactly the
+same colour, so counting distinct colours says a monochrome composition uses
+a hundred of them. Bucketing hues is no better — a few degrees of drift never
+changes the colour anyone sees, but it straddles whatever bucket boundary it
+happens to sit near. Measure instead **how tightly the set huddles round one
+hue**: the share of regions within ~20° of the commonest. And compare schemes
+*relatively*, because how tightly any scheme huddles is partly a fact about
+the palette.
+
 ## Proportion
 
 Harmony is as much about *area* as about hue. The classical ratios — 70/20/10

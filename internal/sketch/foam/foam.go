@@ -65,6 +65,7 @@ type Sketch struct {
 	Passage float64 // wavelength of the colour field, canvas units
 	Stroke  float64 // pencil stroke pitch, canvas units
 	Flat    float64 // how far a flat fill deepens at full tone; 1 is no deepening
+	Shades  float64 // how far a cell's colour wanders from its palette swatch
 	Depth   float64 // rise of the relief, ×smallest cell (shade.go)
 	Bevel   float64 // run that rise happens over, ×smallest cell
 	Light   float64 // the light's bearing, degrees
@@ -95,6 +96,7 @@ func New() *Sketch {
 		Passage: 0.75,
 		Stroke:  0.0045,
 		Flat:    0.76,
+		Shades:  0.7,
 		Depth:   0.12,
 		Bevel:   0.2,
 		Light:   135,

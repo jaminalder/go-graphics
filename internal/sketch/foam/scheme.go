@@ -66,6 +66,7 @@ func (s *Sketch) mixFor(f *cells.Foam, l levels, rng *rand.Rand, ramp []palette.
 		Aspect:  aspect,
 		Passage: s.Passage,
 		Accent:  s.Accent,
+		Shades:  s.Shades,
 	}, regions)}
 }
 

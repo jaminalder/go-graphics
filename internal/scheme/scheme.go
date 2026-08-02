@@ -106,6 +106,18 @@ type Spec struct {
 	Passage float64
 	// Accent is the share of regions allowed off-scheme.
 	Accent float64
+	// Shades is how far a fill may wander from its palette colour in
+	// lightness and saturation: 0 gives the bare swatches, 1 a wide family
+	// around each one.
+	//
+	// A palette is a handful of colours, and a composition of a hundred
+	// regions painted in exactly those reads as a chart of them. Real paint
+	// has tints and shades of every pigment, and it is the *within-hue*
+	// spread that makes a sheet look mixed rather than sampled. The drift is
+	// mostly in value and saturation, with only a few degrees of hue: a
+	// large hue jitter stops being a shade of the colour and becomes a
+	// different colour, which is the arrangement's business, not this.
+	Shades float64
 }
 
 // Mixer is a resolved arrangement: every region already has its colour.

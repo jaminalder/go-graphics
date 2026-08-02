@@ -16,13 +16,38 @@ func (s *state) resolve() {
 	switch s.spec.Name {
 	case Sequence:
 		s.sequence()
+		s.shades()
 		return
 	case Inherit:
 		s.inherit()
+		s.shades()
 		return
 	}
 	for i, r := range s.regions {
 		s.out[i] = s.one(r)
+	}
+	s.shades()
+}
+
+// shades spreads each fill into a family around its palette colour.
+//
+// Applied as a pass over the finished arrangement rather than inside each
+// strategy, so that it reaches sequence and inherit too, and so that a
+// strategy never has to think about it. The tone is deliberately left alone:
+// it is the value structure the arrangement decided, and letting a shade
+// jitter move it would blur exactly the thing that carries the composition.
+func (s *state) shades() {
+	if s.spec.Shades <= 0 {
+		return
+	}
+	k := s.spec.Shades
+	for i := range s.out {
+		h, sat, l := s.out[i].Fill.HSL()
+		s.out[i].Fill = palette.FromHSL(
+			h+rnd.Gauss(s.rng, 0, 4*k),
+			mathx.Clamp01(sat*(1+rnd.Gauss(s.rng, 0, 0.28*k))),
+			mathx.Clamp01(l+rnd.Gauss(s.rng, 0, 0.10*k)),
+		)
 	}
 }
 
