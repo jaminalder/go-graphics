@@ -108,8 +108,14 @@ func New() *Sketch {
 		Load:    1,
 		Pool:    0.07,
 		Uneven:  0.75,
-		Dry:     0.6,
-		traits:  trait.NewOptions(schema),
+		// Off by default. A real drying pool does gather pigment at its rim,
+		// but a cell whose edge is darker than its middle reads as an
+		// outline drawn inside the ink line rather than as a wash — two
+		// lines round every cell instead of one. The knob is kept because
+		// on an open sheet, where a cell is large enough for the rim to be
+		// a small part of it, it is worth having.
+		Dry:    0,
+		traits: trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
 	// taken from the trait level, not from here.

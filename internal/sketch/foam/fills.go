@@ -126,7 +126,10 @@ func roundness(c cells.Cell, aspect float64) float64 {
 // outline exactly because the wall distance is exact — including round the
 // inside of a crescent, which is the whole reason not to paint with discs.
 func (s *Sketch) wash(sh *sheet, d dress, h cells.Hit, u, v float64) palette.Color {
-	load := s.Load * (0.18 + 0.82*d.tone)
+	// The floor is high on purpose. A scheme's palest cells sit near tone 0,
+	// and a wash that thin is indistinguishable from bare paper — which
+	// reads as a hole in the sheet rather than as a light passage.
+	load := s.Load * (0.45 + 0.55*d.tone)
 	if !math.IsInf(h.Wall, 1) {
 		// The rim is measured against the *cell*, not against a fixed
 		// distance on the page: a sheet's cells are all much the same size,

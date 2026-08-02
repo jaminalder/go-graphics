@@ -337,11 +337,12 @@ func newFills(level string, l *levels) {
 		// arrangement is a second thing to look at.
 		l.styles = [nstyles]float64{styleFlat: 1}
 	case "watercolour":
-		// A painted sheet: every cell a wash, bar the few left as paper.
-		// Those few are still load-bearing — a sheet with every cell filled
-		// has nowhere to rest — but the pencil has no place on a sheet that
-		// is about what the water did.
-		l.styles = [nstyles]float64{styleWash: 14, styleEmpty: 2}
+		// A painted sheet: every cell a wash, and no cell left as paper.
+		// Bare cells are load-bearing on a drawn sheet, where they read as
+		// rest; on a painted one they read as cells the brush missed,
+		// because everything around them says the sheet was meant to be
+		// covered.
+		l.styles = [nstyles]float64{styleWash: 1}
 	default: // mixed
 		l.styles = [nstyles]float64{styleWash: 6, stylePencil: 5, styleBands: 2, styleHatch: 1.5, styleEmpty: 3}
 	}

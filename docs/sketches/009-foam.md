@@ -364,7 +364,11 @@ gives a hand-set cell size under a line scaled for the one the seed drew.
   — big lobes next to slivers, as in the reference.
 - Fills stop cleanly at the ink and never leak into a neighbour.
 - Bands and rims follow the cell's own outline, including in a lobe.
-- Some cells are bare paper.
+- Some cells are bare paper on a *drawn* sheet. A painted one has none: a
+  bare cell there reads as one the brush missed, because everything round it
+  says the sheet was meant to be covered.
+- A washed cell is even. If its edge is darker than its middle it reads as a
+  second line drawn inside the ink line — turn `--dry` down.
 - Preview and print of one seed are the same picture, and no spikes radiate
   from the junctions at print size.
 - On a watercolour sheet: some washes run past the ink and some stop short
