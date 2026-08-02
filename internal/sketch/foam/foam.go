@@ -25,6 +25,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/geom"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/opt"
+	"github.com/jaminalder/go-graphics/internal/paint"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -71,10 +72,12 @@ type Sketch struct {
 	Bevel   float64 // run that rise happens over, ×smallest cell
 	Light   float64 // the light's bearing, degrees
 
-	// The wash, stamped rather than answered per pixel (wash.go).
-	Ragged float64 // pool edge deviation; 0 is a true circle, 0.22 a blob
-	Load   float64 // strength of one touch of the brush
-	Reach  float64 // how far a pool sits past its cell's edge, ×depth
+	// The wash (flatwash.go): a field, not a shape, so it fills a cell
+	// exactly instead of covering it with round touches.
+	Load   float64 // pigment in a cell at full tone
+	Pool   float64 // wavelength of the pigment's pooling, canvas units
+	Uneven float64 // how strongly it pools
+	Dry    float64 // extra pigment gathered at the cell's edge as it dried
 
 	// pin is where the composition flags land. Only the ones actually given
 	// on the command line are read; the rest come from the traits.
@@ -102,9 +105,10 @@ func New() *Sketch {
 		Depth:   0.12,
 		Bevel:   0.2,
 		Light:   135,
-		Ragged:  0.2,
-		Load:    0.42,
-		Reach:   1.3,
+		Load:    1,
+		Pool:    0.07,
+		Uneven:  0.75,
+		Dry:     0.6,
 		traits:  trait.NewOptions(schema),
 	}
 	// The pin defaults are only ever shown in --help; a knob left alone is
@@ -141,6 +145,7 @@ type sheet struct {
 	skin  []dress
 	level levels
 	field *noise.Perlin
+	wash  paint.FlatWash
 	paper palette.Color
 	ink   palette.Color
 	ramp  []palette.Color // the pigments, ordered light to dark
@@ -166,12 +171,16 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	foam := cells.New(sites, group, aspect, cells.Params{Node: l.node, Round: l.round, Stat: statRes})
 
 	field := noise.New(ctx.Seed)
+	wash := paint.NewFlatWash(ctx.Seed ^ saltPaper)
+	wash.Blotch, wash.Mottle = s.Pool, s.Uneven
+	wash.Tooth, wash.Grain = paperTooth, s.Grain*7
 	skin := s.dress(foam, l, ctx.RNG(streamDress), aspect, paper, ramp)
 	return &sheet{
 		foam:  foam,
 		skin:  skin,
 		level: l,
 		field: field,
+		wash:  wash,
 		paper: paper,
 		ink:   ink,
 		ramp:  ramp,
@@ -187,16 +196,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A sheet with any washed cell on it is painted rather than rastered:
-	// a pool is a stack of forty stamped deposits, not a function of
-	// position (wash.go).
-	if sh.washes() {
-		return s.paintSheet(ctx, sh), nil
-	}
 	return sketch.Raster(ctx, func(u, v float64) palette.Color {
 		wu, wv := s.warp(sh.field, sh.level, u, v)
 		h := sh.foam.At(wu, wv)
-		c := s.fill(sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
+		c := s.fill(sh, sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
 		// The mosaic replaces what the paint laid down wherever a cell was
 		// subdivided; the relief lights whatever came out. Both run *before*
 		// the ink, so the heavy outer line clips the fine net and is never

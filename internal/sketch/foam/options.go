@@ -41,9 +41,10 @@ func (s *Sketch) declare() {
 	o.Float("empty", "weight of leaving a cell as bare paper", "fe", 0, 20, &s.pin.styles[styleEmpty])
 
 	// The wash. What a pool is made of, laid by internal/paint (fill.go).
-	o.Float("ragged", "wash edge deviation; 0 is a true circle, 0.22 a blob", "rg", 0, 0.6, &s.Ragged)
-	o.Float("load", "strength of one touch of the brush", "ld", 0.05, 1, &s.Load)
-	o.Float("reach", "how far a pool sits past its cell's edge, x depth", "rc", 0.9, 2, &s.Reach)
+	o.Float("load", "pigment in a cell at full tone", "ld", 0.05, 1, &s.Load)
+	o.Float("pool", "wavelength of the pigment's pooling, canvas units", "pl", 0.02, 2, &s.Pool)
+	o.Float("uneven", "how strongly the pigment pools", "un", 0, 1.5, &s.Uneven)
+	o.Float("dry", "extra pigment gathered at a cell's edge as it dried", "dr", 0, 2, &s.Dry)
 
 	o.Float("weight", "how strongly a site radius bends the walls; 0 is straight", "wt", 0, 2, &s.Weight)
 	o.Float("wobble", "hand wander of the line and the strokes, x width", "wb", 0, 1, &s.Wobble)

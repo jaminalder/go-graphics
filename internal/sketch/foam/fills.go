@@ -26,9 +26,15 @@ const (
 	nstyles
 )
 
-// tooth is the paper's grain, in canvas units. Finer than sketch 008's,
-// because there it is a wash granulating and here it is a pencil catching.
+// tooth is the paper's grain for the drawn media, in canvas units: fine,
+// because there it is a pencil catching rather than a wash granulating.
 const tooth = 0.0025
+
+// paperTooth is the grain the *wash* granulates into. Coarser than the
+// pencil's by more than twice, because granulation is pigment settling into
+// pits rather than graphite skipping over them — at the pencil's scale it
+// is a sub-pixel shimmer at preview size and reads as noise, not as paper.
+const paperTooth = 0.0065
 
 // dress is everything one cell is filled with, settled before a single
 // pixel is drawn.
@@ -110,8 +116,30 @@ func roundness(c cells.Cell, aspect float64) float64 {
 	return c.Area * aspect / (math.Pi * c.Inradius * c.Inradius)
 }
 
+// wash lays transparent pigment over the paper, as a field rather than as a
+// shape (paint.FlatWash).
+//
+// Two things make it read as paint rather than as a tint. The pigment pools
+// unevenly at a broad scale and catches in the paper's tooth at a fine one,
+// neither of which has an edge of its own; and it gathers at the boundary,
+// the way a drying pool leaves a rim, which here follows the cell's own
+// outline exactly because the wall distance is exact — including round the
+// inside of a crescent, which is the whole reason not to paint with discs.
+func (s *Sketch) wash(sh *sheet, d dress, h cells.Hit, u, v float64) palette.Color {
+	load := s.Load * (0.18 + 0.82*d.tone)
+	if !math.IsInf(h.Wall, 1) {
+		// The rim is measured against the *cell*, not against a fixed
+		// distance on the page: a sheet's cells are all much the same size,
+		// and a rim wide enough to read on an open sheet swallows a packed
+		// one whole.
+		rim := math.Max(sh.level.base*0.30, 1e-4)
+		load *= 1 + s.Dry*(1-mathx.Smoothstep(0, rim, h.Wall))
+	}
+	return sh.wash.Over(sh.paper, d.pigment, mathx.Clamp01(load), u, v)
+}
+
 // fill paints one point inside its cell.
-func (s *Sketch) fill(d dress, h cells.Hit, field *noise.Perlin, seed uint64, u, v float64, paper palette.Color) palette.Color {
+func (s *Sketch) fill(sh *sheet, d dress, h cells.Hit, field *noise.Perlin, seed uint64, u, v float64, paper palette.Color) palette.Color {
 	var col palette.Color
 	switch d.style {
 	case stylePencil:
@@ -144,10 +172,7 @@ func (s *Sketch) fill(d dress, h cells.Hit, field *noise.Perlin, seed uint64, u,
 			col = palette.Lerp(paper, d.pigment, mathx.Clamp01(0.2+1.6*d.tone))
 		}
 	default:
-		// A washed cell is not drawn here at all: the wash is stamped, not
-		// answered per pixel (paint.Wash.Fill), so by the time this runs the
-		// paint is already on the canvas underneath.
-		col = paper
+		col = s.wash(sh, d, h, u, v)
 	}
 	return shade(col, 1+s.grain(seed, u, v))
 }

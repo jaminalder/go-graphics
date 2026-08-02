@@ -117,8 +117,8 @@ internal/palette/       Color type + ops, HSB Swatch (clamp box + walk), ColorLi
 internal/gradient/      cosine / HSL / discrete / terraced gradients
 internal/noise/         Perlin + fBm, Worley cell noise, Hash01 (leaf)
 internal/render/        pixel loop (AA, dither, 16-bit), profiles, encode+metadata
-internal/paint/         stamp-based brush canvas, bristle brush, washes, analytic rings;
-                        Wash.Fill covers any region with pools (fill.go)
+internal/paint/         stamp-based brush canvas, bristle brush, washes, analytic
+                        rings; FlatWash fills any region as a field (flatwash.go)
 internal/sketch/        Sketch + Configurable + Traited interfaces, Context, registry
 internal/sketch/sketchtest/  shared test helpers (goldens, determinism)
 internal/sketch/<x>/    one package per sketch + its testdata/ goldens
