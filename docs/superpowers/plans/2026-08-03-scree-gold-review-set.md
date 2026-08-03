@@ -47,19 +47,19 @@ Expected: three 2000x2000 PNGs, renamed `01_`, `02_`, and `03_` respectively.
 
 - [ ] **Step 3: Render Rothko at three scales**
 
-Use the same fixed flags with `--colourway rothko-white-black-rust`, seeds 14, 15, 16, and the three `(count, base)` pairs `(240, 0.0215)`, `(340, 0.017)`, `(500, 0.013)`. Rename outputs `04_`, `05_`, `06_`.
+Use the same fixed flags with `--colourway from-flag --palette rothko-white-black-rust`, seeds 14, 15, 16, and the three `(count, base)` pairs `(240, 0.0215)`, `(340, 0.017)`, `(500, 0.013)`. Rename outputs `04_`, `05_`, `06_`.
 
 - [ ] **Step 4: Render Picasso at three scales**
 
-Use `--colourway picasso-demoiselles`, seeds 17, 18, 19, and the same three size pairs. Rename outputs `07_`, `08_`, `09_`.
+Use `--colourway from-flag --palette picasso-demoiselles`, seeds 17, 18, 19, and the same three size pairs. Rename outputs `07_`, `08_`, `09_`.
 
 - [ ] **Step 5: Render Hokusai at three scales**
 
-Use `--colourway hokusai-great-wave`, seeds 20, 21, 22, and the same three size pairs. Rename outputs `10_`, `11_`, `12_`.
+Use `--colourway from-flag --palette hokusai-great-wave`, seeds 20, 21, 22, and the same three size pairs. Rename outputs `10_`, `11_`, `12_`.
 
 - [ ] **Step 6: Render Magritte at three scales**
 
-Use `--colourway magritte-menaced-assassin`, seeds 23, 24, 25, and the same three size pairs. Rename outputs `13_`, `14_`, `15_`.
+Use `--colourway from-flag --palette magritte-menaced-assassin`, seeds 23, 24, 25, and the same three size pairs. Rename outputs `13_`, `14_`, `15_`.
 
 - [ ] **Step 7: Verify count and dimensions**
 

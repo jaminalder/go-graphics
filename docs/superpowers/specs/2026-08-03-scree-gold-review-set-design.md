@@ -44,12 +44,12 @@ Every render uses:
 --light noon
 --wet wet
 --scheme passage
---palette kandinsky-soft-pressure
 ```
 
-`--colourway` selects the actual stone palette. The generic `--palette` stays
-fixed because scree's colourway trait owns the artwork palette; retaining the
-same generic value keeps filenames and invocation consistent.
+The curated Avery row uses `--colourway avery-bicycle-rider --palette
+kandinsky-soft-pressure`. The other four ColorLisa palettes are outside
+scree's curated seed space and use the supported deliberate override path:
+`--colourway from-flag --palette <slug>`.
 
 `--facet 0.34`, not `--faceted 0.34`, is mandatory. `facet` controls Voronoi
 grain while preserving full faceting; `faceted` would randomly make stones
