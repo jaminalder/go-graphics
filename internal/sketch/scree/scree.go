@@ -237,6 +237,9 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		// the scheme's value structure survives being lit.
 		col := s.paint(sh, h, u, v)
 		col = s.illuminate(sh, h, wu, wv, col)
+		if s.Gold && sh.skin[h.Cell].nugget {
+			col = gild(col)
+		}
 		// The joint goes on top of everything and is never itself lit: it is
 		// the water between the stones, not part of any stone's surface.
 		col = s.lay(sh, col, h, u, v, ctx.Seed)

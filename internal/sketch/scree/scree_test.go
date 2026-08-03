@@ -452,12 +452,22 @@ func TestEveryChosenNuggetAppearsInTheRenderedBed(t *testing.T) {
 }
 
 func TestEveryChosenNuggetHasVisibleGold(t *testing.T) {
-	pal, ok := palette.ByName("avery-bicycle-rider")
-	if !ok {
-		t.Fatal("palette missing")
+	cases := []struct {
+		palette string
+		seed    uint64
+		wet     string
+	}{
+		{"avery-bicycle-rider", 8, "wet"},
+		{"avery-bicycle-rider", 50, "wet"},
+		{"tchelitchew-hide-and-seek", 4, "sunk"},
 	}
-	for _, seed := range []uint64{8, 50} {
-		s := configured(t, "--gold", "--colourway", "avery-bicycle-rider", "--bed", "gravel")
+	for _, tc := range cases {
+		pal, ok := palette.ByName(tc.palette)
+		if !ok {
+			t.Fatal("palette missing")
+		}
+		s := configured(t, "--gold", "--colourway", tc.palette, "--bed", "gravel", "--wet", tc.wet)
+		seed := tc.seed
 		ctx := sketch.Context{Width: 96, Height: 96, Seed: seed, Palette: pal}
 		sh := plannedWithContext(t, s, ctx)
 		img := sketchtest.RenderNRGBA(t, s, ctx)

@@ -243,8 +243,15 @@ func wetPigment(c palette.Color, l levels, ink inks) palette.Color {
 
 func goldPigment(l levels, ink inks) palette.Color {
 	p := wetPigment(nuggetGold, l, ink)
-	h, _, light := p.HSL()
+	h, _, _ := nuggetGold.HSL()
+	_, _, light := p.HSL()
 	return palette.FromHSL(h, 1, light)
+}
+
+func gild(c palette.Color) palette.Color {
+	h, _, _ := nuggetGold.HSL()
+	_, _, light := c.HSL()
+	return palette.FromHSL(h, 0.72, light)
 }
 
 // muteOrdinaryYellows keeps scheme shading from moving a neighbouring taupe
