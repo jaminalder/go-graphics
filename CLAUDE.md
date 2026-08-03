@@ -16,6 +16,7 @@ make preview-qql # render sketch "qql" at its native 4:5 preview size
 make preview-pools # render sketch "pools" (watercolour circles)
 make preview-foam # render sketch "foam" (inked cells with pluggable fills)
 make preview-scree # render sketch "scree" (a river bed of faceted, lit stones)
+make preview-riffle # render sketch "riffle" (a small river seen from above)
 make hatchbook  # render the internal/hatch specimen sheets + manifest
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
@@ -24,7 +25,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree,
+scree, riffle,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -45,6 +46,12 @@ and `--facets smooth` is the control that shows it), and the facet grain is
 one fineness for the whole bed rather than proportional to each stone
 (`--facet-scale` restores the proportional behaviour, which is what 009's
 mosaic wants and this does not).
+
+`riffle` is a river seen from directly above — one pure per-pixel function
+over a depth field, a velocity field and an upstream walk. `--reach` is the
+energy of the stretch, `--channel` its plan form, `--water` its turbidity;
+see `docs/sketches/011-riffle.md`, and the "What did not read as water"
+section there before changing any of its textures.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so
