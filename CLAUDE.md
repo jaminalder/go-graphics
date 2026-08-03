@@ -15,6 +15,7 @@ make preview    # render sketch "contour" at preview size into out/
 make preview-qql # render sketch "qql" at its native 4:5 preview size
 make preview-pools # render sketch "pools" (watercolour circles)
 make preview-foam # render sketch "foam" (inked cells with pluggable fills)
+make preview-scree # render sketch "scree" (a river bed of faceted, lit stones)
 make hatchbook  # render the internal/hatch specimen sheets + manifest
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
@@ -23,6 +24,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
+scree,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -30,6 +32,19 @@ hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatch
 `--scheme` how colour is spread over the sheet — see
 `docs/sketches/009-foam.md`. The `watercolour` fill level carries weight 0,
 so a painted sheet is always a deliberate act.
+
+`scree` is a river bed of worn stones seen from above, each stone cut into
+flat Voronoi facets and each facet given *one* shade from its own normal
+against a single lamp — so the third dimension comes out of the same
+wall-distance field the walls do. `--bed` is how coarse the bed is, `--stones`
+how worn, `--facets` how finely they are cut, `--light` the weather and
+`--wet` how much water is standing over it; see `docs/sketches/010-scree.md`.
+Two things there are easy to undo by accident: the shade is flat *per facet*
+(computed at its centroid, not per pixel — that one line is the whole sketch,
+and `--facets smooth` is the control that shows it), and the facet grain is
+one fineness for the whole bed rather than proportional to each stone
+(`--facet-scale` restores the proportional behaviour, which is what 009's
+mosaic wants and this does not).
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so

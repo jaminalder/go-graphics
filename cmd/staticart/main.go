@@ -25,6 +25,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/pools"
 	"github.com/jaminalder/go-graphics/internal/sketch/qql"
 	"github.com/jaminalder/go-graphics/internal/sketch/rounds"
+	"github.com/jaminalder/go-graphics/internal/sketch/scree"
 	"github.com/jaminalder/go-graphics/internal/sketch/shoal"
 	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
 )
@@ -39,6 +40,7 @@ func registry() *sketch.Registry {
 		pools.New(),
 		qql.New(),
 		rounds.New(),
+		scree.New(),
 		shoal.New(),
 		tapestry.New(),
 	)

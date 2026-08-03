@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools preview-foam hatchbook sweep
+.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools preview-foam preview-scree hatchbook sweep
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -45,6 +45,9 @@ preview-pools: ## Render the pools sketch at preview size into out/
 
 preview-foam: ## Render the foam sketch at preview size into out/
 	go run ./cmd/staticart render foam --profile preview --out out
+
+preview-scree: ## Render the scree sketch at preview size into out/
+	go run ./cmd/staticart render scree --profile preview --out out
 
 HATCHBOOK_OUT ?= out/agent-hatch
 HATCHBOOK_ARGS = --aa 3 --palette hopper-night-windows --out $(HATCHBOOK_OUT)
