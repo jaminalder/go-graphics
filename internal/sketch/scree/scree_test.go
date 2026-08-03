@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
+	"github.com/jaminalder/go-graphics/internal/scheme"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 	"github.com/jaminalder/go-graphics/internal/sketch/sketchtest"
 )
@@ -500,4 +501,13 @@ func TestGoldAppearsInTheOutputName(t *testing.T) {
 	if suffix != "-gold" {
 		t.Fatalf("--gold suffix is %q, want -gold", suffix)
 	}
+}
+
+func TestGoldModeSupportsDuetWhenFilteringLeavesOneColour(t *testing.T) {
+	pal, ok := palette.ByName("quidor-leatherstocking")
+	if !ok {
+		t.Fatal("palette missing")
+	}
+	s := configured(t, "--gold", "--colourway", fromFlag, "--scheme", scheme.Duet, "--bed", "boulders")
+	plannedWithContext(t, s, sketch.Context{Width: 48, Height: 48, Seed: 1, Palette: pal})
 }

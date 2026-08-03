@@ -89,6 +89,11 @@ func withoutYellow(p palette.Palette) (palette.Palette, error) {
 	if len(colors) == 0 {
 		return palette.Palette{}, fmt.Errorf("scree: palette %q has no non-yellow colours for --gold", p.Slug)
 	}
+	// Duet expects two inputs. Repeating the sole surviving pigment keeps the
+	// bed monochrome without restoring a colour that gold mode reserved.
+	if len(colors) == 1 {
+		colors = append(colors, colors[0])
+	}
 	p.Colors = colors
 	return p, nil
 }
