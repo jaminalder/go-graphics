@@ -231,6 +231,19 @@ Both the lamp's colour and the sky's come from the palette, not from a
 constant: an invented warm white reads as a filter laid over the picture, and
 it throws away the provenance every palette here carries (invariant 3).
 
+### Gold nuggets
+
+`--gold` reserves yellow for a rare accent. Before the colour scheme runs,
+yellow and amber members are removed from the selected colourway; after the
+ordinary bed has been dressed, two or three random stones from the smaller
+two-thirds of the visible bed are repainted with the gold from Milton Avery's
+*Bicycle Rider By The Loire* (`#F3C937`). The gold is saturated after the
+water treatment so it remains richer than the muted bed.
+
+The selection has its own deterministic RNG stream. Nugget placement may
+cluster or spread according to the seed, but it cannot change the layout,
+facets, ordinary colour arrangement, or any render made without `--gold`.
+
 **The water is the darkest thing on the sheet, and that is derived rather than
 chosen.** A fixed fraction of the palette's darkest swatch cannot promise it —
 a bed painted in the palette's own darks, seen at the ambient, goes below any
@@ -293,6 +306,7 @@ shadows.
 | `--soak`, `--sheen`, `--depth` | the water, overriding `wet` |
 | `--load`, `--pool`, `--uneven`, `--grain` | the paint and the paper |
 | `--accent`, `--passage`, `--shades`, `--saturate` | the colour scheme's spread |
+| `--gold` | reserve yellow for two or three rare, saturated gold nuggets |
 
 ## Acceptance checklist
 
@@ -316,6 +330,8 @@ shadows.
   lighter than the water it is lying in — check it on a `sunk`, `raking` seed
   with a dark palette, which is where it fails first.
 - The joint swells at the junctions and is thinnest mid-wall.
+- With `--gold`, only two or three small-to-medium stones read yellow or gold;
+  the ordinary bed remains muted and contains no competing yellow passage.
 - Preview and print of one seed are the same picture, and no facet edge
   aliases into a stair at print size.
 - `--facets smooth` gives the same picture soft, and it should look
