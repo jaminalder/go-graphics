@@ -201,11 +201,12 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	wash := paint.NewFlatWash(ctx.Seed ^ saltPaper)
 	wash.Blotch, wash.Mottle = s.Pool, s.Uneven
 	wash.Tooth, wash.Grain = tooth*1.8, s.Grain*6
+	field := noise.New(ctx.Seed)
 
 	skin := s.dress(stones, l, ctx.RNG(streamDress), aspect, ink)
 	if s.Gold {
 		muteOrdinaryYellows(skin)
-		addNuggets(skin, stones, l, ink, ctx.RNG(streamGold))
+		s.addNuggets(skin, stones, field, l, ink, ctx.RNG(streamGold), aspect)
 	}
 	ink.joint = sink(ink.joint, darkestShadow(skin, l))
 
@@ -214,7 +215,7 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 		facets: s.cut(stones, l, ctx.RNG(streamFacets), aspect, ctx.Seed),
 		skin:   skin,
 		level:  l,
-		field:  noise.New(ctx.Seed),
+		field:  field,
 		wash:   wash,
 		ink:    ink,
 	}, nil

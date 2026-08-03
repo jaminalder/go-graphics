@@ -8,6 +8,7 @@ import (
 
 	"github.com/jaminalder/go-graphics/internal/cells"
 	"github.com/jaminalder/go-graphics/internal/mathx"
+	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/scheme"
@@ -243,28 +244,40 @@ func muteOrdinaryYellows(skin []stone) {
 	}
 }
 
-// nuggetCandidates returns the smaller two-thirds of the visible stones by
-// area. IDs break exact ties so the ranking is stable across resolutions.
-func nuggetCandidates(st *cells.Foam) []int {
-	var ids []int
-	for i, c := range st.Cells() {
-		if c.Area > 0 {
-			ids = append(ids, i)
+// nuggetCandidates returns the smaller two-thirds of the stones visible after
+// the bed's warp. Visibility is measured on a fixed normalized grid so a
+// preview and a print choose the same nuggets.
+func (s *Sketch) nuggetCandidates(st *cells.Foam, field *noise.Perlin, l levels, aspect float64) []int {
+	const rows = 96
+	cols := max(1, int(math.Round(rows*aspect)))
+	area := make([]int, st.Len())
+	for y := range rows {
+		for x := range cols {
+			u := (float64(x) + 0.5) * aspect / float64(cols)
+			v := (float64(y) + 0.5) / rows
+			wu, wv := s.warp(field, l, u, v)
+			area[st.At(wu, wv).Cell]++
+		}
+	}
+	ids := make([]int, 0, st.Len())
+	for id, n := range area {
+		if n > 0 {
+			ids = append(ids, id)
 		}
 	}
 	sort.Slice(ids, func(i, j int) bool {
-		a, b := st.Cells()[ids[i]], st.Cells()[ids[j]]
-		if a.Area == b.Area {
+		a, b := area[ids[i]], area[ids[j]]
+		if a == b {
 			return ids[i] < ids[j]
 		}
-		return a.Area < b.Area
+		return a < b
 	})
 	return ids[:min(len(ids), (2*len(ids)+2)/3)]
 }
 
 // addNuggets chooses two or three candidates without replacement.
-func addNuggets(skin []stone, st *cells.Foam, l levels, ink inks, rng *rand.Rand) {
-	ids := nuggetCandidates(st)
+func (s *Sketch) addNuggets(skin []stone, st *cells.Foam, field *noise.Perlin, l levels, ink inks, rng *rand.Rand, aspect float64) {
+	ids := s.nuggetCandidates(st, field, l, aspect)
 	want := min(len(ids), 2+rng.IntN(2))
 	for i := range want {
 		j := i + rng.IntN(len(ids)-i)
