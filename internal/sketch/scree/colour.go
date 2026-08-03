@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"sort"
 
 	"github.com/jaminalder/go-graphics/internal/cells"
 	"github.com/jaminalder/go-graphics/internal/mathx"
@@ -66,6 +67,28 @@ func colours(name string, fromCLI palette.Palette) (palette.Palette, error) {
 	if !ok {
 		return palette.Palette{}, fmt.Errorf("scree: no palette %q", name)
 	}
+	return p, nil
+}
+
+// yellowLike identifies pigments that would compete with the reserved gold.
+func yellowLike(c palette.Color) bool {
+	h, sat, _ := c.HSL()
+	return h >= 35 && h <= 75 && sat >= 0.20
+}
+
+// withoutYellow removes yellow-like pigments while preserving provenance and
+// the order of every remaining colour.
+func withoutYellow(p palette.Palette) (palette.Palette, error) {
+	colors := make([]palette.Color, 0, len(p.Colors))
+	for _, c := range p.Colors {
+		if !yellowLike(c) {
+			colors = append(colors, c)
+		}
+	}
+	if len(colors) == 0 {
+		return palette.Palette{}, fmt.Errorf("scree: palette %q has no non-yellow colours for --gold", p.Slug)
+	}
+	p.Colors = colors
 	return p, nil
 }
 
@@ -141,6 +164,7 @@ type stone struct {
 	pigment palette.Color
 	tone    float64 // the scheme's value for this stone, 0 pale .. 1 full
 	load    float64 // how much of that pigment actually went on the paper
+	nugget  bool
 }
 
 // dress settles every stone's colour.
@@ -180,8 +204,7 @@ func (s *Sketch) dress(st *cells.Foam, l levels, rng *rand.Rand, aspect float64,
 		// own reads as a mistake in the palette: darker alone is underexposed,
 		// bluer alone is a colour cast, and more saturated alone is a slider
 		// pushed too far. Together they are unmistakably wet.
-		p := shade(c.Fill, 1-l.wat.soak*0.30)
-		p = palette.Lerp(p, ink.deep, l.wat.deep)
+		p := wetPigment(c.Fill, l, ink)
 		out[i] = stone{
 			pigment: p,
 			tone:    c.Tone,
@@ -193,6 +216,63 @@ func (s *Sketch) dress(st *cells.Foam, l levels, rng *rand.Rand, aspect float64,
 		}
 	}
 	return out
+}
+
+var nuggetGold = palette.MustHex("#F3C937")
+
+func wetPigment(c palette.Color, l levels, ink inks) palette.Color {
+	p := shade(c, 1-l.wat.soak*0.30)
+	return palette.Lerp(p, ink.deep, l.wat.deep)
+}
+
+func goldPigment(l levels, ink inks) palette.Color {
+	p := wetPigment(nuggetGold, l, ink)
+	h, _, light := p.HSL()
+	return palette.FromHSL(h, 1, light)
+}
+
+// muteOrdinaryYellows keeps scheme shading from moving a neighbouring taupe
+// back into the hue range reserved for gold. Lightness and tone stay intact.
+func muteOrdinaryYellows(skin []stone) {
+	for i := range skin {
+		if !yellowLike(skin[i].pigment) {
+			continue
+		}
+		h, _, light := skin[i].pigment.HSL()
+		skin[i].pigment = palette.FromHSL(h, 0.19, light)
+	}
+}
+
+// nuggetCandidates returns the smaller two-thirds of the visible stones by
+// area. IDs break exact ties so the ranking is stable across resolutions.
+func nuggetCandidates(st *cells.Foam) []int {
+	var ids []int
+	for i, c := range st.Cells() {
+		if c.Area > 0 {
+			ids = append(ids, i)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		a, b := st.Cells()[ids[i]], st.Cells()[ids[j]]
+		if a.Area == b.Area {
+			return ids[i] < ids[j]
+		}
+		return a.Area < b.Area
+	})
+	return ids[:min(len(ids), (2*len(ids)+2)/3)]
+}
+
+// addNuggets chooses two or three candidates without replacement.
+func addNuggets(skin []stone, st *cells.Foam, l levels, ink inks, rng *rand.Rand) {
+	ids := nuggetCandidates(st)
+	want := min(len(ids), 2+rng.IntN(2))
+	for i := range want {
+		j := i + rng.IntN(len(ids)-i)
+		ids[i], ids[j] = ids[j], ids[i]
+		id := ids[i]
+		skin[id].pigment = goldPigment(l, ink)
+		skin[id].nugget = true
+	}
 }
 
 // darkestShadow is the least light the bed reflects anywhere: the darkest a

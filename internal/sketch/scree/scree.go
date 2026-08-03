@@ -42,6 +42,7 @@ const (
 	streamTraits = 3 // which point of the output space this seed is
 	streamLevels = 4 // the trait levels made numeric
 	streamFacets = 5 // where the facets are cut
+	streamGold   = 6 // which small-to-medium stones hold gold
 )
 
 // saltPaper salts the paper's grain lattice, so the tooth of the sheet does
@@ -79,6 +80,7 @@ type Sketch struct {
 	Passage float64 // wavelength of the colour field, canvas units
 	Shades  float64 // how far a stone wanders from its palette swatch
 	Sat     float64 // lift on every pigment's saturation
+	Gold    bool    // reserve yellow for two or three rare gold nuggets
 
 	// The surface and the lamp (light.go).
 	Rise      float64 // how proud a stone stands, ×its own inradius
@@ -183,6 +185,12 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	if err != nil {
 		return nil, err
 	}
+	if s.Gold {
+		pal, err = withoutYellow(pal)
+		if err != nil {
+			return nil, err
+		}
+	}
 	ink := s.inks(palette.ByLuminance(pal.Colors))
 
 	rng := ctx.RNG(streamLayout)
@@ -195,6 +203,10 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	wash.Tooth, wash.Grain = tooth*1.8, s.Grain*6
 
 	skin := s.dress(stones, l, ctx.RNG(streamDress), aspect, ink)
+	if s.Gold {
+		muteOrdinaryYellows(skin)
+		addNuggets(skin, stones, l, ink, ctx.RNG(streamGold))
+	}
 	ink.joint = sink(ink.joint, darkestShadow(skin, l))
 
 	return &sheet{

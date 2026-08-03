@@ -4,6 +4,7 @@ import (
 	"flag"
 	"io"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
@@ -47,7 +48,12 @@ func configured(t *testing.T, args ...string) *Sketch {
 
 func planned(t *testing.T, s *Sketch, seed uint64) *sheet {
 	t.Helper()
-	sh, err := s.plan(testCtx(t, seed))
+	return plannedWithContext(t, s, testCtx(t, seed))
+}
+
+func plannedWithContext(t *testing.T, s *Sketch, ctx sketch.Context) *sheet {
+	t.Helper()
+	sh, err := s.plan(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,5 +327,120 @@ func TestEveryStoneIsPaintedWithinRange(t *testing.T) {
 				t.Errorf("seed %d: a stone took a load of %.3f", seed, d.load)
 			}
 		}
+	}
+}
+
+func TestGoldModeRemovesYellowFromTheOrdinaryPalette(t *testing.T) {
+	pal, ok := palette.ByName("avery-bicycle-rider")
+	if !ok {
+		t.Fatal("palette missing")
+	}
+	if !yellowLike(palette.MustHex("#F3C937")) {
+		t.Fatal("Avery gold was not recognized as yellow")
+	}
+	for _, hex := range []string{"#7B533E", "#BFA588", "#604847", "#552723"} {
+		if yellowLike(palette.MustHex(hex)) {
+			t.Errorf("%s was classified as yellow", hex)
+		}
+	}
+	filtered, err := withoutYellow(pal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered.Colors) != 4 {
+		t.Fatalf("filtered palette has %d colours, want 4", len(filtered.Colors))
+	}
+	for i, want := range pal.Colors[1:] {
+		if filtered.Colors[i] != want {
+			t.Errorf("colour %d changed from %s to %s", i, want.Hex(), filtered.Colors[i].Hex())
+		}
+	}
+}
+
+func TestGoldModeChoosesTwoOrThreeSmallToMediumNuggets(t *testing.T) {
+	pal, ok := palette.ByName("avery-bicycle-rider")
+	if !ok {
+		t.Fatal("palette missing")
+	}
+	for seed := uint64(1); seed <= 12; seed++ {
+		s := configured(t, "--gold", "--colourway", "avery-bicycle-rider", "--bed", "gravel")
+		ctx := sketch.Context{Width: 96, Height: 96, Seed: seed, Palette: pal}
+		sh := plannedWithContext(t, s, ctx)
+		allowed := make(map[int]bool)
+		for _, id := range nuggetCandidates(sh.stones) {
+			allowed[id] = true
+		}
+
+		count := 0
+		for id, d := range sh.skin {
+			if !d.nugget {
+				if yellowLike(d.pigment) {
+					t.Errorf("seed %d: ordinary stone %d is yellow (%s)", seed, id, d.pigment.Hex())
+				}
+				continue
+			}
+			count++
+			if !allowed[id] {
+				t.Errorf("seed %d: nugget %d is outside the candidate set", seed, id)
+			}
+			_, sat, _ := d.pigment.HSL()
+			if math.Abs(sat-1) > 1e-12 {
+				t.Errorf("seed %d: nugget %d saturation is %.3f, want 1", seed, id, sat)
+			}
+		}
+		if count != 2 && count != 3 {
+			t.Errorf("seed %d: got %d nuggets, want 2 or 3", seed, count)
+		}
+	}
+}
+
+func TestGoldModeIsDeterministicAndResolutionIndependent(t *testing.T) {
+	pal, ok := palette.ByName("avery-bicycle-rider")
+	if !ok {
+		t.Fatal("palette missing")
+	}
+	ids := func(width, height int) []int {
+		s := configured(t, "--gold", "--colourway", "avery-bicycle-rider", "--bed", "gravel")
+		sh := plannedWithContext(t, s, sketch.Context{Width: width, Height: height, Seed: 8, Palette: pal})
+		var out []int
+		for id, d := range sh.skin {
+			if d.nugget {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+
+	a, b, print := ids(96, 96), ids(96, 96), ids(600, 600)
+	if !slices.Equal(a, b) {
+		t.Fatalf("same render selected %v then %v", a, b)
+	}
+	if !slices.Equal(a, print) {
+		t.Fatalf("preview selected %v, print selected %v", a, print)
+	}
+}
+
+func TestWithoutGoldNoStoneIsANugget(t *testing.T) {
+	for id, d := range planned(t, configured(t), 8).skin {
+		if d.nugget {
+			t.Errorf("stone %d became a nugget without --gold", id)
+		}
+	}
+}
+
+func TestGoldAppearsInTheOutputName(t *testing.T) {
+	s := New()
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	s.Flags(fs)
+	if err := fs.Parse([]string{"--gold"}); err != nil {
+		t.Fatal(err)
+	}
+	suffix, err := s.Configure()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suffix != "-gold" {
+		t.Fatalf("--gold suffix is %q, want -gold", suffix)
 	}
 }

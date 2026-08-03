@@ -46,6 +46,7 @@ func (s *Sketch) declare() {
 	o.Float("passage", "wavelength of the colour field, canvas units", "pa", 0.1, 4, &s.Passage)
 	o.Float("shades", "how far a stone wanders from its palette swatch", "sh", 0, 2, &s.Shades)
 	o.Float("saturate", "lift on every pigment's saturation", "sa", 0, 2, &s.Sat)
+	o.Bool("gold", "reserve yellow for two or three rare gold nuggets", "gold", &s.Gold)
 
 	o.Float("soak", "how much the water darkens a stone", "sk", 0, 1, &s.Soak)
 	o.Float("sheen", "how much the water polishes it, x gloss", "sn", 0, 4, &s.Sheen)
