@@ -239,7 +239,11 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		col = s.illuminate(sh, h, wu, wv, col)
 		// The joint goes on top of everything and is never itself lit: it is
 		// the water between the stones, not part of any stone's surface.
-		return s.lay(sh, col, h, u, v, ctx.Seed)
+		col = s.lay(sh, col, h, u, v, ctx.Seed)
+		if s.Gold && !sh.skin[h.Cell].nugget {
+			col = muteYellow(col)
+		}
+		return col
 	}), nil
 }
 

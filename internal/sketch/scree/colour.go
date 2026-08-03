@@ -74,7 +74,17 @@ func colours(name string, fromCLI palette.Palette) (palette.Palette, error) {
 // yellowLike identifies pigments that would compete with the reserved gold.
 func yellowLike(c palette.Color) bool {
 	h, sat, _ := c.HSL()
-	return h >= 35 && h <= 75 && sat >= 0.20
+	return yellowHue(h) && sat >= 0.20
+}
+
+func yellowHue(h float64) bool { return h >= 35 && h <= 75 }
+
+// readsYellow applies the same hue/chroma test to a visible colour. HSL
+// saturation is unstable near black: #120F0A is technically saturated amber
+// but reads as a dark neutral, not as a colour competing with gold.
+func readsYellow(c palette.Color) bool {
+	h, sat, light := c.HSL()
+	return yellowHue(h) && sat >= 0.20 && light >= 0.12
 }
 
 // withoutYellow removes yellow-like pigments while preserving provenance and
@@ -241,12 +251,18 @@ func goldPigment(l levels, ink inks) palette.Color {
 // back into the hue range reserved for gold. Lightness and tone stay intact.
 func muteOrdinaryYellows(skin []stone) {
 	for i := range skin {
-		if !yellowLike(skin[i].pigment) {
-			continue
-		}
-		h, _, light := skin[i].pigment.HSL()
-		skin[i].pigment = palette.FromHSL(h, 0.19, light)
+		skin[i].pigment = muteYellow(skin[i].pigment)
 	}
+}
+
+func muteYellow(c palette.Color) palette.Color {
+	h, sat, light := c.HSL()
+	// Leave room for 8-bit dither to move a warm neutral a few degrees into
+	// the reserved arc after this float colour is returned.
+	if sat == 0 || light < 0.12 || h < 32 || h > 78 {
+		return c
+	}
+	return palette.FromHSL(0, 0, light)
 }
 
 // nuggetCandidates returns the smaller two-thirds of the stones visible after
