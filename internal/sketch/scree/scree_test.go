@@ -451,6 +451,37 @@ func TestEveryChosenNuggetAppearsInTheRenderedBed(t *testing.T) {
 	}
 }
 
+func TestEveryChosenNuggetHasVisibleGold(t *testing.T) {
+	pal, ok := palette.ByName("avery-bicycle-rider")
+	if !ok {
+		t.Fatal("palette missing")
+	}
+	for _, seed := range []uint64{8, 50} {
+		s := configured(t, "--gold", "--colourway", "avery-bicycle-rider", "--bed", "gravel")
+		ctx := sketch.Context{Width: 96, Height: 96, Seed: seed, Palette: pal}
+		sh := plannedWithContext(t, s, ctx)
+		img := sketchtest.RenderNRGBA(t, s, ctx)
+		gold := make([]int, sh.stones.Len())
+		for y := range 96 {
+			for x := range 96 {
+				u, v := (float64(x)+0.5)/96, (float64(y)+0.5)/96
+				wu, wv := s.warp(sh.field, sh.level, u, v)
+				id := sh.stones.At(wu, wv).Cell
+				px := img.NRGBAAt(x, y)
+				col := palette.Color{R: float64(px.R) / 255, G: float64(px.G) / 255, B: float64(px.B) / 255}
+				if readsYellow(col) {
+					gold[id]++
+				}
+			}
+		}
+		for id, d := range sh.skin {
+			if d.nugget && gold[id] == 0 {
+				t.Errorf("seed %d: nugget %d has no visible gold pixels", seed, id)
+			}
+		}
+	}
+}
+
 func TestOrdinaryRenderedStonesDoNotReadYellowInGoldMode(t *testing.T) {
 	for _, name := range []string{"avery-bicycle-rider", "cezanne-bathers"} {
 		pal, ok := palette.ByName(name)

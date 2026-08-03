@@ -277,7 +277,11 @@ func (s *Sketch) nuggetCandidates(st *cells.Foam, field *noise.Perlin, l levels,
 			u := (float64(x) + 0.5) * aspect / float64(cols)
 			v := (float64(y) + 0.5) / rows
 			wu, wv := s.warp(field, l, u, v)
-			area[st.At(wu, wv).Cell]++
+			h := st.At(wu, wv)
+			half := l.ink / 2 * (1 + l.swell*h.Node)
+			if math.IsInf(h.Wall, 1) || h.Wall > half+l.ink*0.16 {
+				area[h.Cell]++
+			}
 		}
 	}
 	ids := make([]int, 0, st.Len())
