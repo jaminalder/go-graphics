@@ -11,3 +11,4 @@
 
 # Agent worktrees live inside the repo; they are checkouts, not content.
 .claude/worktrees/
+.worktrees/
