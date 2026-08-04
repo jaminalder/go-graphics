@@ -625,6 +625,63 @@ func TestCreateRevalidatesPathImmediatelyBeforeWorktreeMutation(t *testing.T) {
 	}
 }
 
+func TestCreateRevalidatesCoordinatorBeforeWorktreeMutation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, testRepo) func(*testing.T, testRepo)
+		want   string
+	}{
+		{
+			name: "branch changed",
+			mutate: func(t *testing.T, repo testRepo) func(*testing.T, testRepo) {
+				repo.git(t, "checkout", "-b", "human-before-worktree")
+				return func(t *testing.T, repo testRepo) {
+					repo.git(t, "checkout", "master")
+					repo.git(t, "branch", "-d", "human-before-worktree")
+				}
+			},
+			want: "current branch is \"human-before-worktree\"",
+		},
+		{
+			name: "head changed",
+			mutate: func(t *testing.T, repo testRepo) func(*testing.T, testRepo) {
+				original := repo.gitOutput(t, "rev-parse", "HEAD")
+				repo.git(t, "commit", "--allow-empty", "-m", "test: race coordinator before worktree")
+				advanced := repo.gitOutput(t, "rev-parse", "HEAD")
+				return func(t *testing.T, repo testRepo) {
+					repo.git(t, "update-ref", "refs/heads/master", original, advanced)
+				}
+			},
+			want: "coordinator HEAD changed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newTestRepo(t)
+			manager := testManager(t, repo)
+			var restore func(*testing.T, testRepo)
+			manager.createCheckpoint = func(checkpoint string) error {
+				if checkpoint == checkpointBeforeWorktree {
+					restore = test.mutate(t, repo)
+				}
+				return nil
+			}
+
+			created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "coordinator-before-worktree"})
+			if restore == nil {
+				t.Fatal("before-worktree checkpoint was not reached")
+			}
+			restore(t, repo)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want containing %q", err, test.want)
+			}
+			if created.WorktreePath == "" || !strings.Contains(err.Error(), "created branch=true") {
+				t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+			}
+		})
+	}
+}
+
 func TestCreateReportsBranchCreatedWhenCheckpointFailsBeforeWorktree(t *testing.T) {
 	repo := newTestRepo(t)
 	manager := testManager(t, repo)
@@ -676,6 +733,89 @@ func TestCreateRevalidatesAssignedWorktreeBeforeRecordCommit(t *testing.T) {
 	}
 	if created.WorktreePath == "" || !strings.Contains(err.Error(), shellQuote(created.WorktreePath)) {
 		t.Fatalf("missing partial worktree inventory: created=%#v error=%v", created, err)
+	}
+}
+
+func TestCreateRevalidatesCoordinatorBeforeRecordCommit(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, testRepo) func(*testing.T, testRepo)
+		want   string
+	}{
+		{
+			name: "branch changed",
+			mutate: func(t *testing.T, repo testRepo) func(*testing.T, testRepo) {
+				repo.git(t, "checkout", "-b", "human-before-record")
+				return func(t *testing.T, repo testRepo) {
+					repo.git(t, "checkout", "master")
+					repo.git(t, "branch", "-d", "human-before-record")
+				}
+			},
+			want: "current branch is \"human-before-record\"",
+		},
+		{
+			name: "head changed",
+			mutate: func(t *testing.T, repo testRepo) func(*testing.T, testRepo) {
+				original := repo.gitOutput(t, "rev-parse", "HEAD")
+				repo.git(t, "commit", "--allow-empty", "-m", "test: race coordinator before record")
+				advanced := repo.gitOutput(t, "rev-parse", "HEAD")
+				return func(t *testing.T, repo testRepo) {
+					repo.git(t, "update-ref", "refs/heads/master", original, advanced)
+				}
+			},
+			want: "coordinator HEAD changed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newTestRepo(t)
+			manager := testManager(t, repo)
+			var restore func(*testing.T, testRepo)
+			manager.createCheckpoint = func(checkpoint string) error {
+				if checkpoint == checkpointBeforeCommit {
+					restore = test.mutate(t, repo)
+				}
+				return nil
+			}
+
+			created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "coordinator-before-record"})
+			if restore == nil {
+				t.Fatal("before-record-commit checkpoint was not reached")
+			}
+			restore(t, repo)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want containing %q", err, test.want)
+			}
+			if created.WorktreePath == "" || !strings.Contains(err.Error(), "worktree=true") {
+				t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+			}
+		})
+	}
+}
+
+func TestCreateRevalidatesCoordinatorImmediatelyAfterRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	original := repo.gitOutput(t, "rev-parse", "HEAD")
+	advanced := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointAfterCommit {
+			repo.git(t, "commit", "--allow-empty", "-m", "test: race coordinator after record")
+			advanced = repo.gitOutput(t, "rev-parse", "HEAD")
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "coordinator-after-record"})
+	if advanced == "" {
+		t.Fatal("after-record-commit checkpoint was not reached")
+	}
+	repo.git(t, "update-ref", "refs/heads/master", original, advanced)
+	if err == nil || !strings.Contains(err.Error(), "coordinator HEAD changed") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath == "" || !strings.Contains(err.Error(), "worktree=true") {
+		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
 	}
 }
 

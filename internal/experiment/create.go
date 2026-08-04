@@ -20,6 +20,7 @@ const (
 	checkpointBeforeBranch   = "before-branch"
 	checkpointBeforeWorktree = "before-worktree"
 	checkpointBeforeCommit   = "before-commit"
+	checkpointAfterCommit    = "after-record-commit"
 )
 
 // CreateOptions configures one ordinary experiment worktree.
@@ -95,11 +96,12 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 		return Created{}, createResources{}, err
 	}
 	runner := gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}
-	if err := m.validateCoordinator(ctx, runner); err != nil {
+	coordinatorHEAD, err := m.validateCoordinator(ctx, runner, "")
+	if err != nil {
 		return Created{}, createResources{}, err
 	}
 
-	opts, err := normalizedCreateOptions(opts)
+	opts, err = normalizedCreateOptions(opts)
 	if err != nil {
 		return Created{}, createResources{}, err
 	}
@@ -122,7 +124,7 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	if err := m.checkpoint(checkpointBeforeBranch); err != nil {
 		return partial, resources, err
 	}
-	if err := m.validateCoordinator(ctx, runner); err != nil {
+	if _, err := m.validateCoordinator(ctx, runner, coordinatorHEAD); err != nil {
 		return partial, resources, err
 	}
 	if err := m.validateAvailableResources(ctx, runner, id, branch, worktreePath); err != nil {
@@ -140,6 +142,9 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	}
 	resources.branchCreated = true
 	if err := m.checkpoint(checkpointBeforeWorktree); err != nil {
+		return partial, resources, err
+	}
+	if _, err := m.validateCoordinator(ctx, runner, coordinatorHEAD); err != nil {
 		return partial, resources, err
 	}
 	if err := m.validateBranchForWorktree(ctx, runner, branch, baseCommit, worktreePath); err != nil {
@@ -219,10 +224,19 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	if err := m.checkpoint(checkpointBeforeCommit); err != nil {
 		return partial, resources, err
 	}
+	if _, err := m.validateCoordinator(ctx, runner, coordinatorHEAD); err != nil {
+		return partial, resources, err
+	}
 	if err := m.validateAssignedWorktree(ctx, runner, branch, worktreePath, baseCommit); err != nil {
 		return partial, resources, err
 	}
 	if err := commitRecord(ctx, worktreePath, recordDir, "experiment: create "+id.String(), m.gitEnv); err != nil {
+		return partial, resources, err
+	}
+	if err := m.checkpoint(checkpointAfterCommit); err != nil {
+		return partial, resources, err
+	}
+	if _, err := m.validateCoordinator(ctx, runner, coordinatorHEAD); err != nil {
 		return partial, resources, err
 	}
 
@@ -364,36 +378,44 @@ func (m *Manager) resolveCreateBase(ctx context.Context, runner gitRunner, opts 
 	return baseBranch, strings.TrimSpace(commit), nil
 }
 
-func (m *Manager) validateCoordinator(ctx context.Context, runner gitRunner) error {
+func (m *Manager) validateCoordinator(ctx context.Context, runner gitRunner, expectedHEAD string) (string, error) {
 	if err := m.RequireCoordinator(); err != nil {
-		return err
+		return "", err
 	}
 	currentRoot, err := runner.run(ctx, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return err
+		return "", err
 	}
 	root, err := canonicalPath(strings.TrimSpace(currentRoot), m.CoordinatorRoot)
 	if err != nil {
-		return fmt.Errorf("resolve coordinator before mutation: %w", err)
+		return "", fmt.Errorf("resolve coordinator before mutation: %w", err)
 	}
 	if root != m.CoordinatorRoot {
-		return fmt.Errorf("coordinator changed before mutation: got %q, want %q", root, m.CoordinatorRoot)
+		return "", fmt.Errorf("coordinator changed before mutation: got %q, want %q", root, m.CoordinatorRoot)
 	}
 	currentBranch, err := runner.run(ctx, "branch", "--show-current")
 	if err != nil {
-		return err
+		return "", err
 	}
 	if strings.TrimSpace(currentBranch) != "master" {
-		return fmt.Errorf("create requires coordinator branch master; current branch is %q", strings.TrimSpace(currentBranch))
+		return "", fmt.Errorf("create requires coordinator branch master; current branch is %q", strings.TrimSpace(currentBranch))
 	}
 	status, err := runner.run(ctx, "status", "--porcelain")
 	if err != nil {
-		return err
+		return "", err
 	}
 	if status != "" {
-		return fmt.Errorf("coordinator worktree is not clean: %s", strings.TrimSpace(status))
+		return "", fmt.Errorf("coordinator worktree is not clean: %s", strings.TrimSpace(status))
 	}
-	return nil
+	currentHEAD, err := runner.run(ctx, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return "", err
+	}
+	currentHEAD = strings.TrimSpace(currentHEAD)
+	if expectedHEAD != "" && currentHEAD != expectedHEAD {
+		return "", fmt.Errorf("coordinator HEAD changed: got %s, want original %s", currentHEAD, expectedHEAD)
+	}
+	return currentHEAD, nil
 }
 
 func (m *Manager) validateAvailableResources(ctx context.Context, runner gitRunner, id ID, branch, worktreePath string) error {
