@@ -101,7 +101,10 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	surface := riffle.NewSurface(ctx, s.WaterSeed)
+	surface, err := riffle.NewSurface(ctx, riffle.DefaultSurfaceConfig(s.WaterSeed))
+	if err != nil {
+		return nil, err
+	}
 	water := coolest(ctx.Palette.Colors)
 	light := water.Lighten(0.72)
 

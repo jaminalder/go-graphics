@@ -1,9 +1,50 @@
 package riffle
 
-import "testing"
+import (
+	"testing"
+)
+
+func TestDefaultSurfaceConfigPreservesTheShallowsSurface(t *testing.T) {
+	cfg := DefaultSurfaceConfig(42)
+	if cfg != (SurfaceConfig{
+		Seed: 42, Reach: "pool", Channel: "bend", Boulders: "field",
+		Water: "clear", Light: "dappled",
+	}) {
+		t.Fatalf("default surface config = %+v", cfg)
+	}
+	s, err := NewSurface(testCtx(t, 7), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range [][2]float64{{0.1, 0.2}, {0.5, 0.5}, {0.9, 0.8}} {
+		a := s.At(point[0], point[1])
+		b := s.At(point[0], point[1])
+		if a != b {
+			t.Fatalf("surface sample at %v changed from %+v to %+v", point, a, b)
+		}
+	}
+}
+
+func TestSurfaceConfigRejectsUnknownLevels(t *testing.T) {
+	tests := []SurfaceConfig{
+		{Seed: 1, Reach: "flood", Channel: "bend", Boulders: "field", Water: "clear", Light: "dappled"},
+		{Seed: 1, Reach: "pool", Channel: "canal", Boulders: "field", Water: "clear", Light: "dappled"},
+		{Seed: 1, Reach: "pool", Channel: "bend", Boulders: "mountains", Water: "clear", Light: "dappled"},
+		{Seed: 1, Reach: "pool", Channel: "bend", Boulders: "field", Water: "opaque", Light: "dappled"},
+		{Seed: 1, Reach: "pool", Channel: "bend", Boulders: "field", Water: "clear", Light: "night"},
+	}
+	for _, cfg := range tests {
+		if _, err := NewSurface(testCtx(t, 1), cfg); err == nil {
+			t.Errorf("accepted invalid surface config %+v", cfg)
+		}
+	}
+}
 
 func TestSurfaceSpansLightAndShadowWithoutFineStriping(t *testing.T) {
-	s := NewSurface(testCtx(t, 42), 42)
+	s, err := NewSurface(testCtx(t, 42), DefaultSurfaceConfig(42))
+	if err != nil {
+		t.Fatal(err)
+	}
 	lo, hi := 1.0, -1.0
 	crossings := 0
 	previous := s.At(0.5, 0.5/600).Ripple

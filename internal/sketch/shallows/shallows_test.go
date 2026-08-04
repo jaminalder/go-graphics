@@ -8,6 +8,7 @@ import (
 
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
+	"github.com/jaminalder/go-graphics/internal/sketch/riffle"
 	"github.com/jaminalder/go-graphics/internal/sketch/sketchtest"
 )
 
@@ -68,6 +69,40 @@ func TestSurfaceChangesTheBedInsideOneRender(t *testing.T) {
 	}
 	if share := float64(changed) / float64(len(active.Pix)/4); share < 0.55 {
 		t.Fatalf("surface changed %.0f%% of pixels, want a clearly legible field", 100*share)
+	}
+}
+
+func TestWaterSeedDoesNotChangeTheBed(t *testing.T) {
+	s := configured(t)
+	ctx := testCtx(t, 12)
+	bedA, err := s.bed.NewBed(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bedB, err := s.bed.NewBed(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waterA, err := riffle.NewSurface(ctx, riffle.DefaultSurfaceConfig(41))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waterB, err := riffle.NewSurface(ctx, riffle.DefaultSurfaceConfig(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	waterChanged := false
+	for _, point := range [][2]float64{{0.1, 0.2}, {0.5, 0.5}, {0.9, 0.8}} {
+		if a, b := bedA.At(point[0], point[1]), bedB.At(point[0], point[1]); a != b {
+			t.Fatalf("bed changed at %v while only constructing another water seed", point)
+		}
+		if waterA.At(point[0], point[1]) != waterB.At(point[0], point[1]) {
+			waterChanged = true
+		}
+	}
+	if !waterChanged {
+		t.Fatal("different water seeds produced identical sampled surfaces")
 	}
 }
 

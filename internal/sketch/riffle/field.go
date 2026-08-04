@@ -1,6 +1,7 @@
 package riffle
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/jaminalder/go-graphics/internal/mathx"
@@ -22,18 +23,42 @@ type SurfaceSample struct {
 	Dapple float64 // broad tree-shadow field, 0..1
 }
 
-// NewSurface plans the pool/bend/field/clear/dappled water used by the seed-42
-// riffle reference. The channel is widened beyond the frame: its direction
-// and velocity remain, while banks and dry geometry cannot enter a sample.
-func NewSurface(ctx sketch.Context, seed uint64) *Surface {
-	ctx.Seed = seed
+// SurfaceConfig selects the coherent river levels used to build a reusable
+// all-water surface. Each name is one level from riffle's output space; the
+// component keeps the same coupled parameter ranges as the complete artwork.
+type SurfaceConfig struct {
+	Seed     uint64
+	Reach    string
+	Channel  string
+	Boulders string
+	Water    string
+	Light    string
+}
+
+// DefaultSurfaceConfig returns the pool/bend/field/clear/dappled water used by
+// shallows. It is the former fixed NewSurface recipe made explicit.
+func DefaultSurfaceConfig(seed uint64) SurfaceConfig {
+	return SurfaceConfig{
+		Seed: seed, Reach: "pool", Channel: "bend", Boulders: "field",
+		Water: "clear", Light: "dappled",
+	}
+}
+
+// NewSurface plans an all-water flow and wave field. The channel is widened
+// beyond the frame: its direction and velocity remain, while banks and dry
+// geometry cannot enter a sample.
+func NewSurface(ctx sketch.Context, cfg SurfaceConfig) (*Surface, error) {
+	if err := validateSurfaceConfig(cfg); err != nil {
+		return nil, err
+	}
+	ctx.Seed = cfg.Seed
 	rng := ctx.RNG(streamReach)
 	set := defaults()
-	reachLevel("pool", &set, rng)
-	channelLevel("bend", &set, rng)
-	bouldersLevel("field", &set, rng)
-	waterLevel("clear", &set, rng)
-	lightLevel("dappled", &set, rng)
+	reachLevel(cfg.Reach, &set, rng)
+	channelLevel(cfg.Channel, &set, rng)
+	bouldersLevel(cfg.Boulders, &set, rng)
+	waterLevel(cfg.Water, &set, rng)
+	lightLevel(cfg.Light, &set, rng)
 
 	set.channelWidth = 2.4
 	set.taper = 0
@@ -49,7 +74,35 @@ func NewSurface(ctx sketch.Context, seed uint64) *Surface {
 		p.rocks[i].Rise = 0
 		p.rocks[i].Wake = 0
 	}
-	return &Surface{plan: p}
+	return &Surface{plan: p}, nil
+}
+
+func validateSurfaceConfig(cfg SurfaceConfig) error {
+	checks := []struct {
+		name, value string
+		valid       []string
+	}{
+		{"reach", cfg.Reach, []string{"pool", "glide", "run", "riffle", "rapid", "cascade"}},
+		{"channel", cfg.Channel, []string{"straight", "bend", "chute", "bar", "braid"}},
+		{"boulders", cfg.Boulders, []string{"clear", "few", "scattered", "field", "ledge"}},
+		{"water", cfg.Water, []string{"clear", "green", "peat", "glacial", "silt"}},
+		{"light", cfg.Light, []string{"high", "low", "overcast", "dappled"}},
+	}
+	for _, check := range checks {
+		if !oneOf(check.value, check.valid) {
+			return fmt.Errorf("riffle: unknown surface %s %q", check.name, check.value)
+		}
+	}
+	return nil
+}
+
+func oneOf(value string, valid []string) bool {
+	for _, candidate := range valid {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 // At samples the flow-derived surface at one normalized coordinate.
