@@ -3,6 +3,7 @@ package qql
 import (
 	"bytes"
 	"flag"
+	"image"
 	"io"
 	"math"
 	"strings"
@@ -15,7 +16,9 @@ import (
 
 var update = flag.Bool("update", false, "regenerate golden files")
 
-func testCtx(t *testing.T, seed uint64) sketch.Context {
+var benchmarkImage image.Image
+
+func testCtx(t testing.TB, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("munch-scream-oil")
 	if !ok {
@@ -26,7 +29,7 @@ func testCtx(t *testing.T, seed uint64) sketch.Context {
 
 // configured returns a sketch with its options resolved, optionally pinning
 // trait flags the way the CLI would.
-func configured(t *testing.T, args ...string) *Sketch {
+func configured(t testing.TB, args ...string) *Sketch {
 	t.Helper()
 	s := New()
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
@@ -48,6 +51,31 @@ func TestDeterminism(t *testing.T) {
 func TestGolden(t *testing.T) {
 	got := sketchtest.RenderNRGBA(t, configured(t), testCtx(t, 42))
 	sketchtest.Golden(t, got, "testdata/qql_seed42_64.png", *update)
+}
+
+func BenchmarkPlan(b *testing.B) {
+	s := configured(b)
+	ctx := testCtx(b, 42)
+	b.ReportAllocs()
+	for range b.N {
+		if _, err := s.plan(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPaint(b *testing.B) {
+	s := configured(b)
+	ctx := testCtx(b, 42)
+	p, err := s.plan(ctx)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		benchmarkImage = s.paint(ctx, p)
+	}
 }
 
 func TestPlanIsResolutionIndependent(t *testing.T) {

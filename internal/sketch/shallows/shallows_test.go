@@ -3,6 +3,8 @@ package shallows
 import (
 	"bytes"
 	"flag"
+	"fmt"
+	"image"
 	"io"
 	"testing"
 
@@ -14,7 +16,12 @@ import (
 
 var update = flag.Bool("update", false, "regenerate golden files")
 
-func testCtx(t *testing.T, seed uint64) sketch.Context {
+var (
+	benchmarkImage   image.Image
+	benchmarkSurface riffle.SurfaceSample
+)
+
+func testCtx(t testing.TB, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("kandinsky-soft-pressure")
 	if !ok {
@@ -23,7 +30,7 @@ func testCtx(t *testing.T, seed uint64) sketch.Context {
 	return sketch.Context{Width: 96, Height: 96, Seed: seed, Palette: pal}
 }
 
-func configured(t *testing.T, args ...string) *Sketch {
+func configured(t testing.TB, args ...string) *Sketch {
 	t.Helper()
 	s := New()
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
@@ -45,6 +52,48 @@ func TestDeterminism(t *testing.T) {
 func TestGolden(t *testing.T) {
 	got := sketchtest.RenderNRGBA(t, configured(t), testCtx(t, 12))
 	sketchtest.Golden(t, got, "testdata/shallows_seed12_96.png", *update)
+}
+
+func BenchmarkBedPlan(b *testing.B) {
+	s := configured(b)
+	ctx := testCtx(b, 12)
+	b.ReportAllocs()
+	for range b.N {
+		if _, err := s.bed.NewBed(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkSurfaceSample(b *testing.B) {
+	ctx := testCtx(b, 12)
+	surface, err := riffle.NewSurface(ctx, riffle.DefaultSurfaceConfig(42))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		benchmarkSurface = surface.At(float64(i%97)/97, float64(i%89)/89)
+	}
+}
+
+func BenchmarkRender(b *testing.B) {
+	for _, size := range []int{96, 192} {
+		b.Run(fmt.Sprintf("%dx%d", size, size), func(b *testing.B) {
+			s := configured(b)
+			ctx := testCtx(b, 12)
+			ctx.Width, ctx.Height = size, size
+			b.ReportAllocs()
+			for range b.N {
+				var err error
+				benchmarkImage, err = s.Render(ctx)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
 
 func TestSurfaceChangesTheBedInsideOneRender(t *testing.T) {

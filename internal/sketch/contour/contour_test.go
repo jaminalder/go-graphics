@@ -2,6 +2,7 @@ package contour
 
 import (
 	"flag"
+	"image"
 	"testing"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
@@ -11,7 +12,12 @@ import (
 
 var update = flag.Bool("update", false, "regenerate golden files")
 
-func testCtx(t *testing.T, seed uint64) sketch.Context {
+var (
+	benchmarkColor palette.Color
+	benchmarkImage image.Image
+)
+
+func testCtx(t testing.TB, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("staticart-seven")
 	if !ok {
@@ -71,4 +77,41 @@ func TestPlanIsResolutionIndependent(t *testing.T) {
 func TestGolden(t *testing.T) {
 	got := sketchtest.RenderNRGBA(t, New(), testCtx(t, 42))
 	sketchtest.Golden(t, got, "testdata/contour_seed42_64.png", *update)
+}
+
+func BenchmarkPlan(b *testing.B) {
+	s := New()
+	ctx := testCtx(b, 42)
+	b.ReportAllocs()
+	for range b.N {
+		if _, err := s.plan(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkSample(b *testing.B) {
+	p, err := New().plan(testCtx(b, 42))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		benchmarkColor = p.At(float64(i%97)/97, float64(i%89)/89)
+	}
+}
+
+func BenchmarkRender128(b *testing.B) {
+	s := New()
+	ctx := testCtx(b, 42)
+	ctx.Width, ctx.Height = 128, 128
+	b.ReportAllocs()
+	for range b.N {
+		var err error
+		benchmarkImage, err = s.Render(ctx)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }

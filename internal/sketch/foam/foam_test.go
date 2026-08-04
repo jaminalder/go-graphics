@@ -2,6 +2,7 @@ package foam
 
 import (
 	"flag"
+	"image"
 	"io"
 	"math"
 	"testing"
@@ -13,11 +14,16 @@ import (
 
 var update = flag.Bool("update", false, "regenerate golden files")
 
+var (
+	benchmarkColor palette.Color
+	benchmarkImage image.Image
+)
+
 // densities is every level of the density axis, so tests sweep the whole
 // axis rather than whichever one seed 42 happens to draw.
 var densities = []string{"sparse", "open", "medium", "busy", "packed", "fine"}
 
-func testCtx(t *testing.T, seed uint64) sketch.Context {
+func testCtx(t testing.TB, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("tchelitchew-hide-and-seek")
 	if !ok {
@@ -30,7 +36,7 @@ func testCtx(t *testing.T, seed uint64) sketch.Context {
 // flags the way the CLI would. Tests go through the real path rather than
 // setting fields, because which flags were *given* is what tells an
 // override from what the seed's traits drew.
-func configured(t *testing.T, args ...string) *Sketch {
+func configured(t testing.TB, args ...string) *Sketch {
 	t.Helper()
 	s := New()
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
@@ -98,6 +104,43 @@ func TestPlannedSheetIgnoresPixelDimensions(t *testing.T) {
 func TestGolden(t *testing.T) {
 	got := sketchtest.RenderNRGBA(t, configured(t), testCtx(t, 42))
 	sketchtest.Golden(t, got, "testdata/foam_seed42_96.png", *update)
+}
+
+func BenchmarkPlan(b *testing.B) {
+	s := configured(b)
+	ctx := testCtx(b, 42)
+	b.ReportAllocs()
+	for range b.N {
+		if _, err := s.plan(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkSample(b *testing.B) {
+	s := configured(b)
+	sh, err := s.plan(testCtx(b, 42))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		benchmarkColor = s.sample(sh, 42, float64(i%97)/97, float64(i%89)/89)
+	}
+}
+
+func BenchmarkRender96(b *testing.B) {
+	s := configured(b)
+	ctx := testCtx(b, 42)
+	b.ReportAllocs()
+	for range b.N {
+		var err error
+		benchmarkImage, err = s.Render(ctx)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 // TestEveryDensityDividesTheSheet is the guard the pack needs and the one
