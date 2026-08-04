@@ -60,11 +60,23 @@ func (s *Sketch) Describe() string {
 	return "topographic contour rings from shuffled gradients over fBm noise"
 }
 
-// Render implements sketch.Sketch. Palette colors 0, 1, 2 are the gradient
-// endpoints (0→1 shuffled, 1→2 smooth, 2→0 shuffled), as in the original.
-func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
+// plan is the resolved contour field and its colour mapping. It is immutable
+// after construction and safe to share across raster workers.
+type plan struct {
+	field                       *noise.Perlin
+	low, mid, high              gradient.Discrete
+	frequency, gain             float64
+	octaves                     int
+	lowThreshold, highThreshold float64
+	noiseMin, noiseMax          float64
+}
+
+// plan resolves the palette and shuffled bands before the pixel loop.
+// Palette colors 0, 1, 2 are the gradient endpoints (0→1 shuffled, 1→2
+// smooth, 2→0 shuffled), as in the original.
+func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 	if len(ctx.Palette.Colors) < 3 {
-		return nil, fmt.Errorf("contour: palette %q needs at least 3 colors", ctx.Palette.Slug)
+		return plan{}, fmt.Errorf("contour: palette %q needs at least 3 colors", ctx.Palette.Slug)
 	}
 	c0, c1, c2 := ctx.Palette.Color(0), ctx.Palette.Color(1), ctx.Palette.Color(2)
 
@@ -74,18 +86,39 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	gradHigh := gradient.Sample(gradient.CosineBetween(c2, c0), s.Bands).
 		Shuffled(ctx.RNG(streamShuffleHigh))
 
-	field := noise.New(ctx.Seed)
+	return plan{
+		field:         noise.New(ctx.Seed),
+		low:           gradLow,
+		mid:           gradMid,
+		high:          gradHigh,
+		frequency:     s.Frequency,
+		gain:          s.Gain,
+		octaves:       s.Octaves,
+		lowThreshold:  s.LowThreshold,
+		highThreshold: s.HighThreshold,
+		noiseMin:      s.NoiseMin,
+		noiseMax:      s.NoiseMax,
+	}, nil
+}
 
-	img := sketch.Raster(ctx, func(u, v float64) palette.Color {
-		n := field.FBM(u*s.Frequency, v*s.Frequency, s.Octaves) * s.Gain
-		switch {
-		case n < s.LowThreshold:
-			return gradLow.At(mathx.Remap(n, s.NoiseMin, s.LowThreshold))
-		case n < s.HighThreshold:
-			return gradMid.At(mathx.Remap(n, s.LowThreshold, s.HighThreshold))
-		default:
-			return gradHigh.At(mathx.Remap(n, s.HighThreshold, s.NoiseMax))
-		}
-	})
-	return img, nil
+// At evaluates one canvas coordinate.
+func (p plan) At(u, v float64) palette.Color {
+	n := p.field.FBM(u*p.frequency, v*p.frequency, p.octaves) * p.gain
+	switch {
+	case n < p.lowThreshold:
+		return p.low.At(mathx.Remap(n, p.noiseMin, p.lowThreshold))
+	case n < p.highThreshold:
+		return p.mid.At(mathx.Remap(n, p.lowThreshold, p.highThreshold))
+	default:
+		return p.high.At(mathx.Remap(n, p.highThreshold, p.noiseMax))
+	}
+}
+
+// Render implements sketch.Sketch.
+func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
+	p, err := s.plan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sketch.Raster(ctx, p.At), nil
 }
