@@ -14,16 +14,11 @@ type testRepo struct {
 	gitEnv []string
 }
 
-var gitRoutingEnvironment = map[string]struct{}{
-	"GIT_DIR":                          {},
-	"GIT_WORK_TREE":                    {},
-	"GIT_COMMON_DIR":                   {},
-	"GIT_INDEX_FILE":                   {},
-	"GIT_OBJECT_DIRECTORY":             {},
-	"GIT_ALTERNATE_OBJECT_DIRECTORIES": {},
+func newTestRepo(t *testing.T) testRepo {
+	return newTestRepoWithEnv(t, os.Environ())
 }
 
-func newTestRepo(t *testing.T) testRepo {
+func newTestRepoWithEnv(t *testing.T, baseEnv []string) testRepo {
 	t.Helper()
 
 	root := t.TempDir()
@@ -31,14 +26,17 @@ func newTestRepo(t *testing.T) testRepo {
 	if err := os.WriteFile(globalConfig, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for name := range gitRoutingEnvironment {
-		unsetenvForTest(t, name)
-	}
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("GIT_CONFIG_GLOBAL", globalConfig)
+	gitEnv := filterEnvironment(sanitizedGitEnvironment(baseEnv), func(key string) bool {
+		switch key {
+		case "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM":
+			return true
+		default:
+			return false
+		}
+	})
 	repo := testRepo{
 		root: root,
-		gitEnv: append(withoutGitRouting(os.Environ()),
+		gitEnv: append(gitEnv,
 			"GIT_CONFIG_NOSYSTEM=1",
 			"GIT_CONFIG_GLOBAL="+globalConfig,
 		),
@@ -82,35 +80,10 @@ func (r testRepo) git(t *testing.T, args ...string) {
 	}
 }
 
-func withoutGitRouting(env []string) []string {
-	clean := make([]string, 0, len(env))
-	for _, entry := range env {
-		key, _, _ := strings.Cut(entry, "=")
-		if _, routed := gitRoutingEnvironment[key]; !routed {
-			clean = append(clean, entry)
-		}
-	}
-	return clean
-}
-
-func unsetenvForTest(t *testing.T, name string) {
-	t.Helper()
-
-	value, existed := os.LookupEnv(name)
-	if err := os.Unsetenv(name); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if existed {
-			_ = os.Setenv(name, value)
-		} else {
-			_ = os.Unsetenv(name)
-		}
-	})
-}
-
 func TestNewTestRepoIgnoresAmbientGitRouting(t *testing.T) {
-	cleanEnv := withoutGitRouting(os.Environ())
+	t.Parallel()
+
+	cleanEnv := sanitizedGitEnvironment(os.Environ())
 
 	ambientRoot := t.TempDir()
 	cmd := exec.Command("git", "init", "-b", "master")
@@ -130,23 +103,45 @@ func TestNewTestRepoIgnoresAmbientGitRouting(t *testing.T) {
 		t.Fatalf("initialize alternate object store: %v\n%s", err, output)
 	}
 
-	t.Setenv("GIT_DIR", filepath.Join(ambientRoot, ".git"))
-	t.Setenv("GIT_WORK_TREE", ambientRoot)
-	t.Setenv("GIT_COMMON_DIR", filepath.Join(ambientRoot, ".git"))
-	t.Setenv("GIT_INDEX_FILE", filepath.Join(ambientRoot, ".git", "index"))
-	t.Setenv("GIT_OBJECT_DIRECTORY", filepath.Join(ambientRoot, ".git", "objects"))
-	t.Setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", filepath.Join(alternate, "objects"))
+	templateDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(templateDir, "injected-template"), []byte("injected\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	poisoned := append([]string(nil), cleanEnv...)
+	poisoned = append(poisoned,
+		"GIT_DIR="+filepath.Join(ambientRoot, ".git"),
+		"GIT_WORK_TREE="+ambientRoot,
+		"GIT_COMMON_DIR="+filepath.Join(ambientRoot, ".git"),
+		"GIT_INDEX_FILE="+filepath.Join(ambientRoot, ".git", "index"),
+		"GIT_OBJECT_DIRECTORY="+filepath.Join(ambientRoot, ".git", "objects"),
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES="+filepath.Join(alternate, "objects"),
+		"GIT_PREFIX=poisoned/",
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=experiment.injected",
+		"GIT_CONFIG_VALUE_0=true",
+		"GIT_TEMPLATE_DIR="+templateDir,
+	)
 
-	repo := newTestRepo(t)
+	repo := newTestRepoWithEnv(t, poisoned)
 	got, err := (gitRunner{dir: repo.root, env: repo.gitEnv}).run(context.Background(), "rev-parse", "--show-toplevel")
 	if err != nil {
 		t.Fatal(err)
 	}
+	got = strings.TrimSuffix(got, "\n")
 	want, err := filepath.EvalSymlinks(repo.root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != want {
 		t.Fatalf("fixture Git root = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(repo.root, ".git", "injected-template")); !os.IsNotExist(err) {
+		t.Fatalf("injected Git template reached fixture: %v", err)
+	}
+	cmd = exec.Command("git", "config", "--get", "experiment.injected")
+	cmd.Dir = repo.root
+	cmd.Env = repo.gitEnv
+	if err := cmd.Run(); err == nil {
+		t.Fatal("injected command-line config reached fixture")
 	}
 }

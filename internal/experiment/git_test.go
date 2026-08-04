@@ -2,7 +2,9 @@ package experiment
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -12,11 +14,11 @@ import (
 func TestParseWorktreeListHandlesBranchesDetachedBareAndPrunableRecords(t *testing.T) {
 	t.Parallel()
 
+	whitespacePath := "/repo/line one\nline two "
 	input := strings.Join([]string{
-		"worktree /repo/main",
+		"worktree " + whitespacePath,
 		"HEAD 0123456789abcdef",
 		"branch refs/heads/master",
-		"",
 		"",
 		"worktree /repo/detached",
 		"HEAD fedcba9876543210",
@@ -25,10 +27,11 @@ func TestParseWorktreeListHandlesBranchesDetachedBareAndPrunableRecords(t *testi
 		"",
 		"worktree /repo/bare.git",
 		"bare",
-	}, "\n")
+		"",
+	}, "\x00")
 
 	want := []WorktreeInfo{
-		{Path: "/repo/main", HEAD: "0123456789abcdef", Branch: "refs/heads/master"},
+		{Path: whitespacePath, HEAD: "0123456789abcdef", Branch: "refs/heads/master"},
 		{Path: "/repo/detached", HEAD: "fedcba9876543210", Prunable: true},
 		{Path: "/repo/bare.git", Bare: true},
 	}
@@ -44,7 +47,7 @@ func TestParseWorktreeListHandlesBranchesDetachedBareAndPrunableRecords(t *testi
 func TestParseWorktreeListRejectsFieldsBeforeWorktree(t *testing.T) {
 	t.Parallel()
 
-	if _, err := parseWorktreeList("HEAD abc123\n"); err == nil {
+	if _, err := parseWorktreeList("HEAD abc123\x00"); err == nil {
 		t.Fatal("parseWorktreeList accepted a field without a worktree record")
 	}
 }
@@ -57,6 +60,65 @@ func TestGitRunnerReturnsMeaningfulStderr(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing-ref") || !strings.Contains(err.Error(), "fatal:") {
 		t.Fatalf("error %q does not include command and stderr", err)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("error %T does not wrap *exec.ExitError", err)
+	}
+}
+
+func TestGitRunnerPreservesContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := (gitRunner{dir: t.TempDir()}).run(ctx, "version")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+func TestNewManagerIgnoresAmbientGitRouting(t *testing.T) {
+	repo := newTestRepo(t)
+	ambient := newTestRepo(t)
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestNewManagerWithPoisonedProcess$")
+	cmd.Env = append([]string(nil), repo.gitEnv...)
+	cmd.Env = append(cmd.Env,
+		"EXPERIMENT_TEST_TARGET="+repo.root,
+		"GIT_DIR="+filepath.Join(ambient.root, ".git"),
+		"GIT_WORK_TREE="+ambient.root,
+		"GIT_COMMON_DIR="+filepath.Join(ambient.root, ".git"),
+		"GIT_INDEX_FILE="+filepath.Join(ambient.root, ".git", "index"),
+		"GIT_OBJECT_DIRECTORY="+filepath.Join(ambient.root, ".git", "objects"),
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES="+filepath.Join(ambient.root, ".git", "objects"),
+		"GIT_PREFIX=poisoned/",
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=core.bare",
+		"GIT_CONFIG_VALUE_0=true",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("poisoned NewManager subprocess: %v\n%s", err, output)
+	}
+}
+
+func TestNewManagerWithPoisonedProcess(t *testing.T) {
+	target := os.Getenv("EXPERIMENT_TEST_TARGET")
+	if target == "" {
+		t.Skip("subprocess helper")
+	}
+
+	manager, err := NewManager(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manager.CurrentRoot != want || manager.CoordinatorRoot != want {
+		t.Fatalf("roots = current %q coordinator %q, want %q", manager.CurrentRoot, manager.CoordinatorRoot, want)
 	}
 }
 

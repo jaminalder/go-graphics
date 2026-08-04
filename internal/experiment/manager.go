@@ -28,6 +28,7 @@ func NewManager(cwd string) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	current = strings.TrimSuffix(current, "\n")
 	current, err = canonicalPath(current, start)
 	if err != nil {
 		return nil, fmt.Errorf("resolve current worktree: %w", err)
@@ -36,15 +37,16 @@ func NewManager(cwd string) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	common = strings.TrimSuffix(common, "\n")
 	common, err = canonicalPath(common, start)
 	if err != nil {
 		return nil, fmt.Errorf("resolve Git common directory: %w", err)
 	}
-	porcelainLines, err := runner.lines(ctx, "worktree", "list", "--porcelain")
+	porcelain, err := runner.run(ctx, "worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		return nil, err
 	}
-	worktrees, err := parseWorktreeList(strings.Join(porcelainLines, "\n"))
+	worktrees, err := parseWorktreeList(porcelain)
 	if err != nil {
 		return nil, err
 	}

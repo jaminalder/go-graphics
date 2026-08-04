@@ -2,6 +2,7 @@ package experiment
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ type LockOwner struct {
 	Hostname   string    `json:"hostname"`
 	Command    string    `json:"command"`
 	AcquiredAt time.Time `json:"acquired_at"`
+	Token      string    `json:"token"`
 }
 
 // Lock is an acquired lifecycle lock.
@@ -27,8 +29,10 @@ type Lock struct {
 	path  string
 	owner LockOwner
 
-	mu       sync.Mutex
-	released bool
+	mu              sync.Mutex
+	tombstone       string
+	released        bool
+	removeTombstone func(string) error
 }
 
 // AcquireGlobalLock acquires the lock for repository-wide lifecycle mutations.
@@ -50,11 +54,16 @@ func acquireLock(ctx context.Context, path, command string) (*Lock, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read hostname for lock: %w", err)
 	}
+	token := make([]byte, 16)
+	if _, err := rand.Read(token); err != nil {
+		return nil, fmt.Errorf("create lock token: %w", err)
+	}
 	owner := LockOwner{
 		PID:        os.Getpid(),
 		Hostname:   hostname,
 		Command:    command,
 		AcquiredAt: time.Now().UTC(),
+		Token:      fmt.Sprintf("%x", token),
 	}
 
 	ticker := time.NewTicker(lockRetryInterval)
@@ -65,16 +74,16 @@ func acquireLock(ctx context.Context, path, command string) (*Lock, error) {
 		}
 		err := os.Mkdir(path, 0o755)
 		if err == nil {
-			data, marshalErr := json.MarshalIndent(owner, "", "  ")
-			if marshalErr == nil {
+			data, ownerErr := json.MarshalIndent(owner, "", "  ")
+			if ownerErr == nil {
 				data = append(data, '\n')
-				marshalErr = os.WriteFile(filepath.Join(path, "owner.json"), data, 0o644)
+				ownerErr = os.WriteFile(filepath.Join(path, "owner.json"), data, 0o644)
 			}
-			if marshalErr != nil {
-				_ = os.RemoveAll(path)
-				return nil, fmt.Errorf("write lock owner %q: %w", path, marshalErr)
+			if ownerErr != nil {
+				cleanupErr := cleanupIncompleteLock(path, owner.Token)
+				return nil, errors.Join(fmt.Errorf("write lock owner %q: %w", path, ownerErr), cleanupErr)
 			}
-			return &Lock{path: path, owner: owner}, nil
+			return &Lock{path: path, owner: owner, removeTombstone: os.RemoveAll}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, fmt.Errorf("acquire lock %q: %w", path, err)
@@ -86,6 +95,17 @@ func acquireLock(ctx context.Context, path, command string) (*Lock, error) {
 		case <-ticker.C:
 		}
 	}
+}
+
+func cleanupIncompleteLock(path, token string) error {
+	tombstone := path + ".failed-" + token
+	if err := os.Rename(path, tombstone); err != nil {
+		return fmt.Errorf("release incomplete lock %q: %w", path, err)
+	}
+	if err := os.RemoveAll(tombstone); err != nil {
+		return fmt.Errorf("clean incomplete lock %q: %w", tombstone, err)
+	}
+	return nil
 }
 
 func lockTimeoutError(path string, cause error) error {
@@ -118,6 +138,14 @@ func (l *Lock) Release() error {
 	if l.released {
 		return nil
 	}
+	if l.tombstone != "" {
+		if err := l.removeTombstone(l.tombstone); err != nil {
+			return fmt.Errorf("clean released lock %q: %w", l.tombstone, err)
+		}
+		l.tombstone = ""
+		l.released = true
+		return nil
+	}
 	owner, err := readLockOwner(l.path)
 	if err != nil {
 		return fmt.Errorf("verify lock ownership %q: %w", l.path, err)
@@ -125,20 +153,15 @@ func (l *Lock) Release() error {
 	if !reflect.DeepEqual(owner, l.owner) {
 		return fmt.Errorf("refuse to release lock %q owned by PID %d on %s for %q", l.path, owner.PID, owner.Hostname, owner.Command)
 	}
-	entries, err := os.ReadDir(l.path)
-	if err != nil {
-		return fmt.Errorf("inspect lock %q: %w", l.path, err)
-	}
-	if len(entries) != 1 || entries[0].Name() != "owner.json" || entries[0].IsDir() {
-		return fmt.Errorf("refuse to release lock %q with unexpected contents", l.path)
-	}
-	ownerPath := filepath.Join(l.path, "owner.json")
-	if err := os.Remove(ownerPath); err != nil {
-		return fmt.Errorf("remove lock owner %q: %w", ownerPath, err)
-	}
-	if err := os.Remove(l.path); err != nil {
+	tombstone := l.path + ".released-" + l.owner.Token
+	if err := os.Rename(l.path, tombstone); err != nil {
 		return fmt.Errorf("release lock %q: %w", l.path, err)
 	}
+	l.tombstone = tombstone
+	if err := l.removeTombstone(tombstone); err != nil {
+		return fmt.Errorf("clean released lock %q: %w", tombstone, err)
+	}
+	l.tombstone = ""
 	l.released = true
 	return nil
 }

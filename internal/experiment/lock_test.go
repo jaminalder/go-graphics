@@ -3,6 +3,7 @@ package experiment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,9 @@ func TestLockSameNameTimesOutWithOwnerDetails(t *testing.T) {
 	}
 	if owner.PID != os.Getpid() || owner.Hostname == "" || owner.Command != "first command" || owner.AcquiredAt.Location() != time.UTC {
 		t.Fatalf("owner = %#v", owner)
+	}
+	if owner.Token == "" {
+		t.Fatal("owner token is empty")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
@@ -117,6 +121,7 @@ func TestLockReleaseRefusesChangedOwnership(t *testing.T) {
 		Hostname:   "other-host",
 		Command:    "other command",
 		AcquiredAt: time.Now().UTC(),
+		Token:      "other-token",
 	}
 	data, err := json.Marshal(other)
 	if err != nil {
@@ -134,7 +139,7 @@ func TestLockReleaseRefusesChangedOwnership(t *testing.T) {
 	}
 }
 
-func TestLockReleaseDoesNotRecursivelyRemoveUnexpectedContents(t *testing.T) {
+func TestLockCleanupFailureDoesNotBlockReacquisition(t *testing.T) {
 	repo := newTestRepo(t)
 	manager, err := NewManager(repo.root)
 	if err != nil {
@@ -144,19 +149,36 @@ func TestLockReleaseDoesNotRecursivelyRemoveUnexpectedContents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(lock.path) })
-	unexpected := filepath.Join(lock.path, "unexpected")
-	if err := os.WriteFile(unexpected, []byte("preserve me"), 0o644); err != nil {
+	cleanupFailure := errors.New("cleanup failed")
+	var tombstone string
+	lock.removeTombstone = func(path string) error {
+		tombstone = path
+		return cleanupFailure
+	}
+	if err := lock.Release(); !errors.Is(err, cleanupFailure) {
+		t.Fatalf("Release error = %v, want cleanup failure", err)
+	}
+	if _, err := os.Stat(lock.path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("original lock remains after atomic release: %v", err)
+	}
+	owner, err := readLockOwner(tombstone)
+	if err != nil {
+		t.Fatalf("tombstone owner: %v", err)
+	}
+	if owner.Token != lock.owner.Token {
+		t.Fatalf("tombstone token = %q, want %q", owner.Token, lock.owner.Token)
+	}
+
+	reacquired, err := manager.AcquireGlobalLock(context.Background(), "retry")
+	if err != nil {
+		t.Fatalf("reacquire after tombstone cleanup failure: %v", err)
+	}
+	if err := reacquired.Release(); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := lock.Release(); err == nil {
-		t.Fatal("Release recursively removed unexpected lock contents")
-	}
-	if _, err := os.Stat(unexpected); err != nil {
-		t.Fatalf("unexpected lock content was removed: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(lock.path, "owner.json")); err != nil {
-		t.Fatalf("lock owner was removed during refused release: %v", err)
+	lock.removeTombstone = os.RemoveAll
+	if err := lock.Release(); err != nil {
+		t.Fatalf("retry tombstone cleanup: %v", err)
 	}
 }

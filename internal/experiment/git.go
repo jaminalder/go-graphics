@@ -3,7 +3,9 @@ package experiment
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -16,9 +18,11 @@ type gitRunner struct {
 func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = g.dir
-	if g.env != nil {
-		cmd.Env = g.env
+	env := g.env
+	if env == nil {
+		env = os.Environ()
 	}
+	cmd.Env = sanitizedGitEnvironment(env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -27,20 +31,44 @@ func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
 		if detail == "" {
 			detail = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), detail)
+		cause := err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			cause = errors.Join(ctxErr, err)
+		}
+		return "", fmt.Errorf("git %s: %s: %w", strings.Join(args, " "), detail, cause)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return stdout.String(), nil
 }
 
-func (g gitRunner) lines(ctx context.Context, args ...string) ([]string, error) {
-	output, err := g.run(ctx, args...)
-	if err != nil {
-		return nil, err
+func sanitizedGitEnvironment(env []string) []string {
+	return filterEnvironment(env, func(key string) bool {
+		switch key {
+		case "GIT_DIR",
+			"GIT_WORK_TREE",
+			"GIT_COMMON_DIR",
+			"GIT_INDEX_FILE",
+			"GIT_OBJECT_DIRECTORY",
+			"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+			"GIT_PREFIX",
+			"GIT_CONFIG_COUNT",
+			"GIT_CONFIG_PARAMETERS",
+			"GIT_TEMPLATE_DIR":
+			return true
+		default:
+			return strings.HasPrefix(key, "GIT_CONFIG_KEY_") || strings.HasPrefix(key, "GIT_CONFIG_VALUE_")
+		}
+	})
+}
+
+func filterEnvironment(env []string, blocked func(string) bool) []string {
+	filtered := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if !blocked(key) {
+			filtered = append(filtered, entry)
+		}
 	}
-	if output == "" {
-		return nil, nil
-	}
-	return strings.Split(output, "\n"), nil
+	return filtered
 }
 
 // WorktreeInfo describes one record from git worktree list --porcelain.
@@ -62,12 +90,12 @@ func parseWorktreeList(output string) ([]WorktreeInfo, error) {
 		}
 	}
 
-	for _, line := range strings.Split(output, "\n") {
-		if line == "" {
+	for _, field := range strings.Split(output, "\x00") {
+		if field == "" {
 			flush()
 			continue
 		}
-		key, value, _ := strings.Cut(line, " ")
+		key, value, _ := strings.Cut(field, " ")
 		if key == "worktree" {
 			flush()
 			if value == "" {
@@ -77,7 +105,7 @@ func parseWorktreeList(output string) ([]WorktreeInfo, error) {
 			continue
 		}
 		if current == nil {
-			return nil, fmt.Errorf("parse git worktree list: %q appears before a worktree", line)
+			return nil, fmt.Errorf("parse git worktree list: %q appears before a worktree", field)
 		}
 		switch key {
 		case "HEAD":
