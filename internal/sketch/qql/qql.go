@@ -90,13 +90,19 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.paint(ctx, p), nil
+}
+
+// paint interprets a completed composition through QQL's sequential medium.
+// The plan is unchanged by painting and can be rendered repeatedly.
+func (s *Sketch) paint(ctx sketch.Context, p plan) image.Image {
 	cv := paint.NewCanvas(ctx.Width, ctx.Height, p.scheme.Background)
 	var wash *dotWash
 	if p.traits.Is(dimMedium, mediumWash) {
 		wash = newDotWash(ctx.Seed^saltPaper, p.scheme.Background)
 	}
 	paintDots(cv, p.frame, p.traits, p.scheme, p.stack, p.dots, ctx.RNG(streamPaint), wash)
-	return cv.Image(), nil
+	return cv.Image()
 }
 
 func (s *Sketch) plan(ctx sketch.Context) (plan, error) {

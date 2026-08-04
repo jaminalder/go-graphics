@@ -1,6 +1,7 @@
 package qql
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"math"
@@ -47,6 +48,50 @@ func TestDeterminism(t *testing.T) {
 func TestGolden(t *testing.T) {
 	got := sketchtest.RenderNRGBA(t, configured(t), testCtx(t, 42))
 	sketchtest.Golden(t, got, "testdata/qql_seed42_64.png", *update)
+}
+
+func TestPlanIsResolutionIndependent(t *testing.T) {
+	s := configured(t)
+	small := testCtx(t, 42)
+	large := small
+	large.Width, large.Height = 640, 800
+
+	a, err := s.plan(small)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.plan(large)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.frame != b.frame || a.stack != b.stack || a.scheme.Background != b.scheme.Background {
+		t.Fatal("equal-aspect canvases resolved different plan-level values")
+	}
+	if schema.Format(a.traits) != schema.Format(b.traits) {
+		t.Fatalf("traits differ: %s vs %s", schema.Format(a.traits), schema.Format(b.traits))
+	}
+	if len(a.dots) != len(b.dots) {
+		t.Fatalf("planned %d dots at preview and %d at print", len(a.dots), len(b.dots))
+	}
+	for i := range a.dots {
+		if a.dots[i] != b.dots[i] {
+			t.Fatalf("dot %d differs between equal-aspect sizes", i)
+		}
+	}
+}
+
+func TestPaintingAPlanIsDeterministic(t *testing.T) {
+	s := configured(t)
+	ctx := testCtx(t, 42)
+	p, err := s.plan(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := s.paint(ctx, p)
+	b := s.paint(ctx, p)
+	if !bytes.Equal(sketchtest.ToNRGBA(a).Pix, sketchtest.ToNRGBA(b).Pix) {
+		t.Fatal("painting the same plan twice changed pixels")
+	}
 }
 
 func TestSchemaIsValid(t *testing.T) {
