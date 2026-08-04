@@ -58,6 +58,43 @@ func TestDeterminism(t *testing.T) {
 	sketchtest.AssertDeterministic(t, configured(t), testCtx(t, 42), testCtx(t, 43))
 }
 
+func TestPlannedSheetSamplesPurely(t *testing.T) {
+	s := configured(t, "--mosaic", "family", "--relief", "cushion")
+	sh := planned(t, s, 7)
+	cellsBefore := sh.foam.Len()
+	tilesBefore := sh.tiles.foam.Len()
+	for _, point := range [][2]float64{{0.1, 0.2}, {0.5, 0.5}, {0.9, 0.8}} {
+		a := s.sample(sh, 7, point[0], point[1])
+		b := s.sample(sh, 7, point[0], point[1])
+		if a != b {
+			t.Fatalf("sample at %v changed from %v to %v", point, a, b)
+		}
+	}
+	if sh.foam.Len() != cellsBefore || sh.tiles.foam.Len() != tilesBefore {
+		t.Fatal("sampling changed the planned partitions")
+	}
+}
+
+func TestPlannedSheetIgnoresPixelDimensions(t *testing.T) {
+	s := configured(t, "--mosaic", "family", "--relief", "cushion")
+	small := testCtx(t, 9)
+	large := small
+	large.Width, large.Height = 512, 512
+	a, err := s.plan(small)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.plan(large)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range [][2]float64{{0.1, 0.2}, {0.5, 0.5}, {0.9, 0.8}} {
+		if ca, cb := s.sample(a, 9, point[0], point[1]), s.sample(b, 9, point[0], point[1]); ca != cb {
+			t.Fatalf("sample at %v changed from %v to %v with pixel dimensions", point, ca, cb)
+		}
+	}
+}
+
 func TestGolden(t *testing.T) {
 	got := sketchtest.RenderNRGBA(t, configured(t), testCtx(t, 42))
 	sketchtest.Golden(t, got, "testdata/foam_seed42_96.png", *update)

@@ -222,21 +222,26 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		return nil, err
 	}
 	return sketch.Raster(ctx, func(u, v float64) palette.Color {
-		wu, wv := s.warp(sh.field, sh.level, u, v)
-		h := sh.foam.At(wu, wv)
-		c := s.fill(sh, sh.skin[h.Cell], h, sh.field, ctx.Seed, u, v, sh.paper)
-		// The mosaic replaces what the paint laid down wherever a cell was
-		// subdivided; the relief lights whatever came out. Both run *before*
-		// the ink, so the heavy outer line clips the fine net and is never
-		// itself lit.
-		c = s.tile(sh, h, u, v, wu, wv, c, ctx.Seed)
-		// After the mosaic, so the marks lie on whatever colour the cell
-		// ended up with, and before the ink, which stays on top of
-		// everything.
-		c = s.hatchOver(sh, h, c, u, v)
-		c = s.relief(sh, h, u, v, c, ctx.Seed)
-		return s.lay(c, h, sh.level, sh.field, ctx.Seed, sh.ink, u, v)
+		return s.sample(sh, ctx.Seed, u, v)
 	}), nil
+}
+
+// sample evaluates every appearance stage of a planned sheet at one canvas
+// coordinate. The order is the composition: fill, mosaic, hatching, relief,
+// then the outer ink above everything.
+func (s *Sketch) sample(sh *sheet, seed uint64, u, v float64) palette.Color {
+	wu, wv := s.warp(sh.field, sh.level, u, v)
+	h := sh.foam.At(wu, wv)
+	c := s.fill(sh, sh.skin[h.Cell], h, sh.field, seed, u, v, sh.paper)
+	// The mosaic replaces what the paint laid down wherever a cell was
+	// subdivided; the relief lights whatever came out. Both run before the
+	// ink, so the heavy outer line clips the fine net and is never itself lit.
+	c = s.tile(sh, h, u, v, wu, wv, c, seed)
+	// The marks lie on whatever colour the cell ended up with and under the
+	// ink, which stays on top of everything.
+	c = s.hatchOver(sh, h, c, u, v)
+	c = s.relief(sh, h, u, v, c, seed)
+	return s.lay(c, h, sh.level, sh.field, seed, sh.ink, u, v)
 }
 
 // warp bends the whole partition through a smooth displacement field before
