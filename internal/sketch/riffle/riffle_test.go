@@ -63,6 +63,59 @@ func TestGolden(t *testing.T) {
 	sketchtest.Golden(t, got, "testdata/riffle_seed42_96.png", *update)
 }
 
+func TestOverlayIsAnAllWaterAlphaLayer(t *testing.T) {
+	s := configured(t,
+		"--medium", "overlay",
+		"--ground", "transparent",
+		"--boulders", "field",
+	)
+	p := built(t, s, 42)
+	if len(p.rocks) != 0 {
+		t.Fatalf("overlay retained %d physical rocks", len(p.rocks))
+	}
+	if len(p.dots) == 0 {
+		t.Fatal("overlay lost the washed-dot placements")
+	}
+	for j := range 40 {
+		for i := range 40 {
+			u := (float64(i) + 0.5) / 40 * p.aspect
+			v := (float64(j) + 0.5) / 40
+			if depth := p.read(u, v).depth; depth <= 0 {
+				t.Fatalf("overlay exposed a bank at (%v,%v), depth %v", u, v, depth)
+			}
+		}
+	}
+
+	img := sketchtest.RenderNRGBA(t, s, testCtx(t, 42))
+	lo, hi := uint8(255), uint8(0)
+	for y := range img.Bounds().Dy() {
+		for x := range img.Bounds().Dx() {
+			px := img.NRGBAAt(x, y)
+			lo = min(lo, px.A)
+			hi = max(hi, px.A)
+		}
+	}
+	if lo == 0 || hi == 255 || lo == hi {
+		t.Fatalf("overlay alpha range = %d..%d, want varied intermediate alpha", lo, hi)
+	}
+	center := img.NRGBAAt(img.Bounds().Dx()/2, img.Bounds().Dy()/2)
+	if center.B <= center.R {
+		t.Fatalf("overlay center = %#v, want a blue-dominant layer", center)
+	}
+}
+
+func TestOverlayGrayGroundIsOpaque(t *testing.T) {
+	s := configured(t, "--medium", "overlay", "--ground", "gray-mid")
+	img := sketchtest.RenderNRGBA(t, s, testCtx(t, 42))
+	for y := range img.Bounds().Dy() {
+		for x := range img.Bounds().Dx() {
+			if a := img.NRGBAAt(x, y).A; a != 255 {
+				t.Fatalf("gray preview alpha at (%d,%d) = %d, want 255", x, y, a)
+			}
+		}
+	}
+}
+
 // TestSchemaIsValid pins the shape of the output space. If it fails, either a
 // dimension has lost its weights (and seeds stop reaching part of the space)
 // or two dimensions have collided on a filename key.

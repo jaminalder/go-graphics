@@ -182,3 +182,31 @@ func TestProfileByName(t *testing.T) {
 		t.Error("expected error for unknown profile")
 	}
 }
+
+func TestRasterLayerSSAveragesPremultipliedLinearLight(t *testing.T) {
+	img := RasterLayerSS(1, 1, 2, func(u, _ float64) LayerPixel {
+		if u < 0.5 {
+			return LayerPixel{Color: palette.Color{R: 1}, Alpha: 1}
+		}
+		return LayerPixel{Color: palette.Color{B: 1}, Alpha: 0}
+	})
+	px := img.NRGBAAt(0, 0)
+	if px.A != 128 {
+		t.Fatalf("alpha = %d, want 128", px.A)
+	}
+	// A transparent blue sample contributes no premultiplied color. Averaging
+	// straight RGB would leave a purple fringe here instead of red.
+	if px.R < 250 || px.G > 4 || px.B > 4 {
+		t.Fatalf("color = %#v, want unassociated red", px)
+	}
+}
+
+func TestRasterLayerDeepPreservesAlpha(t *testing.T) {
+	img := RasterLayerDeep(1, 1, 1, func(_, _ float64) LayerPixel {
+		return LayerPixel{Color: palette.Color{R: 0.2, G: 0.6, B: 0.9}, Alpha: 0.25}
+	})
+	_, _, _, a := img.NRGBA64At(0, 0).RGBA()
+	if a < 16380 || a > 16390 {
+		t.Fatalf("alpha = %d, want about 16384", a)
+	}
+}

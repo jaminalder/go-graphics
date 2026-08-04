@@ -25,6 +25,36 @@ function: every pixel asks where its water came from and looks upstream. That
 is line integral convolution, and it is the single most legible "this is
 moving water" cue there is.
 
+## Overlay medium
+
+`--medium overlay` keeps only that moving surface as a reusable translucent
+layer. It is intentionally not the full river with its banks recoloured:
+
+- the channel is widened beyond the frame, so every sample is water and no
+  shoreline or damp band can appear;
+- the bed, gravel, caustics, foam and exposed-rock rendering are omitted;
+- current streaks and fine ripple facets are redrawn in a washed light blue
+  derived from the coolest swatch of the CLI palette;
+- boulder placements may remain as soft pale dots, but their domes, wakes,
+  eddies and dry silhouettes are removed from the flow.
+
+The default overlay ground is `transparent`, producing a straight-alpha PNG.
+`gray-light`, `gray-mid` and `gray-dark` are opaque preview grounds for
+judging the same layer over neutral values. Supersamples are accumulated as
+premultiplied linear light before being stored straight-alpha, so the PNG does
+not acquire dark fringes when another image composites it later.
+
+```sh
+staticart render riffle --medium overlay --ground transparent \
+  --overlay-alpha 0.28 --overlay-ripples 0.8 \
+  --overlay-shadows 0.35 --overlay-dots 0.18 --format png
+
+staticart sweep riffle --medium overlay --seed 42 \
+  --vary ground=gray-light,gray-mid,gray-dark \
+  --vary overlay-ripples=0.35,1.25 \
+  --vary overlay-shadows=0,0.9
+```
+
 ## The reference
 
 A trout stream in summer, photographed from a bridge. Three or four metres
@@ -340,6 +370,10 @@ is the seed's, not the table's, which is what `opt.Set.WasSet` is for.
 
 | flag | what it does |
 | --- | --- |
+| `--medium overlay` | render the all-over translucent water layer instead of the complete river |
+| `--ground transparent\|gray-light\|gray-mid\|gray-dark` | choose alpha output or an opaque neutral preview ground |
+| `--overlay-alpha` | overall water-layer opacity |
+| `--overlay-ripples`, `--overlay-shadows`, `--overlay-dots` | independently scale directional surface detail, broad shade and washed boulder deposits |
 | `--depth`, `--riffle`, `--riffle-wave`, `--dune` | the bed, overriding what `reach` drew |
 | `--speed`, `--turbulence`, `--chop` | the current, its noise, and the surface wave height |
 | `--rocks`, `--rock-size` | the boulder pack, overriding `boulders` |
@@ -380,3 +414,6 @@ of them may be named `profile`, `width`, `height`, `seed`, `aa`, `deep`,
       line anywhere.
 - [ ] Preview and print of one seed are the same picture — the same streak
       lengths, the same pebbles, the same caustic cells.
+- [ ] In `overlay` medium every sample is water: there are no banks, dry
+      shapes, caustics, foam lines or physical rocks, and transparent output
+      retains intermediate alpha rather than flattening onto a colour.

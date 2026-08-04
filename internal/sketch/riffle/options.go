@@ -2,6 +2,7 @@ package riffle
 
 import (
 	"flag"
+	"fmt"
 
 	"github.com/jaminalder/go-graphics/internal/opt"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -22,6 +23,14 @@ var (
 // --out — because a sketch's options share that FlagSet.
 func (s *Sketch) declare() {
 	o := opt.New()
+
+	o.Choice("medium", "rendering medium", "md", []string{"river", "overlay"}, &s.medium, nil)
+	o.Choice("ground", "overlay preview ground", "g",
+		[]string{"transparent", "gray-light", "gray-mid", "gray-dark"}, &s.ground, nil)
+	o.Float("overlay-alpha", "overall opacity of the water layer", "oa", 0.02, 1, &s.overlayAlpha)
+	o.Float("overlay-ripples", "strength of current streaks and wave facets", "or", 0, 2, &s.overlayRipples)
+	o.Float("overlay-shadows", "strength of broad shadow patches", "os", 0, 2, &s.overlayShadows)
+	o.Float("overlay-dots", "strength of washed-out boulder dots", "od", 0, 1, &s.overlayDots)
 
 	o.Float("depth", "water on the thalweg in a pool, in extinction units", "dp", 0.1, 4, &s.pin.depth)
 	o.Float("riffle", "amplitude of the pool-riffle sequence", "rf", 0, 0.9, &s.pin.riffle)
@@ -127,7 +136,18 @@ func (s *Sketch) Configure() (string, error) {
 	if err := s.traits.Configure(); err != nil {
 		return "", err
 	}
-	return s.knobs.Configure()
+	suffix, err := s.knobs.Configure()
+	if err != nil {
+		return "", err
+	}
+	if s.medium != "overlay" {
+		for _, name := range []string{"ground", "overlay-alpha", "overlay-ripples", "overlay-shadows", "overlay-dots"} {
+			if s.knobs.WasSet(name) {
+				return "", fmt.Errorf("--%s requires --medium overlay", name)
+			}
+		}
+	}
+	return suffix, nil
 }
 
 // TraitSuffix implements sketch.Traited.

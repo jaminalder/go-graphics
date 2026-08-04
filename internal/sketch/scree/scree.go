@@ -174,6 +174,42 @@ type sheet struct {
 	ink    inks
 }
 
+// Bed is one planned scree sheet exposed as a pure point sampler. It lets a
+// material sketch refract or shade the generated stones before rasterisation
+// without rendering a second image and compositing it afterwards.
+type Bed struct {
+	sketch *Sketch
+	sheet  *sheet
+	seed   uint64
+}
+
+// NewBed plans the same bed Render uses.
+func (s *Sketch) NewBed(ctx sketch.Context) (*Bed, error) {
+	sh, err := s.plan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Bed{sketch: s, sheet: sh, seed: ctx.Seed}, nil
+}
+
+// At evaluates the complete painted, faceted and lit bed at one normalized
+// coordinate. Calls are pure and safe for the parallel raster loop.
+func (b *Bed) At(u, v float64) palette.Color {
+	s, sh := b.sketch, b.sheet
+	wu, wv := s.warp(sh.field, sh.level, u, v)
+	h := sh.stones.At(wu, wv)
+	col := s.paint(sh, h, u, v)
+	col = s.illuminate(sh, h, wu, wv, col)
+	if s.Gold && sh.skin[h.Cell].nugget {
+		col = gild(col)
+	}
+	col = s.lay(sh, col, h, u, v, b.seed)
+	if s.Gold && !sh.skin[h.Cell].nugget {
+		col = muteYellow(col)
+	}
+	return col
+}
+
 // plan builds the sheet for one context.
 func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 	aspect := float64(ctx.Width) / float64(ctx.Height)
@@ -225,29 +261,11 @@ func (s *Sketch) plan(ctx sketch.Context) (*sheet, error) {
 // up in the warped bed, paint its stone, light it, then lay the joint over
 // the top.
 func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
-	sh, err := s.plan(ctx)
+	bed, err := s.NewBed(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return sketch.Raster(ctx, func(u, v float64) palette.Color {
-		wu, wv := s.warp(sh.field, sh.level, u, v)
-		h := sh.stones.At(wu, wv)
-		// Paint first, light second. The light multiplies the painted colour
-		// rather than being mixed into it, so a dark pigment stays dark and
-		// the scheme's value structure survives being lit.
-		col := s.paint(sh, h, u, v)
-		col = s.illuminate(sh, h, wu, wv, col)
-		if s.Gold && sh.skin[h.Cell].nugget {
-			col = gild(col)
-		}
-		// The joint goes on top of everything and is never itself lit: it is
-		// the water between the stones, not part of any stone's surface.
-		col = s.lay(sh, col, h, u, v, ctx.Seed)
-		if s.Gold && !sh.skin[h.Cell].nugget {
-			col = muteYellow(col)
-		}
-		return col
-	}), nil
+	return sketch.Raster(ctx, bed.At), nil
 }
 
 // paint lays the stone's own wash over the paper — an even body of pigment

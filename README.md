@@ -10,12 +10,11 @@ vector work will use [tdewolff/canvas](https://github.com/tdewolff/canvas).
 Color palettes are grounded in artist palettes from
 [ColorLisa](https://colorlisa.com/).
 
-**Status:** four sketches — `contour` (shuffled-gradient noise, a port of
-staticart's sketch_7), `tapestry` (terraced contour terrain with relief
-shading and per-terrace effects), `circles` (packed circles with patterned
-fills), and `drift` (hand-painted dots along a flow field, built on the
-stamp-based `paint` brush package). All 133 ColorLisa palettes are built
-in (`staticart palettes`; `staticart list` shows the sketches).
+**Status:** twelve artwork sketches, from contour fields and packed forms to
+watercolour, faceted river stones, flowing water, and `shallows`, which
+combines its generated stone bed and rippled surface in one material render.
+All 133 ColorLisa palettes are built in (`staticart palettes`; `staticart
+list` shows the complete set).
 
 ## Quick start
 

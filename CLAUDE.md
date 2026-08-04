@@ -25,7 +25,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree, riffle,
+scree, riffle, shallows,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -50,8 +50,14 @@ mosaic wants and this does not).
 `riffle` is a river seen from directly above — one pure per-pixel function
 over a depth field, a velocity field and an upstream walk. `--reach` is the
 energy of the stretch, `--channel` its plan form, `--water` its turbidity;
-see `docs/sketches/011-riffle.md`, and the "What did not read as water"
-section there before changing any of its textures.
+`--medium overlay` reduces it to a translucent all-over water layer with no
+bed or banks. See `docs/sketches/011-riffle.md`, and the "What did not read
+as water" section there before changing any of its textures.
+
+`shallows` combines 010's planned faceted stone bed with 011's point-sampled
+surface in one raster function. Ripple shadows, highlights and refraction act
+on the bed before the final pixel is written; it is not a composite of two
+rendered images. See `docs/sketches/012-shallows.md`.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so

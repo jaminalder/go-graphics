@@ -55,6 +55,15 @@ func Raster(ctx Context, f render.PixelFunc) image.Image {
 	return render.RasterSS(ctx.Width, ctx.Height, ctx.Samples(), f)
 }
 
+// RasterLayer renders a straight-alpha layer with the Context's quality
+// settings. Supersampling is alpha-aware, so translucent edges do not darken.
+func RasterLayer(ctx Context, f render.LayerFunc) image.Image {
+	if ctx.Deep {
+		return render.RasterLayerDeep(ctx.Width, ctx.Height, ctx.Samples(), f)
+	}
+	return render.RasterLayerSS(ctx.Width, ctx.Height, ctx.Samples(), f)
+}
+
 // Sketch is one artwork algorithm: a deterministic function of
 // (parameters, Context) to an image.
 type Sketch interface {

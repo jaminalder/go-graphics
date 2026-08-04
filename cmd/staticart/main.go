@@ -27,6 +27,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/riffle"
 	"github.com/jaminalder/go-graphics/internal/sketch/rounds"
 	"github.com/jaminalder/go-graphics/internal/sketch/scree"
+	"github.com/jaminalder/go-graphics/internal/sketch/shallows"
 	"github.com/jaminalder/go-graphics/internal/sketch/shoal"
 	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
 )
@@ -43,6 +44,7 @@ func registry() *sketch.Registry {
 		riffle.New(),
 		rounds.New(),
 		scree.New(),
+		shallows.New(),
 		shoal.New(),
 		tapestry.New(),
 	)

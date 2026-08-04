@@ -59,6 +59,10 @@ const (
 type Sketch struct {
 	pin settings
 
+	medium, ground                               string
+	overlayAlpha, overlayRipples, overlayShadows float64
+	overlayDots                                  float64
+
 	traits *trait.Options
 	knobs  *opt.Set
 }
@@ -66,8 +70,14 @@ type Sketch struct {
 // New returns the sketch with its defaults.
 func New() *Sketch {
 	s := &Sketch{
-		pin:    defaults(),
-		traits: trait.NewOptions(schema),
+		pin:            defaults(),
+		medium:         "river",
+		ground:         "transparent",
+		overlayAlpha:   0.28,
+		overlayRipples: 0.80,
+		overlayShadows: 0.35,
+		overlayDots:    0.22,
+		traits:         trait.NewOptions(schema),
 	}
 	s.declare()
 	return s
@@ -118,6 +128,9 @@ type plan struct {
 	foamLo, foamHi, foamOn, foamFull      float64
 	halfX, halfY, halfZ, sunPower         float64
 	lightX, lightY                        float64
+
+	overlay overlayPlan
+	dots    []rock
 }
 
 // Render implements sketch.Sketch.
@@ -125,6 +138,12 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	p, err := s.build(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if s.medium == "overlay" {
+		if s.ground == "transparent" {
+			return sketch.RasterLayer(ctx, p.overlayPixel), nil
+		}
+		return sketch.Raster(ctx, p.overlayOnGround), nil
 	}
 	return sketch.Raster(ctx, p.pixel), nil
 }
@@ -138,7 +157,33 @@ func (s *Sketch) build(ctx sketch.Context) (*plan, error) {
 	}
 
 	set := s.settingsFor(tr, ctx.RNG(streamReach))
+	if s.medium == "overlay" {
+		// An overlay is an all-over material, not a mapped river. Widening the
+		// channel keeps the velocity/depth vocabulary while moving both banks
+		// well beyond the frame. Bars and ledges are shoreline geometry too.
+		set.channelWidth = 2.4
+		set.taper = 0
+		set.bars = 0
+		set.ledge = false
+		set.caustic = 0
+	}
 
+	p := newPlan(ctx, set)
+	if s.medium == "overlay" {
+		// Keep the placements as optional washed dots, but remove their domes,
+		// wakes and eddies from the flow. The layer stays only water.
+		p.dots = append(p.dots, p.rocks...)
+		p.rocks = nil
+		p.overlay = newOverlayPlan(s, ctx.Palette)
+	}
+	p.ink = mixInks(pal, set)
+	return p, nil
+}
+
+// newPlan lays out one resolved river. Keeping this below trait resolution
+// lets other material sketches sample the same flow field directly without
+// rendering a standalone riffle image first.
+func newPlan(ctx sketch.Context, set settings) *plan {
 	p := &plan{
 		aspect: float64(ctx.Width) / float64(ctx.Height),
 		set:    set,
@@ -192,8 +237,7 @@ func (s *Sketch) build(ctx sketch.Context) (*plan, error) {
 	p.halfX, p.halfY, p.halfZ = hx*hn, hy*hn, hz*hn
 	p.sunPower = mathx.Rescale(set.sunHeight, 10, 80, 0.55, 1.0)
 
-	p.ink = mixInks(pal, set)
-	return p, nil
+	return p
 }
 
 // warmth is R−B: positive for the ochres and browns a river bed is made of,

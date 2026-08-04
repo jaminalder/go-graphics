@@ -20,6 +20,16 @@ import (
 // it is called concurrently from multiple goroutines.
 type PixelFunc func(u, v float64) palette.Color
 
+// LayerPixel is one straight-alpha sample. Color is stored unassociated from
+// Alpha so the returned NRGBA can be composited without dark fringes.
+type LayerPixel struct {
+	Color palette.Color
+	Alpha float64
+}
+
+// LayerFunc computes a translucent color at normalized coordinates.
+type LayerFunc func(u, v float64) LayerPixel
+
 // Raster renders f over a w×h canvas, sampling pixel centers:
 // u = (x+0.5)/h, v = (y+0.5)/h — dividing both by height keeps the scale
 // uniform, so v spans [0,1] and u spans [0, w/h]. Rows are rendered in
@@ -67,6 +77,39 @@ func RasterDeep(w, h, samples int, f PixelFunc) *image.NRGBA64 {
 	return img
 }
 
+// RasterLayerSS renders a translucent layer. Supersamples are accumulated as
+// premultiplied linear light, then converted back to straight alpha for NRGBA.
+func RasterLayerSS(w, h, samples int, f LayerFunc) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	rasterLayerLoop(w, h, samples, f, func(x, y int, c palette.Color, alpha float64) {
+		d := ign(x, y)
+		i := img.PixOffset(x, y)
+		img.Pix[i] = quant8(c.R, d)
+		img.Pix[i+1] = quant8(c.G, d)
+		img.Pix[i+2] = quant8(c.B, d)
+		img.Pix[i+3] = uint8(math.Round(math.Min(1, math.Max(0, alpha)) * 255))
+	})
+	return img
+}
+
+// RasterLayerDeep is RasterLayerSS with 16-bit color and alpha.
+func RasterLayerDeep(w, h, samples int, f LayerFunc) *image.NRGBA64 {
+	img := image.NewNRGBA64(image.Rect(0, 0, w, h))
+	rasterLayerLoop(w, h, samples, f, func(x, y int, c palette.Color, alpha float64) {
+		i := img.PixOffset(x, y)
+		putU16 := func(off int, v float64) {
+			q := uint16(math.Round(math.Min(1, math.Max(0, v)) * 65535))
+			img.Pix[off] = uint8(q >> 8)
+			img.Pix[off+1] = uint8(q)
+		}
+		putU16(i, c.R)
+		putU16(i+2, c.G)
+		putU16(i+4, c.B)
+		putU16(i+6, alpha)
+	})
+	return img
+}
+
 // rasterLoop runs the parallel sampling loop and hands each pixel's final
 // (still-float) color to put. With samples > 1 the subsample average is
 // computed in linear light.
@@ -110,6 +153,62 @@ func rasterLoop(w, h, samples int, f PixelFunc, put func(x, y int, c palette.Col
 						G: palette.LinearToSRGB(lg * norm),
 						B: palette.LinearToSRGB(lb * norm),
 					})
+				}
+			}
+		}(start, end)
+	}
+	wg.Wait()
+}
+
+func rasterLayerLoop(w, h, samples int, f LayerFunc, put func(x, y int, c palette.Color, alpha float64)) {
+	if samples < 1 {
+		samples = 1
+	}
+	scale := 1 / float64(h)
+	sub := 1 / float64(samples)
+	norm := 1 / float64(samples*samples)
+
+	var wg sync.WaitGroup
+	workers := runtime.GOMAXPROCS(0)
+	rowsPer := (h + workers - 1) / workers
+	for start := 0; start < h; start += rowsPer {
+		end := min(start+rowsPer, h)
+		wg.Add(1)
+		go func(y0, y1 int) {
+			defer wg.Done()
+			for y := y0; y < y1; y++ {
+				for x := 0; x < w; x++ {
+					if samples == 1 {
+						u := (float64(x) + 0.5) * scale
+						v := (float64(y) + 0.5) * scale
+						px := f(u, v)
+						put(x, y, px.Color, px.Alpha)
+						continue
+					}
+					var lr, lg, lb, alpha float64
+					for sj := 0; sj < samples; sj++ {
+						v := (float64(y) + (float64(sj)+0.5)*sub) * scale
+						for si := 0; si < samples; si++ {
+							u := (float64(x) + (float64(si)+0.5)*sub) * scale
+							px := f(u, v)
+							a := math.Min(1, math.Max(0, px.Alpha))
+							lr += palette.SRGBToLinear(px.Color.R) * a
+							lg += palette.SRGBToLinear(px.Color.G) * a
+							lb += palette.SRGBToLinear(px.Color.B) * a
+							alpha += a
+						}
+					}
+					alpha *= norm
+					if alpha <= 0 {
+						put(x, y, palette.Color{}, 0)
+						continue
+					}
+					inv := norm / alpha
+					put(x, y, palette.Color{
+						R: palette.LinearToSRGB(lr * inv),
+						G: palette.LinearToSRGB(lg * inv),
+						B: palette.LinearToSRGB(lb * inv),
+					}, alpha)
 				}
 			}
 		}(start, end)
