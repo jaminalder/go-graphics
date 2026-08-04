@@ -46,12 +46,18 @@ func newTestRepoWithEnv(t *testing.T, baseEnv []string) testRepo {
 	repo.git(t, "config", "--local", "user.email", "experiment@example.invalid")
 
 	files := map[string]string{
-		".gitignore":                      "/out/experiments/\n",
-		"README.md":                       "test repository\n",
-		"experiments/templates/brief.md":  "# Brief\n",
-		"experiments/templates/result.md": "# Result\n",
-		"experiments/active/.gitkeep":     "",
-		"experiments/archive/.gitkeep":    "",
+		".gitignore": "/out/experiments/\n",
+		"README.md":  "test repository\n",
+		"experiments/templates/brief.md": "# Experiment {{.ID}}\n\n" +
+			"- Fixed seeds: `{{.Seeds}}`\n" +
+			"- Source experiments: {{.SourceExperiments}}\n" +
+			"- Output path: `{{.OutputPath}}`\n\n" +
+			"```sh\n{{.BaselineCommand}}\n{{.CandidateCommand}}\n```\n",
+		"experiments/templates/result.md": "# Experiment result: {{.ID}}\n\n" +
+			"- Fixed seeds: `{{.Seeds}}`\n" +
+			"- Output path: `{{.OutputPath}}`\n",
+		"experiments/active/.gitkeep":  "",
+		"experiments/archive/.gitkeep": "",
 	}
 	for name, contents := range files {
 		path := filepath.Join(root, name)

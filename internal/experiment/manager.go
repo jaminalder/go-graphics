@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Manager holds canonical paths shared by experiment lifecycle operations.
@@ -13,6 +14,8 @@ type Manager struct {
 	CurrentRoot     string
 	CommonDir       string
 	TemplatesRoot   string
+	gitEnv          []string
+	now             func() time.Time
 }
 
 // NewManager discovers repository paths without changing the process working directory.
@@ -70,6 +73,7 @@ func NewManager(cwd string) (*Manager, error) {
 		CurrentRoot:     current,
 		CommonDir:       common,
 		TemplatesRoot:   filepath.Join(coordinator, "experiments", "templates"),
+		now:             time.Now,
 	}, nil
 }
 
