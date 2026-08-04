@@ -37,12 +37,16 @@ The first sketch reproduces
 | `Gradient` | A function `t ∈ [0,1] → Color`. Implementations: cosine (Iñigo Quílez form), discrete sampled, shuffled-discrete, multi-band. | `internal/gradient` |
 | Noise / field | Deterministic scalar fields `f(x, y) → float64`, e.g. Perlin + fBm octaves. Seedable, no global state. | `internal/noise` |
 | `Sketch` | One artwork algorithm: deterministic function of (params, seed, size) → `image.Image`. | `internal/sketch`, one subpackage per sketch |
+| Resolved values | The concrete numbers one seed's traits, ranges and explicit overrides become before geometry is built. Usually a private `levels`, `settings` or spec value. | sketch package |
+| Plan / model | Optional seed-dependent data built once and reused while sampling or painting: a mark set, partition, stone bed, channel or field bundle. Plans are concrete and normally private, not one shared interface. | sketch package, or a precise domain component with a real second consumer |
+| Sample / evaluation | A pure coordinate query over an immutable model. The hot path has no RNG draws, option resolution, geometry construction or ordinary allocations. | sketch or domain component |
 | `Swatch` | A colour with room to move: an HSB base plus a per-channel spread and a clamp box it may never leave. Drawing from one repeatedly gives a family; stepping from the previous draw walks that family. | `internal/palette` |
 | Hatch | A region filled with repeated marks: a coverage function of a point *and* the region containing it. The arranging rule (parallel, contour, radial, flow, …) is a parameter, not a type; colour is the caller's. | `internal/hatch` |
 | Partition / foam | The canvas divided into curved-walled cells, each addressable: which cell a point is in, its distance to the nearest wall, how crowded it is with further cells. Per cell: area, centroid, inscribed radius. A distance *field* (Worley) cannot be filled; a partition can. | `internal/cells` |
 | Colour scheme | An arrangement of colour over many discrete regions: which region gets which colour, and how dark. Fifteen strategies, each answering hue *and* value. | `internal/scheme` |
 | Trait / output space | A sketch's space of outcomes as orthogonal, weighted, discrete dimensions derived from the seed and overridable per render. The idea behind QQL; the machinery is sketch-agnostic. | `internal/trait` |
 | Render | Pixel-loop execution (parallel), size profiles, PNG/JPEG encoding. | `internal/render` |
+| Paint | Order-dependent mutation of a float canvas by dabs, bristles, analytic rings and washes. A separate execution model from point sampling. | `internal/paint` |
 
 ## 3. Package layout & dependency rules
 
@@ -85,10 +89,10 @@ tools/                    code generators (palette data)
 out/                      rendered images (gitignored)
 ```
 
-Dependency direction (arrows = "may import"):
+Typical dependency direction (arrows = "may import"):
 
 ```
-cmd → sketch (registry) → {gradient, noise, render, trait} → palette → mathx → stdlib
+cmd → sketch wrappers/compositions → domain mechanisms → palette/mathx → stdlib
 ```
 
 Rules:
@@ -100,6 +104,11 @@ Rules:
   only through the registry. Sketch-specific CLI options are owned by the
   sketch via the `Configurable` interface — `cmd` stays sketch-agnostic.
 - Nothing imports `cmd`. No package keeps global mutable state.
+- A sketch may import another sketch when it genuinely composes that complete
+  artwork or its documented pre-raster model. If the dependency exists only
+  because a reusable mechanism is trapped behind the artwork wrapper, extract
+  the narrow domain component instead. Do not ban or introduce sketch imports
+  mechanically.
 - New third-party dependencies require a documented decision (§8). Current
   count: **zero**.
 
@@ -162,32 +171,87 @@ These are load-bearing; breaking them is a bug even if output "looks fine".
    source. Derived palettes (desaturated etc.) are computed from the originals
    at use-time, not stored as mutated copies.
 
-## 5. Rendering pipeline
+## 5. Artwork lifecycle
 
+`Sketch.Render(ctx)` is the stable outer boundary. Behind it, an artwork uses
+only the stages that make its algorithm clearer. There is no shared `Plan`,
+`Scene`, `Stage`, scalar-field or color-sampler interface.
+
+### Simple point sampler
+
+`contour` is the minimal example:
+
+```text
+definition fields + Context
+  -> plan: validate palette, build shuffled gradients and Perlin field once
+  -> plan.At(u, v): field value -> gradient colour
+  -> sketch.Raster(ctx, plan.At)
 ```
-Sketch.Render(ctx)
-  └─ builds its plan/scene from ctx.Palette + ctx.RNG (seed)
-  └─ sketch.Raster(ctx, func(u, v float64) palette.Color)
-       └─ render.RasterSS / RasterDeep: parallel rows, ctx.AA supersamples
-          per pixel averaged in linear light, dithered 8-bit (or 16-bit
-          with ctx.Deep)
-  └─ optional sketch.RasterLayer(ctx, func(u, v) render.LayerPixel)
-       └─ premultiplied linear-light AA, stored as straight-alpha
-          NRGBA / NRGBA64 for reusable PNG layers
-cmd/staticart
-  └─ render.WritePNGMeta / WriteJPEGMeta: sRGB tag, 300 DPI, full render
-     recipe + code revision embedded (render.Meta)
-  └─ filename: <sketch><option-suffix>_<palette>_<seed>_<WxH>.<ext>
+
+The private plan is useful because its `At` operation is independently
+testable. A still simpler sketch may keep those immutable values local to
+`Render`; a plan is not mandatory.
+
+### Structural point sampler
+
+`foam` and `scree` resolve ranges, build measured partitions and assign
+appearance before sampling:
+
+```text
+traits + explicit overrides
+  -> concrete levels
+  -> sites / partitions / facets / per-region material
+  -> immutable planned sheet or bed
+  -> pure sample: fill -> subdivision -> hatch/light -> joint
+  -> sketch.Raster
 ```
 
-Per-pixel work must be pure (no shared mutable state) so the row-parallel loop
-is race-free by construction.
+Expensive packing, measurement, scheme resolution and per-facet light belong
+before the pixel loop. Coordinate-dependent material behavior remains in the
+sample when that is the mechanism, not avoidable setup.
 
-**Second rendering model:** `paint.Canvas` (used by stroke-based sketches
-like drift) is stamp-based and sequential — soft dabs blended source-over,
-anti-aliasing from the dab edges (Context.AA unused), same dithered
-quantization on output. Compositions stay resolution-independent; stroke
-texture varies subtly with resolution, which is part of the medium.
+### Planned sequential painter
+
+`qql`, `pools`, `drift` and `shoal` use the other execution model:
+
+```text
+resolved values -> planned marks -> paint.Canvas in explicit order -> Image
+```
+
+Painting is sequential and order-dependent. It may consume a dedicated paint
+RNG stream. Soft dab edges provide anti-aliasing, so `Context.AA` is unused.
+Composition remains in canvas units; exact stroke texture may vary subtly with
+resolution as a property of the medium.
+
+### Composed material
+
+`shallows` plans a `scree.Bed` and a `riffle.Surface`, then combines their
+typed samples before rasterization:
+
+```text
+planned faceted bed + planned all-water surface
+  -> refracted bed lookup
+  -> water tint, ripple shadow and focused light applied to bed material
+  -> sketch.Raster
+```
+
+There is no intermediate image. `riffle.SurfaceSample` keeps water-specific
+direction, slope, ripple and dapple rather than reducing the component to a
+weak generic vector field. `scree.Bed.At` exposes the complete generated bed
+because that exact model has a real second consumer.
+
+### Output rendering
+
+All paths return `image.Image` to the command. `sketch.Raster` and
+`RasterLayer` delegate normalized coordinates, parallel rows, supersampling,
+linear-light averaging and quantization to `internal/render`.
+`paint.Canvas.Image` shares final dithered quantization through
+`render.ImageFromColors`. The CLI alone chooses filenames and calls
+`WritePNGMeta` or `WriteJPEGMeta` with DPI, recipe, traits and code revision.
+
+Per-coordinate samplers must be pure so row-parallel rasterization is
+race-free by construction. Their normal path should allocate nothing and must
+not resolve options, consume mutable RNGs or rebuild geometry.
 
 ### Size profiles
 
@@ -240,17 +304,46 @@ type Traited interface {
 }
 ```
 
-- Sketch-specific tunables are fields on the sketch struct with defaults in a
-  `New()` constructor — not a generic params map. Add CLI flags per sketch
-  only when actually needed for exploration.
+- Sketch-specific tunables may remain fields on the sketch struct with
+  defaults in `New()` when the sketch is the only consumer. Use an explicit
+  concrete configuration value when another artwork constructs the component,
+  tests otherwise need to simulate CLI parsing, or a planned value would
+  retain mutable CLI state. Never use a generic params map, and do not convert
+  every sketch for uniformity.
 - Sketches whose interesting choices are *discrete and orthogonal* should
   declare a `trait.Schema` instead of hand-rolling flags: it gives seed
   derivation, per-dimension overrides, filename and metadata plumbing, and
   the `traits` command for free. `qql` is the first user; see
   [sketches/007-qql.md](sketches/007-qql.md).
-- Each sketch subpackage registers itself via `sketch.Register(New())` from
-  the registry wiring in `cmd` (explicit imports, no `init()` magic beyond a
-  single registration call).
+- `cmd/staticart` constructs the registry explicitly from each sketch's
+  `New()` value. There is no `init()` registration or global mutable sketch;
+  each command/render lookup gets fresh CLI adapter instances.
+
+### What belongs in a shared package
+
+Keep code in the sketch package when it chooses aesthetic ranges,
+probabilities, ordering, palette interpretation, composition or deliberate
+exceptions. Extract a mechanism only when it has a coherent domain name and
+responsibility, is independently testable, and has at least two real consumers
+or an existing composition crossing artwork boundaries.
+
+Plans remain private by default. Promotion does not require making a component
+generic: a planned faceted stone bed or an all-water surface is a valid domain
+component. Do not create `utils`, `helpers`, `common`, `pipeline`, `stages` or
+`models` packages.
+
+### RNG ownership by stage
+
+Every random consumer belongs to a named lifecycle stage. A constructor
+receives `ctx.RNG(stream)` or a derived seed explicitly; resolved values and
+planned models do not retain generators unless a sequential painter itself is
+the consumer. Optional effects use dedicated streams. Per-coordinate
+variation uses seed-keyed fields or hashes, never random draws.
+
+Existing numeric stream IDs are part of seed behavior. Adding a new stream
+does not disturb another; adding draws inside one stream intentionally changes
+later values in that stage. Stream IDs within a sketch must be unique unless
+correlation is deliberate and documented.
 
 ## 7. Testing strategy
 
@@ -267,6 +360,15 @@ type Traited interface {
   goldens before committing. Goldens render at AA 1.
 - **Visual verification is part of done**: render a preview and *look at it*
   (agents: `Read` the PNG). Tests prove determinism, not beauty.
+- **Resolution tests**: build plans at two pixel sizes with the same aspect and
+  compare structural values or samples at identical canvas coordinates.
+- **Intermediate tests**: assert geometry bounds, coverage, adjacency,
+  material assignment, facet-flatness, field ranges and sampler purity before
+  relying on a golden. This distinguishes a changed composition from changed
+  rasterization.
+- **Benchmarks**: separate planning from repeated sampling or painting. Direct
+  `At` methods should report zero allocations. Representative results and
+  print-memory implications are in [performance.md](performance.md).
 
 ## 8. Decision log
 
@@ -344,6 +446,7 @@ type Traited interface {
 | 49 | Chop and current are two fields, not two readings of one | The surface slope was first taken as the difference between the convolution walk's first two samples — free, since both had been fetched anyway. It is also wrong: those samples are a streak wavelength apart, so the ripples came out at the streak's scale and were laid in rows by the convolution, which reads as basketry. Ripples and streaks are two scales of one surface and they need two fields; the chop is its own fine noise differenced along the flow at the pixel (two extra samples per pixel, not two per step) and gated by the Froude number, so a glide is glass and a riffle is broken. The related saving: a glint must be an angular *window* rather than a power of a cosine, because seen from straight above with a high sun a flat surface is already near the specular peak and the exponent lights the whole river. |
 | 50 | A reusable translucent raster is averaged premultiplied, then stored straight-alpha | Straight RGB averaging lets a fully transparent sample contribute hidden colour, which becomes a dark or coloured fringe when the layer is later composited. `RasterLayerSS` accumulates linear-light RGB multiplied by alpha, averages alpha separately, and unassociates only when writing `image.NRGBA`. The layer remains conventional straight-alpha PNG data while AA behaves as compositing maths requires. Sketch 011's overlay uses the same surface field as the river, but moves banks off-frame and omits the bed, caustics, foam and physical rock response instead of trying to erase those cues from the finished colour. |
 | 51 | Sketch 012 combines point-sampled materials before rasterisation | A finished water PNG placed over a finished stone PNG can change opacity and colour, but it cannot move the bed lookup through a sloping surface or let a ripple's dark and light faces modulate the stone material. Scree therefore exposes the exact pure point sampler used by its own `Render`, and riffle exposes an all-water surface sample containing flow, slope, ripple and dapple. `shallows` plans both, then calls them inside one `Raster` pixel function: refract the bed coordinate, tint its colour, shadow the trough and light the crest. Existing scree goldens prove extracting `Bed.At` did not change 010. Refraction stays subordinate because large offsets fold hard stone joints into moire; paired value changes are the primary water cue. |
+| 52 | The repository has a shared lifecycle, not a universal pipeline interface | The actual cross-section has simple field samplers, structural models, sequential painters and composed materials. Their useful intermediates have different operations. `Sketch.Render` remains the common outer boundary; private concrete plans name build-once work, and only models with real pre-raster consumers are exposed as typed domain components. This keeps hot paths allocation-free and preserves explicit Go composition without `[]Stage`, generic field hierarchies or `Process(any) any`. Review and alternatives: `architecture-review.md` and `pipeline-design.md`. |
 
 ## 9. Roadmap
 

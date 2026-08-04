@@ -176,6 +176,94 @@ internal/sketch/<x>/    one package per sketch + its testdata/ goldens
    before committing).
 5. Render previews, check against the spec's acceptance list, iterate.
 
+## Artwork lifecycle
+
+Use the smallest internal shape that makes the algorithm clear. These are
+patterns, not interfaces every sketch implements:
+
+```text
+simple sampler
+  defaults/overrides -> immutable fields and colour mapping -> At -> Raster
+
+structural sampler
+  traits/overrides -> concrete levels -> geometry/material plan -> At -> Raster
+
+painted artwork
+  traits/overrides -> planned marks -> sequential paint.Canvas -> Image
+
+composed material
+  typed planned components -> combine samples before rasterisation -> Raster
+```
+
+`contour` is the simple reference: its private plan builds gradients and noise
+once, then `plan.At` is pure. `qql` is the planned painter: its private plan is
+fully specified dots, interpreted later through a paint stream. `foam` is the
+structural reference: plan the partition and appearance once, then sample in
+the documented fill/mosaic/hatch/relief/ink order. `shallows` is the composed
+reference: it combines `scree.Bed` and `riffle.Surface` before pixels are
+written, with no intermediate image.
+
+Not every sketch needs a plan. Keep one private unless another real consumer
+needs its pre-raster result. Do not add universal `Plan`, `Scene`, `Stage`,
+`ScalarField`, `VectorField` or `ColorSampler` interfaces just to label the
+lifecycle.
+
+### Mechanism vs policy
+
+Shared packages own mechanisms: spatial queries, partitions, noise, clipping,
+hatch coverage, colour interpolation, region schemes, lighting arithmetic,
+rasterization, brushes and washes. Sketch packages own artistic policy:
+parameter ranges, weights, ordering, composition, palette roles and aesthetic
+exceptions.
+
+Extract only when there are two real consumers, an existing composition
+crosses artwork boundaries, or the responsibility is independently meaningful
+and testable. A reusable component may remain domain-specific: an all-water
+surface is better than a generic vector-field adapter if consumers need
+surface slope, ripple and dapple together. Never create vague `utils`,
+`helpers`, `common`, `pipeline`, `stages` or `models` packages.
+
+Concrete sketch-to-sketch imports are not automatically wrong. `shallows`
+legitimately inherits the complete scree bed vocabulary. If an import exists
+only because a mechanism is trapped behind an artwork wrapper, extract the
+narrow component instead of banning the dependency.
+
+### Configuration and RNG
+
+Sketch fields plus `New()` defaults are fine for a standalone artwork. Prefer
+an explicit concrete config when another artwork constructs the component or
+when a planned value would otherwise retain mutable CLI state. Keep the
+existing CLI interfaces as adapters; never use a generic parameter map.
+
+Every random consumer owns a named stream. Resolve traits and numeric ranges
+before geometry. Pass an RNG or derived seed explicitly into planning; do not
+silently create shared generators. The repeated pixel path has no RNG draws:
+use immutable seed-keyed noise and hashes there. Optional effects get dedicated
+streams and must not consume the base composition's stream. Preserve existing
+numeric stream IDs unless a seed change is intentional and documented.
+
+### Hot path and tests
+
+A point sampler must avoid mutation, option resolution, geometry construction
+and ordinary allocations. Build partitions, indices, schemes and constant
+per-region/per-facet appearance once. Do not pre-render a full frame when a
+compact model can answer coordinates.
+
+Test the earliest meaningful boundary:
+
+- resolution and override isolation;
+- geometry bounds, coverage and adjacency;
+- deterministic material assignment and shading ranges;
+- exact repeated samples and equal-aspect plans at different pixel sizes;
+- paint interpretation independently of mark planning;
+- final determinism and goldens;
+- preview and sweep inspection.
+
+Benchmark planning separately from sampling or painting for expensive work.
+Direct `At` methods should remain allocation-free. See `docs/performance.md`
+for representative commands, results and the print-memory cost of
+`paint.Canvas`.
+
 ## Engineering standards
 
 - TDD for math-heavy code (color, gradient, noise, mapping): table-driven
