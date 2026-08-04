@@ -139,6 +139,88 @@ func TestLockReleaseRefusesChangedOwnership(t *testing.T) {
 	}
 }
 
+func TestLockReleaseRevalidatesOwnershipAfterRename(t *testing.T) {
+	repo := newTestRepo(t)
+	manager, err := NewManager(repo.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := manager.AcquireGlobalLock(context.Background(), "original")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := LockOwner{
+		PID:        os.Getpid() + 1,
+		Hostname:   "other-host",
+		Command:    "replacement",
+		AcquiredAt: time.Now().UTC(),
+		Token:      "replacement-token",
+	}
+	lock.afterRename = func(_, tombstone string) error {
+		data, err := json.Marshal(other)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(tombstone, "owner.json"), data, 0o644)
+	}
+
+	if err := lock.Release(); err == nil || !strings.Contains(err.Error(), "ownership changed after rename") {
+		t.Fatalf("Release error = %v, want post-rename ownership error", err)
+	}
+	restored, err := readLockOwner(lock.path)
+	if err != nil {
+		t.Fatalf("restored owner: %v", err)
+	}
+	if restored.Token != other.Token {
+		t.Fatalf("restored token = %q, want %q", restored.Token, other.Token)
+	}
+}
+
+func TestLockReleasePreservesMismatchedTombstoneWhenOriginalIsReacquired(t *testing.T) {
+	repo := newTestRepo(t)
+	manager, err := NewManager(repo.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := manager.AcquireGlobalLock(context.Background(), "original")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := LockOwner{
+		PID:        os.Getpid() + 1,
+		Hostname:   "other-host",
+		Command:    "replacement",
+		AcquiredAt: time.Now().UTC(),
+		Token:      "replacement-token",
+	}
+	lock.afterRename = func(path, tombstone string) error {
+		data, err := json.Marshal(other)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(tombstone, "owner.json"), data, 0o644); err != nil {
+			return err
+		}
+		if err := os.Mkdir(path, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(path, "owner.json"), data, 0o644)
+	}
+
+	if err := lock.Release(); err == nil || !strings.Contains(err.Error(), "severe lock ownership error") {
+		t.Fatalf("Release error = %v, want severe ownership error", err)
+	}
+	for _, path := range []string{lock.path, lock.tombstone} {
+		owner, err := readLockOwner(path)
+		if err != nil {
+			t.Fatalf("preserved owner %q: %v", path, err)
+		}
+		if owner.Token != other.Token {
+			t.Fatalf("owner token at %q = %q, want %q", path, owner.Token, other.Token)
+		}
+	}
+}
+
 func TestLockCleanupFailureDoesNotBlockReacquisition(t *testing.T) {
 	repo := newTestRepo(t)
 	manager, err := NewManager(repo.root)
@@ -177,8 +259,44 @@ func TestLockCleanupFailureDoesNotBlockReacquisition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lock.removeTombstone = os.RemoveAll
+	lock.removeTombstone = removeLockTombstone
 	if err := lock.Release(); err != nil {
 		t.Fatalf("retry tombstone cleanup: %v", err)
+	}
+}
+
+func TestLockReleaseDoesNotRecursivelyRemoveUnexpectedContents(t *testing.T) {
+	repo := newTestRepo(t)
+	manager, err := NewManager(repo.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := manager.AcquireGlobalLock(context.Background(), "create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unexpectedName := "unexpected"
+	if err := os.WriteFile(filepath.Join(lock.path, unexpectedName), []byte("preserve me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lock.Release(); err == nil {
+		t.Fatal("Release recursively removed unexpected lock contents")
+	}
+	if _, err := os.Stat(lock.path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("original lock remains after release: %v", err)
+	}
+	if lock.tombstone == "" {
+		t.Fatal("diagnostic tombstone path is empty")
+	}
+	if _, err := os.Stat(filepath.Join(lock.tombstone, unexpectedName)); err != nil {
+		t.Fatalf("unexpected tombstone content was removed: %v", err)
+	}
+	owner, err := readLockOwner(lock.tombstone)
+	if err != nil {
+		t.Fatalf("diagnostic owner was removed: %v", err)
+	}
+	if owner.Token != lock.owner.Token {
+		t.Fatalf("diagnostic token = %q, want %q", owner.Token, lock.owner.Token)
 	}
 }

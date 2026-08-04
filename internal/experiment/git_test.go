@@ -81,11 +81,12 @@ func TestGitRunnerPreservesContextCancellation(t *testing.T) {
 func TestNewManagerIgnoresAmbientGitRouting(t *testing.T) {
 	repo := newTestRepo(t)
 	ambient := newTestRepo(t)
+	nested := filepath.Join(repo.root, "experiments", "active")
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestNewManagerWithPoisonedProcess$")
 	cmd.Env = append([]string(nil), repo.gitEnv...)
 	cmd.Env = append(cmd.Env,
-		"EXPERIMENT_TEST_TARGET="+repo.root,
+		"EXPERIMENT_TEST_TARGET="+nested,
 		"GIT_DIR="+filepath.Join(ambient.root, ".git"),
 		"GIT_WORK_TREE="+ambient.root,
 		"GIT_COMMON_DIR="+filepath.Join(ambient.root, ".git"),
@@ -93,6 +94,8 @@ func TestNewManagerIgnoresAmbientGitRouting(t *testing.T) {
 		"GIT_OBJECT_DIRECTORY="+filepath.Join(ambient.root, ".git", "objects"),
 		"GIT_ALTERNATE_OBJECT_DIRECTORIES="+filepath.Join(ambient.root, ".git", "objects"),
 		"GIT_PREFIX=poisoned/",
+		"GIT_CEILING_DIRECTORIES="+nested,
+		"GIT_DISCOVERY_ACROSS_FILESYSTEM=0",
 		"GIT_CONFIG_COUNT=1",
 		"GIT_CONFIG_KEY_0=core.bare",
 		"GIT_CONFIG_VALUE_0=true",
@@ -113,7 +116,7 @@ func TestNewManagerWithPoisonedProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := filepath.EvalSymlinks(target)
+	want, err := filepath.EvalSymlinks(filepath.Join(target, "..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
