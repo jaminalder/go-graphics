@@ -16,6 +16,12 @@ import (
 
 const defaultMaxWriters = 2
 
+const (
+	checkpointBeforeBranch   = "before-branch"
+	checkpointBeforeWorktree = "before-worktree"
+	checkpointBeforeCommit   = "before-commit"
+)
+
 // CreateOptions configures one ordinary experiment worktree.
 type CreateOptions struct {
 	Piece          string
@@ -53,8 +59,15 @@ type briefData struct {
 	CandidateCommand  string
 }
 
+type createResources struct {
+	branch          string
+	worktreePath    string
+	branchCreated   bool
+	worktreeCreated bool
+}
+
 // Create creates and initializes an ordinary experiment branch and sibling worktree.
-func (m *Manager) Create(ctx context.Context, opts CreateOptions) (_ Created, retErr error) {
+func (m *Manager) Create(ctx context.Context, opts CreateOptions) (Created, error) {
 	id, err := ParseID(opts.Piece + "/" + opts.Name)
 	if err != nil {
 		return Created{}, err
@@ -63,126 +76,91 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (_ Created, re
 	if err != nil {
 		return Created{}, err
 	}
-	defer func() { retErr = errors.Join(retErr, globalLock.Release()) }()
 	idLock, err := m.AcquireExperimentLock(ctx, id, "create "+id.String())
 	if err != nil {
-		return Created{}, err
+		return Created{}, errors.Join(err, m.release(globalLock))
 	}
-	defer func() { retErr = errors.Join(retErr, idLock.Release()) }()
 
+	created, resources, createErr := m.createLocked(ctx, id, opts)
+	releaseErr := errors.Join(m.release(idLock), m.release(globalLock))
+	err = errors.Join(createErr, releaseErr)
+	if err != nil && (resources.branchCreated || resources.worktreeCreated) {
+		return created, createFailure(id, resources, err)
+	}
+	return created, err
+}
+
+func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (Created, createResources, error) {
 	if err := m.RequireCoordinator(); err != nil {
-		return Created{}, err
+		return Created{}, createResources{}, err
 	}
 	runner := gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}
-	currentBranch, err := runner.run(ctx, "branch", "--show-current")
-	if err != nil {
-		return Created{}, err
-	}
-	if strings.TrimSpace(currentBranch) != "master" {
-		return Created{}, fmt.Errorf("create requires coordinator branch master; current branch is %q", strings.TrimSpace(currentBranch))
-	}
-	status, err := runner.run(ctx, "status", "--porcelain")
-	if err != nil {
-		return Created{}, err
-	}
-	if status != "" {
-		return Created{}, fmt.Errorf("coordinator worktree is not clean: %s", strings.TrimSpace(status))
+	if err := m.validateCoordinator(ctx, runner); err != nil {
+		return Created{}, createResources{}, err
 	}
 
-	opts, err = normalizedCreateOptions(opts)
+	opts, err := normalizedCreateOptions(opts)
 	if err != nil {
-		return Created{}, err
+		return Created{}, createResources{}, err
 	}
 	branch := id.ExperimentBranch()
 	worktreePath := id.WorktreePath(m.CoordinatorRoot)
 	recordDir := id.RecordDir()
-	coordinatorRecord := filepath.Join(m.CoordinatorRoot, recordDir)
-	refsOutput, err := runner.run(ctx, "for-each-ref", "--format=%(refname:short)", "refs/heads/exp", "refs/heads/integrate")
-	if err != nil {
-		return Created{}, err
-	}
-	refs := strings.Fields(refsOutput)
-	for _, candidate := range []string{branch, id.IntegrationBranch()} {
-		if slices.Contains(refs, candidate) {
-			return Created{}, fmt.Errorf("experiment branch already exists: %s", candidate)
-		}
-	}
-	worktreeOutput, err := runner.run(ctx, "worktree", "list", "--porcelain", "-z")
-	if err != nil {
-		return Created{}, err
-	}
-	worktrees, err := parseWorktreeList(worktreeOutput)
-	if err != nil {
-		return Created{}, err
-	}
-	for _, worktree := range worktrees {
-		if filepath.Clean(worktree.Path) == filepath.Clean(worktreePath) || worktree.Branch == "refs/heads/"+branch {
-			return Created{}, fmt.Errorf("experiment worktree already registered: %s", worktree.Path)
-		}
-	}
-	if _, err := os.Lstat(worktreePath); err == nil {
-		return Created{}, fmt.Errorf("experiment worktree path already exists: %s", worktreePath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Created{}, fmt.Errorf("inspect experiment worktree path: %w", err)
-	}
-	if _, err := os.Lstat(coordinatorRecord); err == nil {
-		return Created{}, fmt.Errorf("experiment record already exists: %s", coordinatorRecord)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Created{}, fmt.Errorf("inspect experiment record: %w", err)
-	}
-	archiveRecord := filepath.Join(m.CoordinatorRoot, filepath.FromSlash(id.ArchiveDir()))
-	if _, err := os.Lstat(archiveRecord); err == nil {
-		return Created{}, fmt.Errorf("experiment record already exists: %s", archiveRecord)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Created{}, fmt.Errorf("inspect archived experiment record: %w", err)
+	resources := createResources{branch: branch, worktreePath: worktreePath}
+	partial := Created{WorktreePath: worktreePath}
+	if err := m.validateAvailableResources(ctx, runner, id, branch, worktreePath); err != nil {
+		return partial, resources, err
 	}
 	if err := m.enforceWriterLimit(ctx, opts.MaxWriters); err != nil {
-		return Created{}, err
+		return partial, resources, err
 	}
 
 	baseBranch, baseCommit, err := m.resolveCreateBase(ctx, runner, opts)
 	if err != nil {
-		return Created{}, err
+		return partial, resources, err
 	}
-	branchCreated := false
-	worktreeCreated := false
-	fail := func(cause error) error {
-		if !branchCreated && !worktreeCreated {
-			return cause
-		}
-		commands := []string{
-			"git branch --list " + branch,
-			"git worktree list --porcelain",
-		}
-		if worktreeCreated {
-			commands = append(commands, "git -C "+strconv.Quote(worktreePath)+" status --short")
-		}
-		commands = append(commands,
-			"git worktree prune --dry-run",
-			"git worktree remove "+strconv.Quote(worktreePath),
-			"git branch -d "+branch,
-		)
-		return fmt.Errorf("create experiment %s: %w; created branch=%t %q, worktree=%t %q; inspect and recover without force:\n%s", id.String(), cause, branchCreated, branch, worktreeCreated, worktreePath, strings.Join(commands, "\n"))
+	if err := m.checkpoint(checkpointBeforeBranch); err != nil {
+		return partial, resources, err
+	}
+	if err := m.validateCoordinator(ctx, runner); err != nil {
+		return partial, resources, err
+	}
+	if err := m.validateAvailableResources(ctx, runner, id, branch, worktreePath); err != nil {
+		return partial, resources, err
+	}
+	currentBase, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+baseBranch+"^{commit}")
+	if err != nil {
+		return partial, resources, fmt.Errorf("revalidate base branch before experiment branch creation: %w", err)
+	}
+	if strings.TrimSpace(currentBase) != baseCommit {
+		return partial, resources, fmt.Errorf("base branch changed before experiment branch creation: got %s, want %s", strings.TrimSpace(currentBase), baseCommit)
 	}
 	if _, err := runner.run(ctx, "branch", branch, baseCommit); err != nil {
-		return Created{}, err
+		return partial, resources, err
 	}
-	branchCreated = true
+	resources.branchCreated = true
+	if err := m.checkpoint(checkpointBeforeWorktree); err != nil {
+		return partial, resources, err
+	}
+	if err := m.validateBranchForWorktree(ctx, runner, branch, baseCommit, worktreePath); err != nil {
+		return partial, resources, err
+	}
 	if _, err := runner.run(ctx, "worktree", "add", worktreePath, branch); err != nil {
-		return Created{}, fail(err)
+		return partial, resources, err
 	}
-	worktreeCreated = true
+	resources.worktreeCreated = true
 
 	outputRelative := filepath.ToSlash(id.OutputDir())
 	outputPath := filepath.Join(worktreePath, filepath.FromSlash(outputRelative))
+	partial.OutputPath = outputPath
 	for _, dir := range []string{"baseline", "candidate", "metadata"} {
 		if err := os.MkdirAll(filepath.Join(outputPath, dir), 0o755); err != nil {
-			return Created{}, fail(fmt.Errorf("create output directory %s: %w", dir, err))
+			return partial, resources, fmt.Errorf("create output directory %s: %w", dir, err)
 		}
 	}
 	recordPath := filepath.Join(worktreePath, filepath.FromSlash(recordDir))
 	if err := os.MkdirAll(recordPath, 0o755); err != nil {
-		return Created{}, fail(fmt.Errorf("create record directory: %w", err))
+		return partial, resources, fmt.Errorf("create record directory: %w", err)
 	}
 	now := m.now
 	if now == nil {
@@ -210,11 +188,12 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (_ Created, re
 		CreatedAt:      createdAt,
 		UpdatedAt:      createdAt,
 	}
+	partial.State = state
 	if err := writeJSONAtomic(filepath.Join(recordPath, "state.json"), state); err != nil {
-		return Created{}, fail(err)
+		return partial, resources, err
 	}
-	if err := writeJSONAtomic(filepath.Join(recordPath, "favorites.json"), []any{}); err != nil {
-		return Created{}, fail(err)
+	if err := writeJSONAtomic(filepath.Join(recordPath, "favorites.json"), []Favorite{}); err != nil {
+		return partial, resources, err
 	}
 	seeds := formatSeeds(opts.Seeds)
 	templateData := briefData{
@@ -230,14 +209,21 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (_ Created, re
 		CandidateCommand:  "go run ./cmd/staticart sweep " + id.Piece() + " --seeds " + seeds + " --profile " + opts.Profile + " --out " + outputRelative + "/candidate",
 	}
 	briefPath := filepath.Join(recordPath, "brief.md")
+	partial.BriefPath = briefPath
 	if err := renderTemplate(filepath.Join(m.TemplatesRoot, "brief.md"), briefPath, templateData); err != nil {
-		return Created{}, fail(err)
+		return partial, resources, err
 	}
 	if err := renderTemplate(filepath.Join(m.TemplatesRoot, "result.md"), filepath.Join(recordPath, "result.md"), templateData); err != nil {
-		return Created{}, fail(err)
+		return partial, resources, err
+	}
+	if err := m.checkpoint(checkpointBeforeCommit); err != nil {
+		return partial, resources, err
+	}
+	if err := m.validateAssignedWorktree(ctx, runner, branch, worktreePath, baseCommit); err != nil {
+		return partial, resources, err
 	}
 	if err := commitRecord(ctx, worktreePath, recordDir, "experiment: create "+id.String(), m.gitEnv); err != nil {
-		return Created{}, fail(err)
+		return partial, resources, err
 	}
 
 	instruction := "Work on experiment " + id.String() + " only.\n" +
@@ -245,11 +231,15 @@ func (m *Manager) Create(ctx context.Context, opts CreateOptions) (_ Created, re
 		"Branch: " + branch + "\n" +
 		"Brief: " + briefPath + "\n" +
 		"Operate only inside this worktree. Do not switch branches. Do not create or remove worktrees. Do not merge, rebase, or modify master. Do not work outside the assigned scope. Do not modify another experiment's files."
-	return Created{State: state, WorktreePath: worktreePath, BriefPath: briefPath, OutputPath: outputPath, WorkerInstruction: instruction}, nil
+	partial.WorkerInstruction = instruction
+	return partial, resources, nil
 }
 
 func normalizedCreateOptions(opts CreateOptions) (CreateOptions, error) {
-	if opts.BaseBranch == "" {
+	if opts.BaseExperiment != "" && opts.BaseBranch != "" && opts.BaseBranch != "master" {
+		return CreateOptions{}, fmt.Errorf("base branch cannot be combined with base experiment")
+	}
+	if opts.BaseBranch == "" || opts.BaseExperiment != "" {
 		opts.BaseBranch = "master"
 	}
 	if opts.Stage == "" {
@@ -299,14 +289,13 @@ func normalizedCreateOptions(opts CreateOptions) (CreateOptions, error) {
 }
 
 func (m *Manager) resolveCreateBase(ctx context.Context, runner gitRunner, opts CreateOptions) (string, string, error) {
-	baseBranch := opts.BaseBranch
 	if opts.BaseExperiment != "" {
 		parentID, err := ParseID(opts.BaseExperiment)
 		if err != nil {
 			return "", "", fmt.Errorf("invalid base experiment: %w", err)
 		}
 		parentBranch := parentID.ExperimentBranch()
-		parentCommitOutput, err := runner.run(ctx, "rev-parse", "--verify", parentBranch+"^{commit}")
+		parentCommitOutput, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+parentBranch+"^{commit}")
 		if err != nil {
 			return "", "", fmt.Errorf("resolve base experiment %s branch: %w", opts.BaseExperiment, err)
 		}
@@ -326,7 +315,7 @@ func (m *Manager) resolveCreateBase(ctx context.Context, runner gitRunner, opts 
 		if parent.Status == StatusMerged || parent.Status == StatusDiscarded {
 			return "", "", fmt.Errorf("base experiment %s is not active", opts.BaseExperiment)
 		}
-		baseBranch = parent.Branch
+		baseBranch := parent.Branch
 		worktreeOutput, err := runner.run(ctx, "worktree", "list", "--porcelain", "-z")
 		if err != nil {
 			return "", "", err
@@ -347,11 +336,200 @@ func (m *Manager) resolveCreateBase(ctx context.Context, runner gitRunner, opts 
 		}
 		return baseBranch, parentCommit, nil
 	}
-	commit, err := runner.run(ctx, "rev-parse", "--verify", baseBranch+"^{commit}")
+	baseBranch := opts.BaseBranch
+	if strings.HasPrefix(baseBranch, "refs/") {
+		return "", "", fmt.Errorf("invalid base branch %q: want a plain local branch name", baseBranch)
+	}
+	if strings.HasPrefix(baseBranch, "exp/") || strings.HasPrefix(baseBranch, "integrate/") {
+		return "", "", fmt.Errorf("base branch %q cannot use experiment namespace; use base experiment", baseBranch)
+	}
+	validated, err := runner.run(ctx, "check-ref-format", "--branch", baseBranch)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid base branch %q: %w", baseBranch, err)
+	}
+	if strings.TrimSpace(validated) != baseBranch {
+		return "", "", fmt.Errorf("invalid base branch %q: Git resolved it as %q", baseBranch, strings.TrimSpace(validated))
+	}
+	exists, err := localBranchExists(ctx, runner, baseBranch)
+	if err != nil {
+		return "", "", err
+	}
+	if !exists {
+		return "", "", fmt.Errorf("base branch does not exist: %s", baseBranch)
+	}
+	commit, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+baseBranch+"^{commit}")
 	if err != nil {
 		return "", "", fmt.Errorf("resolve base branch %s: %w", baseBranch, err)
 	}
 	return baseBranch, strings.TrimSpace(commit), nil
+}
+
+func (m *Manager) validateCoordinator(ctx context.Context, runner gitRunner) error {
+	if err := m.RequireCoordinator(); err != nil {
+		return err
+	}
+	currentRoot, err := runner.run(ctx, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return err
+	}
+	root, err := canonicalPath(strings.TrimSpace(currentRoot), m.CoordinatorRoot)
+	if err != nil {
+		return fmt.Errorf("resolve coordinator before mutation: %w", err)
+	}
+	if root != m.CoordinatorRoot {
+		return fmt.Errorf("coordinator changed before mutation: got %q, want %q", root, m.CoordinatorRoot)
+	}
+	currentBranch, err := runner.run(ctx, "branch", "--show-current")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(currentBranch) != "master" {
+		return fmt.Errorf("create requires coordinator branch master; current branch is %q", strings.TrimSpace(currentBranch))
+	}
+	status, err := runner.run(ctx, "status", "--porcelain")
+	if err != nil {
+		return err
+	}
+	if status != "" {
+		return fmt.Errorf("coordinator worktree is not clean: %s", strings.TrimSpace(status))
+	}
+	return nil
+}
+
+func (m *Manager) validateAvailableResources(ctx context.Context, runner gitRunner, id ID, branch, worktreePath string) error {
+	refsOutput, err := runner.run(ctx, "for-each-ref", "--format=%(refname:short)", "refs/heads/exp", "refs/heads/integrate")
+	if err != nil {
+		return err
+	}
+	refs := strings.Fields(refsOutput)
+	for _, candidate := range []string{branch, id.IntegrationBranch()} {
+		if slices.Contains(refs, candidate) {
+			return fmt.Errorf("experiment branch already exists: %s", candidate)
+		}
+	}
+	worktreeOutput, err := runner.run(ctx, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return err
+	}
+	worktrees, err := parseWorktreeList(worktreeOutput)
+	if err != nil {
+		return err
+	}
+	for _, worktree := range worktrees {
+		if filepath.Clean(worktree.Path) == filepath.Clean(worktreePath) || worktree.Branch == "refs/heads/"+branch {
+			return fmt.Errorf("experiment worktree already registered: %s", worktree.Path)
+		}
+	}
+	if err := requirePathAbsent(worktreePath, "experiment worktree path already exists", "inspect experiment worktree path"); err != nil {
+		return err
+	}
+	coordinatorRecord := filepath.Join(m.CoordinatorRoot, filepath.FromSlash(id.RecordDir()))
+	if err := requirePathAbsent(coordinatorRecord, "experiment record already exists", "inspect experiment record"); err != nil {
+		return err
+	}
+	archiveRecord := filepath.Join(m.CoordinatorRoot, filepath.FromSlash(id.ArchiveDir()))
+	return requirePathAbsent(archiveRecord, "experiment record already exists", "inspect archived experiment record")
+}
+
+func (m *Manager) validateBranchForWorktree(ctx context.Context, runner gitRunner, branch, baseCommit, worktreePath string) error {
+	commit, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+branch+"^{commit}")
+	if err != nil {
+		return fmt.Errorf("verify experiment branch before worktree add: %w", err)
+	}
+	if strings.TrimSpace(commit) != baseCommit {
+		return fmt.Errorf("experiment branch %q changed before worktree add: got %s, want %s", branch, strings.TrimSpace(commit), baseCommit)
+	}
+	worktreeOutput, err := runner.run(ctx, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return err
+	}
+	worktrees, err := parseWorktreeList(worktreeOutput)
+	if err != nil {
+		return err
+	}
+	for _, worktree := range worktrees {
+		if filepath.Clean(worktree.Path) == filepath.Clean(worktreePath) || worktree.Branch == "refs/heads/"+branch {
+			return fmt.Errorf("experiment worktree already registered: %s", worktree.Path)
+		}
+	}
+	return requirePathAbsent(worktreePath, "experiment worktree path already exists", "inspect experiment worktree path")
+}
+
+func (m *Manager) validateAssignedWorktree(ctx context.Context, runner gitRunner, branch, worktreePath, baseCommit string) error {
+	worktreeOutput, err := runner.run(ctx, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return err
+	}
+	worktrees, err := parseWorktreeList(worktreeOutput)
+	if err != nil {
+		return err
+	}
+	for _, worktree := range worktrees {
+		if filepath.Clean(worktree.Path) != filepath.Clean(worktreePath) {
+			continue
+		}
+		if worktree.Branch != "refs/heads/"+branch {
+			return fmt.Errorf("assigned worktree branch changed: got %q, want %q", worktree.Branch, "refs/heads/"+branch)
+		}
+		if worktree.HEAD != baseCommit {
+			return fmt.Errorf("assigned worktree tip changed: got %s, want %s", worktree.HEAD, baseCommit)
+		}
+		return nil
+	}
+	return fmt.Errorf("assigned worktree is no longer registered: %s", worktreePath)
+}
+
+func localBranchExists(ctx context.Context, runner gitRunner, branch string) (bool, error) {
+	output, err := runner.run(ctx, "for-each-ref", "--format=%(refname)", "refs/heads/"+branch)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(output) == "refs/heads/"+branch, nil
+}
+
+func requirePathAbsent(path, existsMessage, inspectMessage string) error {
+	if _, err := os.Lstat(path); err == nil {
+		return fmt.Errorf("%s: %s", existsMessage, path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%s: %w", inspectMessage, err)
+	}
+	return nil
+}
+
+func (m *Manager) checkpoint(name string) error {
+	if m.createCheckpoint == nil {
+		return nil
+	}
+	return m.createCheckpoint(name)
+}
+
+func (m *Manager) release(lock *Lock) error {
+	if m.releaseLock != nil {
+		return m.releaseLock(lock)
+	}
+	return lock.Release()
+}
+
+func createFailure(id ID, resources createResources, cause error) error {
+	commands := []string{
+		"git branch --list " + shellQuote(resources.branch),
+		"git worktree list --porcelain",
+	}
+	if resources.worktreeCreated {
+		commands = append(commands, "git -C "+shellQuote(resources.worktreePath)+" status --short")
+	}
+	commands = append(commands, "git worktree prune --dry-run")
+	if resources.worktreeCreated {
+		commands = append(commands, "git worktree remove "+shellQuote(resources.worktreePath))
+	}
+	if resources.branchCreated {
+		commands = append(commands, "git branch -d "+shellQuote(resources.branch))
+	}
+	return fmt.Errorf("create experiment %s: %w; created branch=%t %s, worktree=%t %s; inspect and recover without force:\n%s", id.String(), cause, resources.branchCreated, shellQuote(resources.branch), resources.worktreeCreated, shellQuote(resources.worktreePath), strings.Join(commands, "\n"))
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func (m *Manager) enforceWriterLimit(ctx context.Context, maximum int) error {

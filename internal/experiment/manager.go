@@ -10,12 +10,14 @@ import (
 
 // Manager holds canonical paths shared by experiment lifecycle operations.
 type Manager struct {
-	CoordinatorRoot string
-	CurrentRoot     string
-	CommonDir       string
-	TemplatesRoot   string
-	gitEnv          []string
-	now             func() time.Time
+	CoordinatorRoot  string
+	CurrentRoot      string
+	CommonDir        string
+	TemplatesRoot    string
+	gitEnv           []string
+	now              func() time.Time
+	releaseLock      func(*Lock) error
+	createCheckpoint func(string) error
 }
 
 // NewManager discovers repository paths without changing the process working directory.

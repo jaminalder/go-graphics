@@ -52,7 +52,9 @@ func newTestRepoWithEnv(t *testing.T, baseEnv []string) testRepo {
 			"- Fixed seeds: `{{.Seeds}}`\n" +
 			"- Source experiments: {{.SourceExperiments}}\n" +
 			"- Output path: `{{.OutputPath}}`\n\n" +
-			"```sh\n{{.BaselineCommand}}\n{{.CandidateCommand}}\n```\n",
+			"```sh\n{{.BaselineCommand}}\n{{.CandidateCommand}}\n```\n\n" +
+			"## Favorites\n\n" +
+			"Each entry has `seed` (uint64), `label` (string), `image` (record-relative artifact path), and `notes` (string).\n",
 		"experiments/templates/result.md": "# Experiment result: {{.ID}}\n\n" +
 			"- Fixed seeds: `{{.Seeds}}`\n" +
 			"- Output path: `{{.OutputPath}}`\n",

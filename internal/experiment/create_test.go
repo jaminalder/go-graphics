@@ -3,6 +3,8 @@ package experiment
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,6 +135,92 @@ func TestCreateLifecycleOnlyDefaultsToLifecycleStage(t *testing.T) {
 	}
 	if created.State.Stage != "lifecycle" {
 		t.Fatalf("stage = %q, want lifecycle", created.State.Stage)
+	}
+}
+
+func TestCreateValidatesPlainLocalBaseBranch(t *testing.T) {
+	tests := []struct {
+		name string
+		base string
+		want string
+	}{
+		{name: "experiment namespace", base: "exp/foam/parent", want: "cannot use experiment namespace"},
+		{name: "integration namespace", base: "integrate/foam/parent", want: "cannot use experiment namespace"},
+		{name: "revision expression", base: "master~1", want: "invalid base branch"},
+		{name: "commit peel", base: "master^{commit}", want: "invalid base branch"},
+		{name: "previous checkout syntax", base: "@{-1}", want: "invalid base branch"},
+		{name: "fully qualified ref", base: "refs/heads/master", want: "invalid base branch"},
+		{name: "missing local branch", base: "missing", want: "base branch does not exist"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newTestRepo(t)
+			_, err := testManager(t, repo).Create(context.Background(), CreateOptions{
+				Piece:      "foam",
+				Name:       "base-validation",
+				BaseBranch: test.base,
+			})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCreateUsesDeclaredOrdinaryBaseBranch(t *testing.T) {
+	repo := newTestRepo(t)
+	repo.git(t, "branch", "feature/source")
+	baseTip := repo.gitOutput(t, "rev-parse", "refs/heads/feature/source")
+
+	created, err := testManager(t, repo).Create(context.Background(), CreateOptions{
+		Piece:      "foam",
+		Name:       "ordinary-base",
+		BaseBranch: "feature/source",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.State.BaseBranch != "feature/source" || created.State.BaseExperiment != "" || created.State.BaseCommit != baseTip {
+		t.Fatalf("base state = %#v", created.State)
+	}
+}
+
+func TestCreateRejectsConflictingChildBase(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	if _, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "parent"}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := manager.Create(context.Background(), CreateOptions{
+		Piece:          "foam",
+		Name:           "child",
+		BaseBranch:     "feature/source",
+		BaseExperiment: "foam/parent",
+	})
+	if err == nil || !strings.Contains(err.Error(), "base branch cannot be combined with base experiment") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestCreateAcceptsDefaultBaseWithChildDeclaration(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	if _, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "parent"}); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{
+		Piece:          "foam",
+		Name:           "child",
+		BaseBranch:     "master",
+		BaseExperiment: "foam/parent",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.State.BaseExperiment != "foam/parent" || created.State.BaseBranch != "exp/foam/parent" {
+		t.Fatalf("child base = %q / %q", created.State.BaseExperiment, created.State.BaseBranch)
 	}
 }
 
@@ -330,6 +418,284 @@ func TestReadStateRejectsCorruptIdentity(t *testing.T) {
 	}
 	if _, err := readState(path); err == nil || !strings.Contains(err.Error(), "missing experiment ID") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestWriteJSONAtomicUsesIndentedNewlineTerminatedMode0644File(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.json")
+	if err := writeJSONAtomic(path, map[string]any{"name": "record", "values": []int{1, 2}}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"name\": \"record\",\n  \"values\": [\n    1,\n    2\n  ]\n}\n"
+	if string(data) != want {
+		t.Fatalf("JSON = %q, want %q", data, want)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("mode = %o, want 644", got)
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(path) {
+		t.Fatalf("directory entries = %v, want only final file", entries)
+	}
+}
+
+func TestShellQuoteProducesSafePOSIXSingleWord(t *testing.T) {
+	tests := map[string]string{
+		"":                  "''",
+		"plain":             "'plain'",
+		"space and $dollar": "'space and $dollar'",
+		"quote'newline\n":   "'quote'\"'\"'newline\n'",
+	}
+	for input, want := range tests {
+		if got := shellQuote(input); got != want {
+			t.Errorf("shellQuote(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestCreateFailureShellQuotesEveryDynamicRecoveryArgument(t *testing.T) {
+	id, err := ParseID("foam/recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources := createResources{
+		branch:          "branch with 'quote\nand newline",
+		worktreePath:    "/tmp/path with 'quote\nand newline",
+		branchCreated:   true,
+		worktreeCreated: true,
+	}
+	got := createFailure(id, resources, errors.New("injected failure")).Error()
+	for _, command := range []string{
+		"git branch --list " + shellQuote(resources.branch),
+		"git -C " + shellQuote(resources.worktreePath) + " status --short",
+		"git worktree remove " + shellQuote(resources.worktreePath),
+		"git branch -d " + shellQuote(resources.branch),
+	} {
+		if !strings.Contains(got, command) {
+			t.Errorf("recovery error does not contain safely quoted command %q:\n%s", command, got)
+		}
+	}
+}
+
+func TestCreateWritesTypedEmptyFavoritesAndDocumentsSchema(t *testing.T) {
+	repo := newTestRepo(t)
+	created, err := testManager(t, repo).Create(context.Background(), CreateOptions{Piece: "foam", Name: "favorites-schema"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(filepath.Dir(created.BriefPath), "favorites.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "[]\n" {
+		t.Fatalf("favorites JSON = %q, want empty array", data)
+	}
+	var favorites []Favorite
+	if err := json.Unmarshal(data, &favorites); err != nil {
+		t.Fatal(err)
+	}
+	brief := readTextFile(t, created.BriefPath)
+	for _, field := range []string{"seed", "label", "image", "notes"} {
+		if !strings.Contains(brief, "`"+field+"`") {
+			t.Errorf("brief does not document favorites field %q", field)
+		}
+	}
+}
+
+func TestCreateReportsPartialResourcesWhenLockReleaseFails(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	releases := 0
+	manager.releaseLock = func(lock *Lock) error {
+		releases++
+		releaseErr := lock.Release()
+		return errors.Join(releaseErr, fmt.Errorf("injected release failure %d", releases))
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "release-failure"})
+	if err == nil {
+		t.Fatal("Create succeeded despite release failures")
+	}
+	if releases != 2 {
+		t.Fatalf("release calls = %d, want 2", releases)
+	}
+	for _, fragment := range []string{
+		"injected release failure 1",
+		"injected release failure 2",
+		"created branch=true 'exp/foam/release-failure'",
+		"worktree=true " + shellQuote(created.WorktreePath),
+		"inspect and recover without force",
+	} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("error does not contain %q:\n%s", fragment, err)
+		}
+	}
+	if created.State.ID != "foam/release-failure" || created.WorktreePath == "" {
+		t.Fatalf("Created resources were discarded: %#v", created)
+	}
+}
+
+func TestCreateRevalidatesDuplicateImmediatelyBeforeBranchMutation(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointBeforeBranch {
+			repo.git(t, "branch", "exp/foam/raced-branch")
+		}
+		return nil
+	}
+
+	_, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "raced-branch"})
+	if err == nil || !strings.Contains(err.Error(), "branch already exists") {
+		t.Fatalf("error = %v", err)
+	}
+	id, _ := ParseID("foam/raced-branch")
+	if _, err := os.Stat(id.WorktreePath(manager.CoordinatorRoot)); !os.IsNotExist(err) {
+		t.Fatalf("worktree was created after duplicate race: %v", err)
+	}
+}
+
+func TestCreateRevalidatesBaseTipImmediatelyBeforeBranchMutation(t *testing.T) {
+	repo := newTestRepo(t)
+	repo.git(t, "branch", "feature/source")
+	manager := testManager(t, repo)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointBeforeBranch {
+			repo.git(t, "checkout", "feature/source")
+			if err := os.WriteFile(filepath.Join(repo.root, "source.txt"), []byte("advanced\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			repo.git(t, "add", "source.txt")
+			repo.git(t, "commit", "-m", "test: advance source")
+			repo.git(t, "checkout", "master")
+		}
+		return nil
+	}
+
+	_, err := manager.Create(context.Background(), CreateOptions{
+		Piece:      "foam",
+		Name:       "raced-base",
+		BaseBranch: "feature/source",
+	})
+	if err == nil || !strings.Contains(err.Error(), "base branch changed before experiment branch creation") {
+		t.Fatalf("error = %v", err)
+	}
+	if output := repo.gitOutput(t, "branch", "--list", "exp/foam/raced-base"); output != "" {
+		t.Fatalf("experiment branch created after base race: %s", output)
+	}
+}
+
+func TestCreateRevalidatesPathImmediatelyBeforeWorktreeMutation(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	id, _ := ParseID("foam/raced-path")
+	path := id.WorktreePath(manager.CoordinatorRoot)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointBeforeWorktree {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "raced-path"})
+	if err == nil || !strings.Contains(err.Error(), "worktree path already exists") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath != path {
+		t.Fatalf("worktree inventory path = %q, want %q", created.WorktreePath, path)
+	}
+	for _, fragment := range []string{"created branch=true 'exp/foam/raced-path'", "git worktree list --porcelain", "git branch -d 'exp/foam/raced-path'"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("error does not contain %q:\n%s", fragment, err)
+		}
+	}
+}
+
+func TestCreateReportsBranchCreatedWhenCheckpointFailsBeforeWorktree(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointBeforeWorktree {
+			return errors.New("injected checkpoint failure")
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "partial-branch"})
+	if err == nil {
+		t.Fatal("Create succeeded despite checkpoint failure")
+	}
+	id, _ := ParseID("foam/partial-branch")
+	wantPath := id.WorktreePath(manager.CoordinatorRoot)
+	if created.WorktreePath != wantPath {
+		t.Fatalf("created worktree inventory = %q, want %q", created.WorktreePath, wantPath)
+	}
+	for _, fragment := range []string{
+		"injected checkpoint failure",
+		"created branch=true 'exp/foam/partial-branch'",
+		"worktree=false " + shellQuote(wantPath),
+		"git branch -d 'exp/foam/partial-branch'",
+	} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("error does not contain %q:\n%s", fragment, err)
+		}
+	}
+	if strings.Contains(err.Error(), "git worktree remove") {
+		t.Fatalf("recovery suggests removing a worktree that was not created:\n%s", err)
+	}
+}
+
+func TestCreateRevalidatesAssignedWorktreeBeforeRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointBeforeCommit {
+			id, _ := ParseID("foam/raced-commit")
+			repo.gitOutputAt(t, id.WorktreePath(manager.CoordinatorRoot), "checkout", "--detach")
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "raced-commit"})
+	if err == nil || !strings.Contains(err.Error(), "assigned worktree branch changed") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath == "" || !strings.Contains(err.Error(), shellQuote(created.WorktreePath)) {
+		t.Fatalf("missing partial worktree inventory: created=%#v error=%v", created, err)
+	}
+}
+
+func TestCreateRevalidatesAssignedBranchTipBeforeRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == checkpointBeforeCommit {
+			id, _ := ParseID("foam/raced-tip")
+			repo.gitOutputAt(t, id.WorktreePath(manager.CoordinatorRoot), "commit", "--allow-empty", "-m", "test: advance assigned branch")
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "raced-tip"})
+	if err == nil || !strings.Contains(err.Error(), "assigned worktree tip changed") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath == "" || !strings.Contains(err.Error(), shellQuote(created.WorktreePath)) {
+		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
 	}
 }
 

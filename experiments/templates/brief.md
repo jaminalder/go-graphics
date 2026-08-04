@@ -49,6 +49,12 @@ Render the candidate with the same profile and seeds:
 
 Keep all generated renders under `{{.OutputPath}}`.
 
+## Favorites
+
+`favorites.json` is an array of selected renders. Each entry has `seed`
+(uint64), `label` (string), `image` (record-relative artifact path), and
+`notes` (string).
+
 ## Required deliverables
 
 - Focused implementation and tests for the permitted stage.

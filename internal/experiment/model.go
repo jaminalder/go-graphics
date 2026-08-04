@@ -112,6 +112,16 @@ type Source struct {
 	Commit string `json:"commit"`
 }
 
+// Favorite identifies one noteworthy render in favorites.json. Seed is the
+// render seed, label is a short name, image is its record-relative artifact
+// path, and notes explain why it was selected.
+type Favorite struct {
+	Seed  uint64 `json:"seed"`
+	Label string `json:"label"`
+	Image string `json:"image"`
+	Notes string `json:"notes"`
+}
+
 // Verification records the latest explicit verification run.
 type Verification struct {
 	CheckedAt *time.Time `json:"checked_at,omitempty"`
