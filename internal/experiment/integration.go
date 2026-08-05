@@ -198,8 +198,21 @@ func (m *Manager) prepareIntegrationLocked(ctx context.Context, id ID, opts Inte
 	if err != nil {
 		return created, resources, err
 	}
+	postCommitErr := m.revalidateIntegrationInputs(ctx, runner, created.State.BaseCommit, sources)
+	if postCommitErr != nil {
+		return created, resources, appliedCommitError(result, "refs/heads/"+integrationBranch, postCommitErr)
+	}
 	created.WorkerInstruction = integrationWorkerInstruction(id, created)
 	return created, resources, nil
+}
+
+func (m *Manager) revalidateIntegrationInputs(ctx context.Context, runner gitRunner, baseCommit string, sources []Source) error {
+	_, coordinatorErr := m.validateCoordinator(ctx, runner, baseCommit)
+	currentSources, sourceErr := m.resolveIntegrationSources(ctx, integrationIDsFromSources(sources))
+	if sourceErr == nil && !equalSources(currentSources, sources) {
+		sourceErr = fmt.Errorf("source tips changed after record commit: got %#v, want %#v", currentSources, sources)
+	}
+	return errors.Join(coordinatorErr, sourceErr)
 }
 
 func integrationTemplateData(state State) briefData {

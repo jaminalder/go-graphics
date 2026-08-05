@@ -2,6 +2,7 @@ package experiment
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -177,6 +178,117 @@ func TestPrepareIntegrationRejectsNonAuthoritativeSources(t *testing.T) {
 	}
 }
 
+func TestPrepareIntegrationReportsSourceMovementAfterRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	source, pinnedTip := createIntegrationSource(t, repo, manager, "moving-source")
+	target, _ := ParseID("foam/source-race")
+	sourceID, _ := ParseID(source.State.ID)
+	checkpointReached := false
+	locksHeld := false
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "after-record-ref-update" || repo.gitOutput(t, "branch", "--list", target.IntegrationBranch()) == "" {
+			return nil
+		}
+		checkpointReached = true
+		_, targetErr := os.Stat(filepath.Join(manager.CommonDir, "experiment-locks", target.Flat()+".lock"))
+		_, sourceErr := os.Stat(filepath.Join(manager.CommonDir, "experiment-locks", sourceID.Flat()+".lock"))
+		locksHeld = targetErr == nil && sourceErr == nil
+		repo.gitOutputAt(t, source.WorktreePath, "commit", "--allow-empty", "-m", "test: advance source during integration commit")
+		return nil
+	}
+
+	created, err := manager.PrepareIntegration(context.Background(), integrationTestOptions(target.String(), source.State.ID))
+	if !checkpointReached {
+		t.Fatal("final integration record checkpoint was not reached")
+	}
+	if !locksHeld {
+		t.Fatal("integration source and target locks were not held during final record commit")
+	}
+	if err == nil || !strings.Contains(err.Error(), "source tips changed after record commit") {
+		t.Fatalf("error = %v, want post-commit source movement", err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != created.RecordCommit {
+		t.Fatalf("applied error = %#v, created commit = %q, error = %v", applied, created.RecordCommit, err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", target.IntegrationBranch()); got != created.RecordCommit {
+		t.Fatalf("retained integration tip = %s, want applied record commit %s", got, created.RecordCommit)
+	}
+	if created.State.Sources[0].Commit != pinnedTip {
+		t.Fatalf("recorded source pin = %s, want original %s", created.State.Sources[0].Commit, pinnedTip)
+	}
+	for _, id := range []ID{target, sourceID} {
+		if _, statErr := os.Stat(filepath.Join(manager.CommonDir, "experiment-locks", id.Flat()+".lock")); !os.IsNotExist(statErr) {
+			t.Errorf("lock for %s remains after failed preparation: %v", id.String(), statErr)
+		}
+	}
+}
+
+func TestPrepareIntegrationReportsMasterMovementAfterRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	source, _ := createIntegrationSource(t, repo, manager, "master-race-source")
+	target, _ := ParseID("foam/master-race")
+	originalMaster := repo.gitOutput(t, "rev-parse", "master")
+	checkpointReached := false
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "after-record-ref-update" || repo.gitOutput(t, "branch", "--list", target.IntegrationBranch()) == "" {
+			return nil
+		}
+		checkpointReached = true
+		repo.git(t, "commit", "--allow-empty", "-m", "test: advance master during integration commit")
+		return nil
+	}
+
+	created, err := manager.PrepareIntegration(context.Background(), integrationTestOptions(target.String(), source.State.ID))
+	if !checkpointReached {
+		t.Fatal("final integration record checkpoint was not reached")
+	}
+	if err == nil || !strings.Contains(err.Error(), "coordinator HEAD changed") {
+		t.Fatalf("error = %v, want post-commit master movement", err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != created.RecordCommit {
+		t.Fatalf("applied error = %#v, created commit = %q, error = %v", applied, created.RecordCommit, err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", target.IntegrationBranch()+"^"); got != originalMaster {
+		t.Fatalf("retained integration parent = %s, want pinned master %s", got, originalMaster)
+	}
+}
+
+func TestPrepareIntegrationRetainsRecoverableResourcesWhenFinalCommitFails(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	source, _ := createIntegrationSource(t, repo, manager, "commit-failure-source")
+	target, _ := ParseID("foam/commit-failure")
+	checkpointReached := false
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "before-record-ref-update" || repo.gitOutput(t, "branch", "--list", target.IntegrationBranch()) == "" {
+			return nil
+		}
+		checkpointReached = true
+		return errors.New("injected final integration commit failure")
+	}
+
+	created, err := manager.PrepareIntegration(context.Background(), integrationTestOptions(target.String(), source.State.ID))
+	if !checkpointReached {
+		t.Fatal("final integration commit checkpoint was not reached")
+	}
+	if err == nil || !strings.Contains(err.Error(), "injected final integration commit failure") || !strings.Contains(err.Error(), "created branch=true") || !strings.Contains(err.Error(), "worktree=true") {
+		t.Fatalf("partial failure error = %v", err)
+	}
+	if created.RecordCommit == "" {
+		t.Fatal("generated but unapplied record commit was not reported")
+	}
+	if got := repo.gitOutput(t, "rev-parse", target.IntegrationBranch()); got != created.State.BaseCommit {
+		t.Fatalf("integration branch = %s, want unchanged base %s", got, created.State.BaseCommit)
+	}
+	if _, statErr := os.Stat(created.WorktreePath); statErr != nil {
+		t.Fatalf("recoverable worktree was not retained: %v", statErr)
+	}
+}
+
 func createIntegrationSource(t *testing.T, repo testRepo, manager *Manager, name string) (Created, string) {
 	t.Helper()
 	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: name})
@@ -190,6 +302,16 @@ func createIntegrationSource(t *testing.T, repo testRepo, manager *Manager, name
 	repo.gitOutputAt(t, created.WorktreePath, "add", filepath.Base(path))
 	repo.gitOutputAt(t, created.WorktreePath, "commit", "-m", "experiment: implement "+name)
 	return created, repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "HEAD")
+}
+
+func integrationTestOptions(name string, sources ...string) IntegrationOptions {
+	return IntegrationOptions{
+		Name:     name,
+		Sources:  sources,
+		Keep:     "selected behavior",
+		Reject:   "unselected behavior",
+		Preserve: "stable behavior",
+	}
 }
 
 func gitIsAncestor(t *testing.T, repo testRepo, ancestor, descendant string) bool {
