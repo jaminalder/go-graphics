@@ -3,8 +3,15 @@
 package warp
 
 import (
+	"fmt"
+	"image"
+	"math"
+
+	"github.com/jaminalder/go-graphics/internal/gradient"
 	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
+	"github.com/jaminalder/go-graphics/internal/opt"
+	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
 )
 
@@ -30,42 +37,72 @@ type settings struct {
 	warpStrength, nestedStrength float64
 	octaves                      int
 	mode                         mode
+	appearance                   appearance
 }
+
+type appearance uint8
+
+const (
+	appearanceGradient appearance = iota
+	appearanceStructure
+)
 
 // Sketch holds warp's public field controls. Use New for useful defaults.
 type Sketch struct {
 	Scale, Gain, Lacunarity      float64
 	WarpStrength, NestedStrength float64
 	Octaves                      int
+	warpName, appearanceName     string
 	fieldMode                    mode
+	appearance                   appearance
+	knobs                        *opt.Set
 }
 
 // New returns warp configured for a moderately folded nested field.
 func New() *Sketch {
-	return &Sketch{
+	s := &Sketch{
 		Scale:          2.2,
 		Gain:           0.5,
 		Lacunarity:     2,
 		WarpStrength:   2.2,
 		NestedStrength: 2.8,
 		Octaves:        5,
+		warpName:       "nested",
+		appearanceName: "gradient",
 		fieldMode:      modeNested,
+		appearance:     appearanceGradient,
 	}
+	s.declare()
+	return s
+}
+
+// Name implements sketch.Sketch.
+func (s *Sketch) Name() string { return "warp" }
+
+// Describe implements sketch.Sketch.
+func (s *Sketch) Describe() string {
+	return "flowing organic fields from nested fBM domain warps"
 }
 
 type plan struct {
-	set      settings
-	q        [2]*noise.Perlin
-	r        [2]*noise.Perlin
-	value    *noise.Perlin
-	activity *noise.Perlin
+	set       settings
+	q         [2]*noise.Perlin
+	r         [2]*noise.Perlin
+	value     *noise.Perlin
+	activity  *noise.Perlin
+	low, high gradient.SmoothHSL
 }
 
 type fieldSample struct {
 	value, qx, qy, rx, ry, activity float64
 }
 
-func (s *Sketch) plan(ctx sketch.Context) plan {
+func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
+	if len(ctx.Palette.Colors) < 3 {
+		return plan{}, fmt.Errorf("warp: palette %q needs at least 3 colors", ctx.Palette.Slug)
+	}
+	colors := palette.ByLuminance(ctx.Palette.Colors)
+	middle := colors[len(colors)/2]
 	return plan{
 		set: settings{
 			scale:          s.Scale,
@@ -75,12 +112,15 @@ func (s *Sketch) plan(ctx sketch.Context) plan {
 			nestedStrength: s.NestedStrength,
 			octaves:        s.Octaves,
 			mode:           s.fieldMode,
+			appearance:     s.appearance,
 		},
 		q:        [2]*noise.Perlin{noise.New(ctx.Seed ^ seedQX), noise.New(ctx.Seed ^ seedQY)},
 		r:        [2]*noise.Perlin{noise.New(ctx.Seed ^ seedRX), noise.New(ctx.Seed ^ seedRY)},
 		value:    noise.New(ctx.Seed ^ seedValue),
 		activity: noise.New(ctx.Seed ^ seedActivity),
-	}
+		low:      gradient.HSLBetween(colors[0], middle),
+		high:     gradient.HSLBetween(middle, colors[len(colors)-1]),
+	}, nil
 }
 
 func (p plan) fbm(field *noise.Perlin, x, y float64) float64 {
@@ -93,6 +133,35 @@ func (p plan) fbm(field *noise.Perlin, x, y float64) float64 {
 		amplitude *= p.set.gain
 	}
 	return sum / weight
+}
+
+// At maps one canvas coordinate through the field and selected appearance.
+func (p plan) At(u, v float64) palette.Color {
+	sample := p.sample(u, v)
+	tone := mathx.Smoothstep(-0.48, 0.48, sample.value)
+	if p.set.appearance == appearanceStructure {
+		shift := 0.0
+		if p.set.mode >= modeSingle {
+			shift += 0.13 * math.Tanh(2.8*(sample.qx-sample.qy))
+		}
+		if p.set.mode == modeNested {
+			shift += 0.11 * math.Tanh(2.8*(sample.rx+sample.ry))
+		}
+		tone = mathx.Clamp01(tone + shift)
+	}
+	if tone < 0.5 {
+		return p.low.At(tone * 2).Clamp()
+	}
+	return p.high.At((tone - 0.5) * 2).Clamp()
+}
+
+// Render implements sketch.Sketch.
+func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
+	p, err := s.plan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sketch.Raster(ctx, p.At), nil
 }
 
 func (p plan) sample(u, v float64) fieldSample {
