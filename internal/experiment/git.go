@@ -18,6 +18,10 @@ type gitRunner struct {
 }
 
 func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
+	return g.runInput(ctx, "", args...)
+}
+
+func (g gitRunner) runInput(ctx context.Context, input string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = g.dir
 	env := g.env
@@ -31,6 +35,7 @@ func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
 	if g.disableOptionalLocks {
 		cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0")
 	}
+	cmd.Stdin = strings.NewReader(input)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

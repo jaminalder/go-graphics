@@ -303,6 +303,109 @@ func TestArchiveRevalidatesCoordinatorImmediatelyBeforeRefUpdate(t *testing.T) {
 	}
 }
 
+func TestArchiveRevalidatesExperimentImmediatelyBeforeRefUpdate(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, testRepo, Created)
+		want   string
+	}{
+		{
+			name: "dirty worktree",
+			mutate: func(t *testing.T, _ testRepo, created Created) {
+				if err := os.WriteFile(filepath.Join(created.WorktreePath, "concurrent.txt"), []byte("dirty\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "dirty-worktree",
+		},
+		{
+			name: "retained input",
+			mutate: func(t *testing.T, _ testRepo, created Created) {
+				id := IDFromState(t, created.State)
+				path := filepath.Join(created.WorktreePath, filepath.FromSlash(id.RecordDir()), "result.md")
+				if err := os.WriteFile(path, []byte("concurrent result\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "dirty-worktree",
+		},
+		{
+			name: "contact sheet",
+			mutate: func(t *testing.T, _ testRepo, created Created) {
+				if err := os.WriteFile(filepath.Join(created.OutputPath, "contact-sheet.png"), []byte("concurrent sheet\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "changed before archive ref update",
+		},
+		{
+			name: "symbolic head",
+			mutate: func(t *testing.T, repo testRepo, created Created) {
+				repo.gitAt(t, created.WorktreePath, "branch", "concurrent-branch")
+				repo.gitAt(t, created.WorktreePath, "switch", "concurrent-branch")
+			},
+			want: "branch-mismatch",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo, manager, created := createArchiveableExperiment(t, "pre-ref-"+strings.ReplaceAll(test.name, " ", "-"))
+			id := IDFromState(t, created.State)
+			masterBefore := repo.gitOutput(t, "rev-parse", "master")
+			manager.createCheckpoint = func(name string) error {
+				if name == "before-archive-ref-update" {
+					test.mutate(t, repo, created)
+				}
+				return nil
+			}
+
+			_, err := manager.Archive(context.Background(), id.String())
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Archive error = %v, want %q", err, test.want)
+			}
+			if got := repo.gitOutput(t, "rev-parse", "master"); got != masterBefore {
+				t.Fatalf("master changed across experiment mutation: got %s, want %s", got, masterBefore)
+			}
+			if _, statErr := os.Stat(created.WorktreePath); statErr != nil {
+				t.Fatalf("experiment mutation removed worktree: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestArchiveAtomicallyVerifiesExperimentRefWhileAdvancingMaster(t *testing.T) {
+	repo, manager, created := createArchiveableExperiment(t, "atomic-refs")
+	id := IDFromState(t, created.State)
+	masterBefore := repo.gitOutput(t, "rev-parse", "master")
+	checkpointCalled := false
+	manager.createCheckpoint = func(name string) error {
+		if name != "before-archive-ref-transaction" {
+			return nil
+		}
+		checkpointCalled = true
+		if err := os.WriteFile(filepath.Join(created.WorktreePath, "concurrent.txt"), []byte("branch advance\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		repo.gitAt(t, created.WorktreePath, "add", "concurrent.txt")
+		repo.gitAt(t, created.WorktreePath, "commit", "-m", "test: advance experiment during archive")
+		return nil
+	}
+
+	_, err := manager.Archive(context.Background(), id.String())
+	if !checkpointCalled {
+		t.Fatal("archive did not reach ref transaction checkpoint")
+	}
+	if err == nil || !strings.Contains(err.Error(), "atomic archive ref transaction") {
+		t.Fatalf("Archive error = %v", err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", "master"); got != masterBefore {
+		t.Fatalf("master changed despite experiment ref race: got %s, want %s", got, masterBefore)
+	}
+	if _, statErr := os.Stat(created.WorktreePath); statErr != nil {
+		t.Fatalf("experiment ref race removed worktree: %v", statErr)
+	}
+}
+
 func TestArchiveRevalidatesAssignedBranchImmediatelyBeforeWorktreeRemoval(t *testing.T) {
 	repo, manager, created := createArchiveableExperiment(t, "worktree-race")
 	id := IDFromState(t, created.State)
@@ -377,6 +480,54 @@ func TestDiscardRefusesAnExistingNonDiscardArchive(t *testing.T) {
 	}
 	if _, err := manager.Discard(context.Background(), created.State.ID); err == nil || !strings.Contains(err.Error(), "not discarded") {
 		t.Fatalf("Discard error = %v", err)
+	}
+}
+
+func TestDiscardRecoversAppliedCommitAfterIndexSyncFailure(t *testing.T) {
+	repo, manager, created := createArchiveableExperiment(t, "discard-index-recovery")
+	id := IDFromState(t, created.State)
+	gitDir := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "--git-dir")
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(created.WorktreePath, gitDir)
+	}
+	indexLock := filepath.Join(gitDir, "index.lock")
+	manager.createCheckpoint = func(name string) error {
+		if name != "after-record-ref-update" {
+			return nil
+		}
+		return os.WriteFile(indexLock, []byte("held\n"), 0o644)
+	}
+
+	first, err := manager.Discard(context.Background(), id.String())
+	if err == nil || !strings.Contains(err.Error(), "index.lock") {
+		t.Fatalf("first Discard error = %v", err)
+	}
+	if first.RemainingWorktree != created.WorktreePath || first.RemainingBranch != created.State.Branch {
+		t.Fatalf("first discard recovery = %#v", first)
+	}
+	statePath := filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json"))
+	stateData := repo.gitOutput(t, "show", "refs/heads/"+created.State.Branch+":"+statePath)
+	state, decodeErr := decodeState(statePath, []byte(stateData))
+	if decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if state.Status != StatusDiscarded {
+		t.Fatalf("committed state = %s, want discarded", state.Status)
+	}
+	if err := os.Remove(indexLock); err != nil {
+		t.Fatal(err)
+	}
+	manager.createCheckpoint = nil
+
+	second, err := manager.Discard(context.Background(), id.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ArchiveCommit == "" || second.RemainingWorktree != "" || second.RemainingBranch != "" {
+		t.Fatalf("second discard = %#v", second)
+	}
+	if _, statErr := os.Stat(created.WorktreePath); !os.IsNotExist(statErr) {
+		t.Fatalf("worktree remains after retry: %v", statErr)
 	}
 }
 

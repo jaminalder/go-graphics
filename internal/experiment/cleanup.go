@@ -52,8 +52,9 @@ func (m *Manager) Discard(ctx context.Context, value string) (CleanupResult, err
 		return CleanupResult{}, err
 	}
 	return m.withCleanupLocks(ctx, id, "discard "+id.String(), func() (CleanupResult, error) {
-		if err := m.discardLocked(ctx, id); err != nil {
-			return CleanupResult{}, err
+		discardResult, err := m.discardLocked(ctx, id)
+		if err != nil {
+			return discardResult, err
 		}
 		return m.archiveLocked(ctx, id)
 	})
@@ -118,7 +119,7 @@ func (m *Manager) archiveLocked(ctx context.Context, id ID) (CleanupResult, erro
 			return CleanupResult{}, err
 		}
 		paths := archiveRelativePaths(id, snapshot.files)
-		commitResult, commitErr := m.commitArchive(ctx, runner, id, snapshot.branch, paths, masterTip, snapshot.branchTip)
+		commitResult, commitErr := m.commitArchive(ctx, runner, id, snapshot, paths, masterTip)
 		archiveCommit = commitResult.Commit
 		if commitErr != nil {
 			if !commitResult.RefUpdated {
@@ -330,16 +331,16 @@ func archiveRelativePaths(id ID, files map[string][]byte) []string {
 	return paths
 }
 
-func (m *Manager) commitArchive(ctx context.Context, runner gitRunner, id ID, branch string, paths []string, masterParent, experimentParent string) (recordCommitResult, error) {
+func (m *Manager) commitArchive(ctx context.Context, runner gitRunner, id ID, snapshot cleanupSnapshot, paths []string, masterParent string) (recordCommitResult, error) {
 	if err := m.validateCoordinatorArchiveMutation(ctx, runner, masterParent, paths); err != nil {
 		return recordCommitResult{}, err
 	}
-	currentExperiment, err := resolveCommit(ctx, runner, "refs/heads/"+branch)
+	currentExperiment, err := resolveCommit(ctx, runner, "refs/heads/"+snapshot.branch)
 	if err != nil {
 		return recordCommitResult{}, err
 	}
-	if currentExperiment != experimentParent {
-		return recordCommitResult{}, fmt.Errorf("experiment branch changed before archive commit: got %s, want %s", currentExperiment, experimentParent)
+	if currentExperiment != snapshot.branchTip {
+		return recordCommitResult{}, fmt.Errorf("experiment branch changed before archive commit: got %s, want %s", currentExperiment, snapshot.branchTip)
 	}
 	index, err := os.CreateTemp("", "experiment-archive-index-*")
 	if err != nil {
@@ -371,17 +372,17 @@ func (m *Manager) commitArchive(ctx context.Context, runner gitRunner, id ID, br
 	if err != nil {
 		return recordCommitResult{}, err
 	}
-	commit, err := runner.run(ctx, "commit-tree", strings.TrimSpace(tree), "-p", masterParent, "-p", experimentParent, "-m", "experiment: archive "+id.String())
+	commit, err := runner.run(ctx, "commit-tree", strings.TrimSpace(tree), "-p", masterParent, "-p", snapshot.branchTip, "-m", "experiment: archive "+id.String())
 	if err != nil {
 		return recordCommitResult{}, err
 	}
 	result := recordCommitResult{Commit: strings.TrimSpace(commit)}
-	currentExperiment, err = resolveCommit(ctx, runner, "refs/heads/"+branch)
+	currentExperiment, err = resolveCommit(ctx, runner, "refs/heads/"+snapshot.branch)
 	if err != nil {
 		return result, err
 	}
-	if currentExperiment != experimentParent {
-		return result, fmt.Errorf("experiment branch changed before archive ref update: got %s, want %s", currentExperiment, experimentParent)
+	if currentExperiment != snapshot.branchTip {
+		return result, fmt.Errorf("experiment branch changed before archive ref update: got %s, want %s", currentExperiment, snapshot.branchTip)
 	}
 	if err := m.checkpoint("before-archive-ref-update"); err != nil {
 		return result, err
@@ -389,15 +390,18 @@ func (m *Manager) commitArchive(ctx context.Context, runner gitRunner, id ID, br
 	if err := m.validateCoordinatorArchiveMutation(ctx, runner, masterParent, paths); err != nil {
 		return result, err
 	}
-	currentExperiment, err = resolveCommit(ctx, runner, "refs/heads/"+branch)
-	if err != nil {
+	if err := m.revalidateExperimentSnapshot(ctx, snapshot, "archive ref update"); err != nil {
 		return result, err
 	}
-	if currentExperiment != experimentParent {
-		return result, fmt.Errorf("experiment branch changed immediately before archive ref update: got %s, want %s", currentExperiment, experimentParent)
+	if err := m.checkpoint("before-archive-ref-transaction"); err != nil {
+		return result, err
 	}
-	if _, err := runner.run(ctx, "update-ref", "refs/heads/master", result.Commit, masterParent); err != nil {
-		return result, fmt.Errorf("compare-and-swap master archive commit: %w", err)
+	transaction := fmt.Sprintf(
+		"start\nverify refs/heads/%s %s\nupdate refs/heads/master %s %s\nprepare\ncommit\n",
+		snapshot.branch, snapshot.branchTip, result.Commit, masterParent,
+	)
+	if _, err := runner.runInput(ctx, transaction, "update-ref", "--stdin"); err != nil {
+		return result, fmt.Errorf("atomic archive ref transaction: %w", err)
 	}
 	result.RefUpdated = true
 	if err := m.checkpoint("after-archive-ref-update"); err != nil {
@@ -410,6 +414,17 @@ func (m *Manager) commitArchive(ctx context.Context, runner gitRunner, id ID, br
 		return result, appliedCommitError(result, "refs/heads/master", err)
 	}
 	return result, nil
+}
+
+func (m *Manager) revalidateExperimentSnapshot(ctx context.Context, expected cleanupSnapshot, operation string) error {
+	current, active, err := m.cleanupSnapshot(ctx, expected.id)
+	if err != nil {
+		return err
+	}
+	if !active || current.branch != expected.branch || current.branchTip != expected.branchTip || current.worktreePath != expected.worktreePath || !equalRetainedFiles(current.files, expected.files) {
+		return fmt.Errorf("experiment %s changed before %s", expected.id.String(), operation)
+	}
+	return nil
 }
 
 func (m *Manager) validateCoordinatorArchiveMutation(ctx context.Context, runner gitRunner, expectedHEAD string, allowedPaths []string) error {
@@ -571,47 +586,50 @@ func requireExpectedWorktreeAbsent(path string) error {
 	return nil
 }
 
-func (m *Manager) discardLocked(ctx context.Context, id ID) error {
+func (m *Manager) discardLocked(ctx context.Context, id ID) (CleanupResult, error) {
 	runner := gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}
 	masterTip, err := m.validateCoordinator(ctx, runner, "")
 	if err != nil {
-		return err
+		return CleanupResult{}, err
+	}
+	if err := m.recoverAppliedDiscardIndex(ctx, id); err != nil {
+		return discardRecoveryResult(id, id.WorktreePath(m.CoordinatorRoot), ""), err
 	}
 	snapshot, active, err := m.cleanupSnapshot(ctx, id)
 	if err != nil {
-		return err
+		return CleanupResult{}, err
 	}
 	if !active {
 		archiveFiles, archiveExists, archiveErr := readArchiveFiles(filepath.Join(m.CoordinatorRoot, filepath.FromSlash(id.ArchiveDir())), id)
 		if archiveErr != nil {
-			return archiveErr
+			return CleanupResult{}, archiveErr
 		}
 		if archiveExists {
 			state, decodeErr := decodeState(id.ArchiveDir()+"/state.json", archiveFiles["state.json"])
 			if decodeErr != nil {
-				return decodeErr
+				return CleanupResult{}, decodeErr
 			}
 			if state.Status != StatusDiscarded {
-				return fmt.Errorf("existing archive %s is not discarded; status is %s", id.ArchiveDir(), state.Status)
+				return CleanupResult{}, fmt.Errorf("existing archive %s is not discarded; status is %s", id.ArchiveDir(), state.Status)
 			}
-			return nil
+			return CleanupResult{}, nil
 		}
-		return fmt.Errorf("experiment %s has no active resources", id.String())
+		return CleanupResult{}, fmt.Errorf("experiment %s has no active resources", id.String())
 	}
 	if snapshot.state.Status == StatusDiscarded {
-		return nil
+		return CleanupResult{}, nil
 	}
 	if !CanTransition(snapshot.state.Status, StatusDiscarded) {
-		return fmt.Errorf("invalid transition from %s to %s; allowed: %v", snapshot.state.Status, StatusDiscarded, AllowedTransitions(snapshot.state.Status))
+		return CleanupResult{}, fmt.Errorf("invalid transition from %s to %s; allowed: %v", snapshot.state.Status, StatusDiscarded, AllowedTransitions(snapshot.state.Status))
 	}
 	archivePath := filepath.Join(m.CoordinatorRoot, filepath.FromSlash(id.ArchiveDir()))
 	if _, archiveExists, err := readArchiveFiles(archivePath, id); err != nil {
-		return err
+		return CleanupResult{}, err
 	} else if archiveExists {
-		return fmt.Errorf("existing archive %s differs from requested discarded state", id.ArchiveDir())
+		return CleanupResult{}, fmt.Errorf("existing archive %s differs from requested discarded state", id.ArchiveDir())
 	}
 	if err := m.revalidateCleanupSnapshot(ctx, runner, masterTip, snapshot); err != nil {
-		return err
+		return CleanupResult{}, err
 	}
 
 	recordDir := filepath.Join(snapshot.worktreePath, filepath.FromSlash(id.RecordDir()))
@@ -633,14 +651,14 @@ func (m *Manager) discardLocked(ctx context.Context, id ID) error {
 	state.Status = StatusDiscarded
 	state.UpdatedAt = discardedAt
 	if err := writeBytesAtomic(resultPath, newResult); err != nil {
-		return err
+		return CleanupResult{}, err
 	}
 	if err := writeJSONAtomic(statePath, state); err != nil {
-		return errors.Join(err, restoreIfUnchanged(resultPath, newResult, oldResult))
+		return CleanupResult{}, errors.Join(err, restoreIfUnchanged(resultPath, newResult, oldResult))
 	}
 	newState, err := os.ReadFile(statePath)
 	if err != nil {
-		return errors.Join(err, restoreIfUnchanged(resultPath, newResult, oldResult), restoreIfUnchanged(statePath, nil, oldState))
+		return CleanupResult{}, errors.Join(err, restoreIfUnchanged(resultPath, newResult, oldResult), restoreIfUnchanged(statePath, nil, oldState))
 	}
 	paths := []string{
 		filepath.Join(id.RecordDir(), "result.md"),
@@ -649,27 +667,115 @@ func (m *Manager) discardLocked(ctx context.Context, id ID) error {
 	commitResult, commitErr := commitRecord(ctx, snapshot.worktreePath, id.RecordDir(), paths, "experiment: discard "+id.String(), snapshot.branch, snapshot.branchTip, m.gitEnv, m.createCheckpoint)
 	if commitErr != nil {
 		if commitResult.RefUpdated {
-			return appliedCommitError(commitResult, "refs/heads/"+snapshot.branch, commitErr)
+			result := discardRecoveryResult(id, snapshot.worktreePath, snapshot.branch)
+			return result, fmt.Errorf("discard commit %s was applied, but post-commit synchronization failed: %w; inspect and retry discard without force:\n%s", commitResult.Commit, appliedCommitError(commitResult, "refs/heads/"+snapshot.branch, commitErr), strings.Join(result.RemainingCommands, "\n"))
 		}
 		currentTip, resolveErr := resolveCommit(ctx, runner, "refs/heads/"+snapshot.branch)
 		if resolveErr != nil {
-			return errors.Join(commitErr, resolveErr)
+			return CleanupResult{}, errors.Join(commitErr, resolveErr)
 		}
 		if commitResult.Commit != "" && currentTip == commitResult.Commit {
 			if syncErr := updateCommittedIndexPaths(ctx, gitRunner{dir: snapshot.worktreePath, env: m.gitEnv}, currentTip, paths); syncErr != nil {
-				return appliedCommitError(recordCommitResult{Commit: currentTip, RefUpdated: true}, "refs/heads/"+snapshot.branch, errors.Join(commitErr, syncErr))
+				result := discardRecoveryResult(id, snapshot.worktreePath, snapshot.branch)
+				return result, appliedCommitError(recordCommitResult{Commit: currentTip, RefUpdated: true}, "refs/heads/"+snapshot.branch, errors.Join(commitErr, syncErr))
 			}
-			return nil
+			return CleanupResult{}, nil
 		}
 		if currentTip != snapshot.branchTip {
-			return errors.Join(commitErr, fmt.Errorf("experiment branch changed during discard; attempted result and state were preserved"))
+			return CleanupResult{}, errors.Join(commitErr, fmt.Errorf("experiment branch changed during discard; attempted result and state were preserved"))
 		}
-		return errors.Join(commitErr,
+		return CleanupResult{}, errors.Join(commitErr,
 			restoreIfUnchanged(resultPath, newResult, oldResult),
 			restoreIfUnchanged(statePath, newState, oldState),
 		)
 	}
+	return CleanupResult{}, nil
+}
+
+func (m *Manager) recoverAppliedDiscardIndex(ctx context.Context, id ID) error {
+	refs, _, err := m.discoverExperimentRefs(ctx)
+	if err != nil {
+		return err
+	}
+	var branch string
+	for _, ref := range refs {
+		if ref.id == id {
+			if branch != "" {
+				return nil
+			}
+			branch = ref.branch
+		}
+	}
+	if branch == "" {
+		return nil
+	}
+	worktreePath := id.WorktreePath(m.CoordinatorRoot)
+	runner := gitRunner{dir: worktreePath, env: m.gitEnv}
+	if err := requireSymbolicHEAD(ctx, runner, "refs/heads/"+branch); err != nil {
+		return nil
+	}
+	tip, err := resolveCommit(ctx, runner, "refs/heads/"+branch)
+	if err != nil {
+		return nil
+	}
+	stateRelative := filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json"))
+	stateData, err := runner.run(ctx, "show", tip+":"+stateRelative)
+	if err != nil {
+		return nil
+	}
+	state, err := decodeState(tip+":"+stateRelative, []byte(stateData))
+	if err != nil || state.ID != id.String() || state.Branch != branch || state.Status != StatusDiscarded {
+		return nil
+	}
+	paths := []string{filepath.ToSlash(filepath.Join(id.RecordDir(), "result.md")), stateRelative}
+	status, err := runner.run(ctx, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return nil
+	}
+	changed := statusPaths(status)
+	slices.Sort(changed)
+	slices.Sort(paths)
+	if !slices.Equal(changed, paths) {
+		return nil
+	}
+	for _, path := range paths {
+		committed, showErr := runner.run(ctx, "show", tip+":"+path)
+		if showErr != nil {
+			return nil
+		}
+		local, readErr := os.ReadFile(filepath.Join(worktreePath, filepath.FromSlash(path)))
+		if readErr != nil || !bytes.Equal(local, []byte(committed)) {
+			return nil
+		}
+	}
+	if err := updateCommittedIndexPaths(ctx, runner, tip, paths); err != nil {
+		return fmt.Errorf("synchronize already-applied discard commit %s: %w", tip, err)
+	}
 	return nil
+}
+
+func statusPaths(status string) []string {
+	var paths []string
+	for _, line := range strings.Split(strings.TrimSpace(status), "\n") {
+		if len(line) >= 4 {
+			paths = append(paths, strings.TrimSpace(line[3:]))
+		}
+	}
+	return paths
+}
+
+func discardRecoveryResult(id ID, worktree, branch string) CleanupResult {
+	if branch == "" {
+		branch = id.ExperimentBranch()
+	}
+	return CleanupResult{
+		RemainingWorktree: worktree,
+		RemainingBranch:   branch,
+		RemainingCommands: []string{
+			"git -C " + shellQuote(worktree) + " status --short",
+			"git show " + shellQuote("refs/heads/"+branch+":"+filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json"))),
+		},
+	}
 }
 
 func restoreIfUnchanged(path string, written, old []byte) error {
