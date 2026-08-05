@@ -30,6 +30,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/shallows"
 	"github.com/jaminalder/go-graphics/internal/sketch/shoal"
 	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
+	"github.com/jaminalder/go-graphics/internal/sketch/warp"
 )
 
 func registry() *sketch.Registry {
@@ -47,6 +48,7 @@ func registry() *sketch.Registry {
 		shallows.New(),
 		shoal.New(),
 		tapestry.New(),
+		warp.New(),
 	)
 }
 

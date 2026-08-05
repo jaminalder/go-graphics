@@ -13,6 +13,8 @@ import (
 
 var fixedSeeds = []uint64{1, 2, 3, 5, 8, 13, 21, 34}
 
+var update = flag.Bool("update", false, "regenerate golden files")
+
 func testCtx(t testing.TB, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("kandinsky-soft-pressure")
@@ -223,6 +225,11 @@ func TestRejectsTooSmallPalette(t *testing.T) {
 	if _, err := configured(t).Render(ctx); err == nil {
 		t.Error("expected error for palette with fewer than three colors")
 	}
+}
+
+func TestGolden(t *testing.T) {
+	got := sketchtest.RenderNRGBA(t, New(), testCtx(t, 13))
+	sketchtest.Golden(t, got, "testdata/warp_seed13_64.png", *update)
 }
 
 var benchmarkSample fieldSample
