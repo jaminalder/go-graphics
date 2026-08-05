@@ -257,6 +257,41 @@ func TestPrepareIntegrationReportsMasterMovementAfterRecordCommit(t *testing.T) 
 	}
 }
 
+func TestPrepareIntegrationReportsTargetRefMovementAfterRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	source, _ := createIntegrationSource(t, repo, manager, "target-race-source")
+	target, _ := ParseID("foam/target-race")
+	checkpointReached := false
+	competingCommit := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "after-record-ref-update" || repo.gitOutput(t, "branch", "--list", target.IntegrationBranch()) == "" {
+			return nil
+		}
+		checkpointReached = true
+		applied := repo.gitOutput(t, "rev-parse", target.IntegrationBranch())
+		tree := repo.gitOutput(t, "rev-parse", applied+"^{tree}")
+		competingCommit = repo.gitOutput(t, "commit-tree", tree, "-p", applied, "-m", "test: advance integration ref after record commit")
+		repo.gitOutput(t, "update-ref", "refs/heads/"+target.IntegrationBranch(), competingCommit, applied)
+		return nil
+	}
+
+	created, err := manager.PrepareIntegration(context.Background(), integrationTestOptions(target.String(), source.State.ID))
+	if !checkpointReached || competingCommit == "" {
+		t.Fatal("final integration record checkpoint was not reached")
+	}
+	if err == nil || !strings.Contains(err.Error(), "record branch changed after commit") || !strings.Contains(err.Error(), competingCommit) {
+		t.Fatalf("error = %v, want retained target ref movement", err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != created.RecordCommit {
+		t.Fatalf("applied error = %#v, created commit = %q, error = %v", applied, created.RecordCommit, err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", target.IntegrationBranch()); got != competingCommit {
+		t.Fatalf("integration ref = %s, want retained competing commit %s", got, competingCommit)
+	}
+}
+
 func TestPrepareIntegrationRetainsRecoverableResourcesWhenFinalCommitFails(t *testing.T) {
 	repo := newTestRepo(t)
 	manager := testManager(t, repo)

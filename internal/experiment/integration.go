@@ -198,6 +198,13 @@ func (m *Manager) prepareIntegrationLocked(ctx context.Context, id ID, opts Inte
 	if err != nil {
 		return created, resources, err
 	}
+	currentRecordTip, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+integrationBranch+"^{commit}")
+	if err != nil {
+		return created, resources, appliedCommitError(result, "refs/heads/"+integrationBranch, err)
+	}
+	if currentRecordTip = strings.TrimSpace(currentRecordTip); currentRecordTip != result.Commit {
+		return created, resources, appliedCommitError(result, "refs/heads/"+integrationBranch, fmt.Errorf("record branch changed after commit: got %s, want %s", currentRecordTip, result.Commit))
+	}
 	postCommitErr := m.revalidateIntegrationInputs(ctx, runner, created.State.BaseCommit, sources)
 	if postCommitErr != nil {
 		return created, resources, appliedCommitError(result, "refs/heads/"+integrationBranch, postCommitErr)
