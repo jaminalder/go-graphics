@@ -230,8 +230,16 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	if err := m.validateAssignedWorktree(ctx, runner, branch, worktreePath, baseCommit); err != nil {
 		return partial, resources, err
 	}
-	if err := commitRecord(ctx, worktreePath, recordDir, "experiment: create "+id.String(), m.gitEnv); err != nil {
+	recordCommit, err := commitRecord(ctx, worktreePath, recordDir, "experiment: create "+id.String(), branch, baseCommit, m.gitEnv, m.createCheckpoint)
+	if err != nil {
 		return partial, resources, err
+	}
+	currentRecordTip, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+branch+"^{commit}")
+	if err != nil {
+		return partial, resources, err
+	}
+	if currentRecordTip = strings.TrimSpace(currentRecordTip); currentRecordTip != recordCommit {
+		return partial, resources, fmt.Errorf("record branch changed after commit: got %s, want %s", currentRecordTip, recordCommit)
 	}
 	if err := m.checkpoint(checkpointAfterCommit); err != nil {
 		return partial, resources, err
@@ -545,7 +553,9 @@ func createFailure(id ID, resources createResources, cause error) error {
 		commands = append(commands, "git worktree remove "+shellQuote(resources.worktreePath))
 	}
 	if resources.branchCreated {
-		commands = append(commands, "git branch -d "+shellQuote(resources.branch))
+		commands = append(commands, "git log --oneline --decorate "+shellQuote(resources.branch))
+		commands = append(commands, "git branch --contains "+shellQuote(resources.branch))
+		commands = append(commands, "# branch is retained because it may be unmerged; preserve or merge it first, and perform branch cleanup manually only after explicit approval")
 	}
 	return fmt.Errorf("create experiment %s: %w; created branch=%t %s, worktree=%t %s; inspect and recover without force:\n%s", id.String(), cause, resources.branchCreated, shellQuote(resources.branch), resources.worktreeCreated, shellQuote(resources.worktreePath), strings.Join(commands, "\n"))
 }

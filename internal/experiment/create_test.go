@@ -324,7 +324,8 @@ func TestCreateRejectsThirdActiveWriter(t *testing.T) {
 		if err := writeJSONAtomic(filepath.Join(filepath.Dir(created.BriefPath), "state.json"), created.State); err != nil {
 			t.Fatal(err)
 		}
-		if err := commitRecord(context.Background(), created.WorktreePath, filepath.Join("experiments", "active", "foam--"+name), "experiment: start foam/"+name, repo.gitEnv); err != nil {
+		parent := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "HEAD")
+		if _, err := commitRecord(context.Background(), created.WorktreePath, filepath.Join("experiments", "active", "foam--"+name), "experiment: start foam/"+name, created.State.Branch, parent, repo.gitEnv, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -374,7 +375,8 @@ func TestCreateChildRejectsParentWithMismatchedState(t *testing.T) {
 	if err := writeJSONAtomic(filepath.Join(filepath.Dir(parent.BriefPath), "state.json"), parent.State); err != nil {
 		t.Fatal(err)
 	}
-	if err := commitRecord(context.Background(), parent.WorktreePath, filepath.Join("experiments", "active", "foam--parent"), "experiment: corrupt fixture", repo.gitEnv); err != nil {
+	parentTip := repo.gitOutputAt(t, parent.WorktreePath, "rev-parse", "HEAD")
+	if _, err := commitRecord(context.Background(), parent.WorktreePath, filepath.Join("experiments", "active", "foam--parent"), "experiment: corrupt fixture", "exp/foam/parent", parentTip, repo.gitEnv, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -397,7 +399,8 @@ func TestCreateCountsCommittedWriterStateWhenWorktreeRecordIsMissing(t *testing.
 		if err := writeJSONAtomic(statePath, created.State); err != nil {
 			t.Fatal(err)
 		}
-		if err := commitRecord(context.Background(), created.WorktreePath, filepath.Join("experiments", "active", "foam--"+name), "experiment: start foam/"+name, repo.gitEnv); err != nil {
+		parent := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "HEAD")
+		if _, err := commitRecord(context.Background(), created.WorktreePath, filepath.Join("experiments", "active", "foam--"+name), "experiment: start foam/"+name, created.State.Branch, parent, repo.gitEnv, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Remove(statePath); err != nil {
@@ -450,6 +453,50 @@ func TestWriteJSONAtomicUsesIndentedNewlineTerminatedMode0644File(t *testing.T) 
 	}
 }
 
+func TestWriteJSONAtomicReplacesExistingFileOnSupportedFilesystem(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.json")
+	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONAtomic(path, map[string]string{"value": "new"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "{\n  \"value\": \"new\"\n}\n"; got != want {
+		t.Fatalf("replacement JSON = %q, want %q", got, want)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("replacement mode = %o, want 644", got)
+	}
+}
+
+func TestWriteJSONAtomicPreservesExistingFileWhenAtomicReplaceFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.json")
+	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := writeJSONAtomicWithRename(path, map[string]string{"value": "new"}, func(_, _ string) error {
+		return errors.New("injected rename failure")
+	})
+	if err == nil || !strings.Contains(err.Error(), "same-directory atomic replacement is unsupported or failed") {
+		t.Fatalf("error = %v", err)
+	}
+	data, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "old\n" {
+		t.Fatalf("existing destination changed to %q", data)
+	}
+}
+
 func TestShellQuoteProducesSafePOSIXSingleWord(t *testing.T) {
 	tests := map[string]string{
 		"":                  "''",
@@ -480,11 +527,18 @@ func TestCreateFailureShellQuotesEveryDynamicRecoveryArgument(t *testing.T) {
 		"git branch --list " + shellQuote(resources.branch),
 		"git -C " + shellQuote(resources.worktreePath) + " status --short",
 		"git worktree remove " + shellQuote(resources.worktreePath),
-		"git branch -d " + shellQuote(resources.branch),
+		"git log --oneline --decorate " + shellQuote(resources.branch),
+		"git branch --contains " + shellQuote(resources.branch),
 	} {
 		if !strings.Contains(got, command) {
 			t.Errorf("recovery error does not contain safely quoted command %q:\n%s", command, got)
 		}
+	}
+	if strings.Contains(got, "git branch -d") || strings.Contains(got, "git branch -D") {
+		t.Fatalf("recovery promises branch deletion without preservation approval:\n%s", got)
+	}
+	if !strings.Contains(got, "branch is retained because it may be unmerged") || !strings.Contains(got, "only after explicit approval") {
+		t.Fatalf("recovery does not explain retained branch:\n%s", got)
 	}
 }
 
@@ -618,7 +672,7 @@ func TestCreateRevalidatesPathImmediatelyBeforeWorktreeMutation(t *testing.T) {
 	if created.WorktreePath != path {
 		t.Fatalf("worktree inventory path = %q, want %q", created.WorktreePath, path)
 	}
-	for _, fragment := range []string{"created branch=true 'exp/foam/raced-path'", "git worktree list --porcelain", "git branch -d 'exp/foam/raced-path'"} {
+	for _, fragment := range []string{"created branch=true 'exp/foam/raced-path'", "git worktree list --porcelain", "git branch --contains 'exp/foam/raced-path'"} {
 		if !strings.Contains(err.Error(), fragment) {
 			t.Errorf("error does not contain %q:\n%s", fragment, err)
 		}
@@ -705,7 +759,7 @@ func TestCreateReportsBranchCreatedWhenCheckpointFailsBeforeWorktree(t *testing.
 		"injected checkpoint failure",
 		"created branch=true 'exp/foam/partial-branch'",
 		"worktree=false " + shellQuote(wantPath),
-		"git branch -d 'exp/foam/partial-branch'",
+		"git branch --contains 'exp/foam/partial-branch'",
 	} {
 		if !strings.Contains(err.Error(), fragment) {
 			t.Errorf("error does not contain %q:\n%s", fragment, err)
@@ -836,6 +890,108 @@ func TestCreateRevalidatesAssignedBranchTipBeforeRecordCommit(t *testing.T) {
 	}
 	if created.WorktreePath == "" || !strings.Contains(err.Error(), shellQuote(created.WorktreePath)) {
 		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+	}
+}
+
+func TestCreateCommitsOnlyIntendedBranchWhenHEADSwitchesInsideRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	original := repo.gitOutput(t, "rev-parse", "HEAD")
+	repo.git(t, "branch", "human-branch")
+	id, _ := ParseID("foam/commit-branch-race")
+	worktree := id.WorktreePath(manager.CoordinatorRoot)
+	checkpointReached := false
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == "during-record-commit" {
+			checkpointReached = true
+			repo.gitOutputAt(t, worktree, "symbolic-ref", "HEAD", "refs/heads/human-branch")
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "commit-branch-race"})
+	if !checkpointReached {
+		t.Fatal("record commit checkpoint was not reached")
+	}
+	repo.gitOutputAt(t, worktree, "symbolic-ref", "HEAD", "refs/heads/"+id.ExperimentBranch())
+	if err == nil || !strings.Contains(err.Error(), "record worktree HEAD changed") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath != worktree || !strings.Contains(err.Error(), "worktree=true") {
+		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", "human-branch"); got != original {
+		t.Fatalf("unrelated branch advanced to %s, want %s", got, original)
+	}
+	if got := repo.gitOutput(t, "log", "-1", "--format=%s", id.ExperimentBranch()); got != "experiment: create "+id.String() {
+		t.Fatalf("experiment commit message = %q", got)
+	}
+}
+
+func TestCreateCommitsIntendedBranchButFailsWhenHEADDetachesInsideRecordCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	original := repo.gitOutput(t, "rev-parse", "HEAD")
+	id, _ := ParseID("foam/commit-detach-race")
+	worktree := id.WorktreePath(manager.CoordinatorRoot)
+	checkpointReached := false
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == "during-record-commit" {
+			checkpointReached = true
+			repo.gitOutputAt(t, worktree, "update-ref", "--no-deref", "HEAD", original)
+		}
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "commit-detach-race"})
+	if !checkpointReached {
+		t.Fatal("record commit checkpoint was not reached")
+	}
+	repo.gitOutputAt(t, worktree, "symbolic-ref", "HEAD", "refs/heads/"+id.ExperimentBranch())
+	if err == nil || !strings.Contains(err.Error(), "record worktree HEAD changed") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath != worktree || !strings.Contains(err.Error(), "worktree=true") {
+		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+	}
+	if got := repo.gitOutput(t, "log", "-1", "--format=%s", id.ExperimentBranch()); got != "experiment: create "+id.String() {
+		t.Fatalf("experiment commit message = %q", got)
+	}
+}
+
+func TestCreateDoesNotOverwriteConcurrentExperimentBranchAdvance(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	id, _ := ParseID("foam/commit-ref-race")
+	branch := id.ExperimentBranch()
+	worktree := id.WorktreePath(manager.CoordinatorRoot)
+	advanced := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		parent := repo.gitOutputAt(t, worktree, "rev-parse", "HEAD")
+		tree := repo.gitOutputAt(t, worktree, "rev-parse", parent+"^{tree}")
+		advanced = repo.gitOutputAt(t, worktree, "commit-tree", tree, "-p", parent, "-m", "test: concurrent branch advance")
+		repo.gitOutputAt(t, worktree, "update-ref", "refs/heads/"+branch, advanced, parent)
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "commit-ref-race"})
+	if advanced == "" {
+		t.Fatal("record commit checkpoint was not reached")
+	}
+	if err == nil || !strings.Contains(err.Error(), "compare-and-swap record branch") {
+		t.Fatalf("error = %v", err)
+	}
+	if created.WorktreePath != worktree || !strings.Contains(err.Error(), "worktree=true") {
+		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", branch); got != advanced {
+		t.Fatalf("experiment branch = %s, want concurrent tip %s", got, advanced)
+	}
+	if got := repo.gitOutput(t, "log", "-1", "--format=%s", branch); got != "test: concurrent branch advance" {
+		t.Fatalf("experiment branch was overwritten; message = %q", got)
 	}
 }
 

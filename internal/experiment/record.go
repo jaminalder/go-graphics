@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -43,7 +44,14 @@ func decodeState(source string, data []byte) (State, error) {
 	return state, nil
 }
 
+// writeJSONAtomic requires same-directory rename to atomically replace an
+// existing destination. Filesystems or platforms without that guarantee
+// return an error and leave the destination untouched.
 func writeJSONAtomic(path string, value any) error {
+	return writeJSONAtomicWithRename(path, value, os.Rename)
+}
+
+func writeJSONAtomicWithRename(path string, value any, rename func(string, string) error) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal JSON for %q: %w", path, err)
@@ -75,8 +83,8 @@ func writeJSONAtomic(path string, value any) error {
 		return fmt.Errorf("close temporary JSON %q: %w", tempPath, err)
 	}
 	closed = true
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("replace JSON %q: %w", path, err)
+	if err := rename(tempPath, path); err != nil {
+		return fmt.Errorf("same-directory atomic replacement is unsupported or failed for JSON %q: %w", path, err)
 	}
 	return nil
 }
@@ -117,13 +125,58 @@ func renderTemplate(source, destination string, data any) error {
 	return nil
 }
 
-func commitRecord(ctx context.Context, worktree, recordDir, message string, env []string) error {
+func commitRecord(
+	ctx context.Context,
+	worktree, recordDir, message, expectedBranch, expectedParent string,
+	env []string,
+	checkpoint func(string) error,
+) (string, error) {
 	runner := gitRunner{dir: worktree, env: env}
-	if _, err := runner.run(ctx, "add", "--", filepath.ToSlash(recordDir)); err != nil {
-		return err
+	expectedRef := "refs/heads/" + expectedBranch
+	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
+		return "", err
 	}
-	if _, err := runner.run(ctx, "commit", "-m", message, "--", filepath.ToSlash(recordDir)); err != nil {
-		return err
+	parent, err := runner.run(ctx, "rev-parse", "--verify", expectedRef+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if parent = strings.TrimSpace(parent); parent != expectedParent {
+		return "", fmt.Errorf("record branch %q changed before commit: got %s, want %s", expectedBranch, parent, expectedParent)
+	}
+	if _, err := runner.run(ctx, "add", "--", filepath.ToSlash(recordDir)); err != nil {
+		return "", err
+	}
+	if checkpoint != nil {
+		if err := checkpoint("during-record-commit"); err != nil {
+			return "", err
+		}
+	}
+	tree, err := runner.run(ctx, "write-tree")
+	if err != nil {
+		return "", err
+	}
+	tree = strings.TrimSpace(tree)
+	commit, err := runner.run(ctx, "commit-tree", tree, "-p", expectedParent, "-m", message)
+	if err != nil {
+		return "", err
+	}
+	commit = strings.TrimSpace(commit)
+	if _, err := runner.run(ctx, "update-ref", expectedRef, commit, expectedParent); err != nil {
+		return "", fmt.Errorf("compare-and-swap record branch %q: %w", expectedBranch, err)
+	}
+	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
+		return commit, err
+	}
+	return commit, nil
+}
+
+func requireSymbolicHEAD(ctx context.Context, runner gitRunner, expectedRef string) error {
+	ref, err := runner.run(ctx, "symbolic-ref", "-q", "HEAD")
+	if err != nil {
+		return fmt.Errorf("record worktree HEAD changed: expected symbolic ref %q: %w", expectedRef, err)
+	}
+	if ref = strings.TrimSpace(ref); ref != expectedRef {
+		return fmt.Errorf("record worktree HEAD changed: got %q, want %q", ref, expectedRef)
 	}
 	return nil
 }
