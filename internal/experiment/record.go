@@ -44,11 +44,12 @@ func decodeState(source string, data []byte) (State, error) {
 	return state, nil
 }
 
-// writeJSONAtomic requires same-directory rename to atomically replace an
-// existing destination. Filesystems or platforms without that guarantee
-// return an error and leave the destination untouched.
+// writeJSONAtomic keeps its temporary file beside the destination. Replacement
+// uses the platform's replace primitive and depends on the destination
+// filesystem's atomic rename guarantees. Replacement errors leave the existing
+// destination untouched and are returned.
 func writeJSONAtomic(path string, value any) error {
-	return writeJSONAtomicWithRename(path, value, os.Rename)
+	return writeJSONAtomicWithRename(path, value, replaceFile)
 }
 
 func writeJSONAtomicWithRename(path string, value any, rename func(string, string) error) error {
@@ -84,7 +85,7 @@ func writeJSONAtomicWithRename(path string, value any, rename func(string, strin
 	}
 	closed = true
 	if err := rename(tempPath, path); err != nil {
-		return fmt.Errorf("same-directory atomic replacement is unsupported or failed for JSON %q: %w", path, err)
+		return fmt.Errorf("same-directory replacement failed for JSON %q; existing destination was preserved: %w", path, err)
 	}
 	return nil
 }
@@ -119,8 +120,8 @@ func renderTemplate(source, destination string, data any) error {
 		return fmt.Errorf("close rendered template %q: %w", tempPath, err)
 	}
 	closed = true
-	if err := os.Rename(tempPath, destination); err != nil {
-		return fmt.Errorf("replace rendered template %q: %w", destination, err)
+	if err := replaceFile(tempPath, destination); err != nil {
+		return fmt.Errorf("same-directory replacement failed for rendered template %q; existing destination was preserved: %w", destination, err)
 	}
 	return nil
 }
@@ -143,7 +144,24 @@ func commitRecord(
 	if parent = strings.TrimSpace(parent); parent != expectedParent {
 		return "", fmt.Errorf("record branch %q changed before commit: got %s, want %s", expectedBranch, parent, expectedParent)
 	}
-	if _, err := runner.run(ctx, "add", "--", filepath.ToSlash(recordDir)); err != nil {
+	index, err := os.CreateTemp("", "experiment-index-*")
+	if err != nil {
+		return "", fmt.Errorf("create isolated record index: %w", err)
+	}
+	indexPath := index.Name()
+	if err := index.Close(); err != nil {
+		_ = os.Remove(indexPath)
+		return "", fmt.Errorf("close isolated record index placeholder: %w", err)
+	}
+	if err := os.Remove(indexPath); err != nil {
+		return "", fmt.Errorf("prepare absent isolated record index %q: %w", indexPath, err)
+	}
+	defer func() { _ = os.Remove(indexPath) }()
+	indexRunner := gitRunner{dir: worktree, env: env, indexFile: indexPath}
+	if _, err := indexRunner.run(ctx, "read-tree", expectedParent); err != nil {
+		return "", err
+	}
+	if _, err := indexRunner.run(ctx, "add", "--", filepath.ToSlash(recordDir)); err != nil {
 		return "", err
 	}
 	if checkpoint != nil {
@@ -151,7 +169,7 @@ func commitRecord(
 			return "", err
 		}
 	}
-	tree, err := runner.run(ctx, "write-tree")
+	tree, err := indexRunner.run(ctx, "write-tree")
 	if err != nil {
 		return "", err
 	}

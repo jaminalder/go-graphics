@@ -477,6 +477,35 @@ func TestWriteJSONAtomicReplacesExistingFileOnSupportedFilesystem(t *testing.T) 
 	}
 }
 
+func TestRenderTemplateReplacesExistingFileOnSupportedFilesystem(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "source.md")
+	destination := filepath.Join(root, "result.md")
+	if err := os.WriteFile(source, []byte("hello {{.Name}}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderTemplate(source, destination, struct{ Name string }{Name: "world"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "hello world\n" {
+		t.Fatalf("rendered replacement = %q", data)
+	}
+	info, err := os.Stat(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("replacement mode = %o, want 644", got)
+	}
+}
+
 func TestWriteJSONAtomicPreservesExistingFileWhenAtomicReplaceFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "record.json")
 	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
@@ -485,7 +514,7 @@ func TestWriteJSONAtomicPreservesExistingFileWhenAtomicReplaceFails(t *testing.T
 	err := writeJSONAtomicWithRename(path, map[string]string{"value": "new"}, func(_, _ string) error {
 		return errors.New("injected rename failure")
 	})
-	if err == nil || !strings.Contains(err.Error(), "same-directory atomic replacement is unsupported or failed") {
+	if err == nil || !strings.Contains(err.Error(), "same-directory replacement failed") || !strings.Contains(err.Error(), "existing destination was preserved") {
 		t.Fatalf("error = %v", err)
 	}
 	data, readErr := os.ReadFile(path)
@@ -992,6 +1021,51 @@ func TestCreateDoesNotOverwriteConcurrentExperimentBranchAdvance(t *testing.T) {
 	}
 	if got := repo.gitOutput(t, "log", "-1", "--format=%s", branch); got != "test: concurrent branch advance" {
 		t.Fatalf("experiment branch was overwritten; message = %q", got)
+	}
+}
+
+func TestCreateRecordCommitExcludesConcurrentRealIndexChanges(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	id, _ := ParseID("foam/isolated-index")
+	branch := id.ExperimentBranch()
+	worktree := id.WorktreePath(manager.CoordinatorRoot)
+	expectedParent := repo.gitOutput(t, "rev-parse", "HEAD")
+	realIndexTree := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		if err := os.WriteFile(filepath.Join(worktree, "user-staged.txt"), []byte("user work\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		repo.gitOutputAt(t, worktree, "add", "user-staged.txt")
+		realIndexTree = repo.gitOutputAt(t, worktree, "write-tree")
+		return nil
+	}
+
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "isolated-index"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if realIndexTree == "" {
+		t.Fatal("record commit checkpoint was not reached")
+	}
+	if got := repo.gitOutputAt(t, worktree, "write-tree"); got != realIndexTree {
+		t.Fatalf("real index tree changed to %s, want %s", got, realIndexTree)
+	}
+	if got := repo.gitOutputAt(t, worktree, "diff", "--cached", "--name-only", expectedParent); got != "user-staged.txt" {
+		t.Fatalf("real staged paths = %q, want only user-staged.txt", got)
+	}
+	commitPaths := strings.Fields(repo.gitOutput(t, "diff-tree", "--no-commit-id", "--name-only", "-r", branch))
+	if slices.Contains(commitPaths, "user-staged.txt") {
+		t.Fatalf("record commit contains concurrently staged user file: %v", commitPaths)
+	}
+	if !slices.Contains(commitPaths, filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json"))) {
+		t.Fatalf("record commit does not contain state.json: %v", commitPaths)
+	}
+	if created.State.ID != id.String() {
+		t.Fatalf("created state ID = %q", created.State.ID)
 	}
 }
 

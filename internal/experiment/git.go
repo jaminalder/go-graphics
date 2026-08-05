@@ -11,8 +11,9 @@ import (
 )
 
 type gitRunner struct {
-	dir string
-	env []string
+	dir       string
+	env       []string
+	indexFile string
 }
 
 func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
@@ -23,6 +24,9 @@ func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
 		env = os.Environ()
 	}
 	cmd.Env = sanitizedGitEnvironment(env)
+	if g.indexFile != "" {
+		cmd.Env = append(cmd.Env, "GIT_INDEX_FILE="+g.indexFile)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
