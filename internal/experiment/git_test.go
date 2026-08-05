@@ -32,7 +32,7 @@ func TestParseWorktreeListHandlesBranchesDetachedBareAndPrunableRecords(t *testi
 
 	want := []WorktreeInfo{
 		{Path: whitespacePath, HEAD: "0123456789abcdef", Branch: "refs/heads/master"},
-		{Path: "/repo/detached", HEAD: "fedcba9876543210", Prunable: true},
+		{Path: "/repo/detached", HEAD: "fedcba9876543210", Prunable: true, PrunableReason: "stale administrative files"},
 		{Path: "/repo/bare.git", Bare: true},
 	}
 	got, err := parseWorktreeList(input)
@@ -75,6 +75,22 @@ func TestGitRunnerPreservesContextCancellation(t *testing.T) {
 	_, err := (gitRunner{dir: t.TempDir()}).run(ctx, "version")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+func TestGitRunnerOptionalLocksModeOverridesAmbientValue(t *testing.T) {
+	repo := newTestRepo(t)
+	env := append(append([]string(nil), repo.gitEnv...), "GIT_OPTIONAL_LOCKS=1")
+	runner := gitRunner{dir: repo.root, env: env, disableOptionalLocks: true}
+
+	filtered := sanitizedGitEnvironment(runner.env)
+	for _, entry := range filtered {
+		if strings.HasPrefix(entry, "GIT_OPTIONAL_LOCKS=") {
+			t.Fatalf("ambient optional-lock setting survived sanitization: %s", entry)
+		}
+	}
+	if !runner.disableOptionalLocks {
+		t.Fatal("runner optional-lock mode was not enabled")
 	}
 }
 

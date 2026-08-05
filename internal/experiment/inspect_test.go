@@ -1,12 +1,14 @@
 package experiment
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestListSortsExperimentsByIDWithoutDuplicates(t *testing.T) {
@@ -55,6 +57,55 @@ func TestShowReturnsExactStateAndPathReturnsAbsoluteAssignedWorktree(t *testing.
 	}
 }
 
+func TestInspectionDoesNotRefreshWorktreeIndex(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	manager.gitEnv = append(manager.gitEnv, "GIT_OPTIONAL_LOCKS=1")
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "read-only-index"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexPath := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	trackedPath := filepath.Join(created.WorktreePath, "README.md")
+	trackedInfo, err := os.Stat(trackedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshableTime := trackedInfo.ModTime().Add(2 * time.Second)
+	if err := os.Chtimes(trackedPath, refreshableTime, refreshableTime); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeInfo, err := os.Stat(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := manager.List(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Show(context.Background(), "foam/read-only-index"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Path(context.Background(), "foam/read-only-index"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterInfo, err := os.Stat(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) || !afterInfo.ModTime().Equal(beforeInfo.ModTime()) {
+		t.Fatalf("inspection refreshed index: bytes equal=%t, mtime before=%s after=%s", bytes.Equal(after, before), beforeInfo.ModTime(), afterInfo.ModTime())
+	}
+}
+
 func TestReconcileReportsRegisteredMissingDirectoryAsStaleWithoutRepair(t *testing.T) {
 	repo := newTestRepo(t)
 	manager := testManager(t, repo)
@@ -82,6 +133,37 @@ func TestReconcileReportsRegisteredMissingDirectoryAsStaleWithoutRepair(t *testi
 	}
 	if _, err := os.Stat(created.WorktreePath); !os.IsNotExist(err) {
 		t.Fatalf("Show recreated missing worktree: %v", err)
+	}
+}
+
+func TestReconcileTreatsPrunableMetadataAsStaleWithoutStatus(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "prunable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(created.WorktreePath, "dirty.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := ParseID("foam/prunable")
+	got, err := manager.reconcile(context.Background(), discoveredRef{id: id, branch: id.ExperimentBranch()}, []WorktreeInfo{{
+		Path:           created.WorktreePath,
+		Branch:         "refs/heads/" + id.ExperimentBranch(),
+		Prunable:       true,
+		PrunableReason: "gitdir file points to a missing location",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasDiagnostic(got, "stale-worktree-metadata") {
+		t.Fatalf("diagnostics = %#v, want stale-worktree-metadata", got.Diagnostics)
+	}
+	if hasDiagnostic(got, "dirty-worktree") {
+		t.Fatalf("prunable worktree was status-checked: %#v", got.Diagnostics)
+	}
+	if !strings.Contains(diagnosticMessage(got, "stale-worktree-metadata"), "gitdir file points") {
+		t.Fatalf("stale diagnostic omitted reason: %#v", got.Diagnostics)
 	}
 }
 
@@ -194,6 +276,28 @@ func TestShowRejectsAmbiguousExperimentAndIntegrationRefs(t *testing.T) {
 	}
 }
 
+func TestShowUsesFullyQualifiedBranchWhenTagHasSameShortName(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "tag-shadow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.git(t, "tag", "exp/foam/tag-shadow", "master")
+	if err := os.Rename(created.WorktreePath, created.WorktreePath+"-missing"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Rename(created.WorktreePath+"-missing", created.WorktreePath) })
+
+	got, err := manager.Show(context.Background(), "foam/tag-shadow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State.ID != "foam/tag-shadow" || hasDiagnostic(got, "missing-record") {
+		t.Fatalf("Show read tag instead of branch: %#v", got)
+	}
+}
+
 func TestListShowAndPathAreReadOnly(t *testing.T) {
 	repo := newTestRepo(t)
 	manager := testManager(t, repo)
@@ -229,6 +333,15 @@ func hasDiagnostic(experiment Experiment, code string) bool {
 	return slices.ContainsFunc(experiment.Diagnostics, func(diagnostic Diagnostic) bool {
 		return diagnostic.Code == code
 	})
+}
+
+func diagnosticMessage(experiment Experiment, code string) string {
+	for _, diagnostic := range experiment.Diagnostics {
+		if diagnostic.Code == code {
+			return diagnostic.Message
+		}
+	}
+	return ""
 }
 
 func repositorySnapshot(t *testing.T, repo testRepo) string {

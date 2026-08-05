@@ -49,7 +49,11 @@ func decodeState(source string, data []byte) (State, error) {
 // filesystem's atomic rename guarantees. Replacement errors leave the existing
 // destination untouched and are returned.
 func writeJSONAtomic(path string, value any) error {
-	return writeJSONAtomicWithRename(path, value, replaceFile)
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal JSON for %q: %w", path, err)
+	}
+	return writeBytesAtomicWithRename(path, append(data, '\n'), replaceFile)
 }
 
 func writeJSONAtomicWithRename(path string, value any, rename func(string, string) error) error {
@@ -57,8 +61,14 @@ func writeJSONAtomicWithRename(path string, value any, rename func(string, strin
 	if err != nil {
 		return fmt.Errorf("marshal JSON for %q: %w", path, err)
 	}
-	data = append(data, '\n')
+	return writeBytesAtomicWithRename(path, append(data, '\n'), rename)
+}
 
+func writeBytesAtomic(path string, data []byte) error {
+	return writeBytesAtomicWithRename(path, data, replaceFile)
+}
+
+func writeBytesAtomicWithRename(path string, data []byte, rename func(string, string) error) error {
 	temp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
 	if err != nil {
 		return fmt.Errorf("create temporary JSON beside %q: %w", path, err)

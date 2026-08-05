@@ -1,8 +1,10 @@
 package experiment
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +85,127 @@ func TestSetStateRejectsInvalidTransitionWithoutChangingFilesOrRef(t *testing.T)
 	}
 	if string(afterData) != string(beforeData) || repo.gitOutput(t, "rev-parse", created.State.Branch) != beforeTip {
 		t.Fatal("invalid transition changed state file or branch")
+	}
+}
+
+func TestSetStateRejectsKindThatContradictsBranchNamespace(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "wrong-kind"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	state := created.State
+	state.Kind = KindIntegration
+	if err := writeJSONAtomic(statePath, state); err != nil {
+		t.Fatal(err)
+	}
+	repo.gitOutputAt(t, created.WorktreePath, "add", filepath.ToSlash(filepath.Join("experiments", "active", "foam--wrong-kind", "state.json")))
+	repo.gitOutputAt(t, created.WorktreePath, "commit", "-m", "test: contradict branch kind")
+	before := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/wrong-kind")
+
+	if _, _, err := manager.SetState(context.Background(), "foam/wrong-kind", StatusRunning); err == nil || !strings.Contains(err.Error(), "kind") {
+		t.Fatalf("error = %v, want kind mismatch", err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/wrong-kind"); got != before {
+		t.Fatalf("branch changed to %s, want %s", got, before)
+	}
+}
+
+func TestSetStateRestoresOldFileWhenBranchAdvanceDefeatsCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "rollback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	oldState, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	advanced := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/rollback")
+		tree := repo.gitOutput(t, "rev-parse", parent+"^{tree}")
+		advanced = repo.gitOutput(t, "commit-tree", tree, "-p", parent, "-m", "test: concurrent branch advance")
+		repo.git(t, "update-ref", "refs/heads/exp/foam/rollback", advanced, parent)
+		return nil
+	}
+
+	if _, _, err := manager.SetState(context.Background(), "foam/rollback", StatusRunning); err == nil || !strings.Contains(err.Error(), "compare-and-swap") {
+		t.Fatalf("error = %v, want compare-and-swap failure", err)
+	}
+	if got := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/rollback"); got != advanced {
+		t.Fatalf("branch = %s, want concurrent advance %s", got, advanced)
+	}
+	after, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, oldState) {
+		t.Fatalf("state file was not restored\nold: %s\nafter: %s", oldState, after)
+	}
+	status := repo.gitOutputAt(t, created.WorktreePath, "status", "--porcelain")
+	if status != "" {
+		t.Fatalf("restored worktree is dirty: %s", status)
+	}
+}
+
+func TestSetStatePreservesHumanFileChangeWhenCommitFails(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "human-race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	humanContent := []byte("human content\n")
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/human-race")
+		tree := repo.gitOutput(t, "rev-parse", parent+"^{tree}")
+		advanced := repo.gitOutput(t, "commit-tree", tree, "-p", parent, "-m", "test: concurrent branch advance")
+		repo.git(t, "update-ref", "refs/heads/exp/foam/human-race", advanced, parent)
+		return os.WriteFile(statePath, humanContent, 0o644)
+	}
+
+	_, _, err = manager.SetState(context.Background(), "foam/human-race", StatusRunning)
+	if err == nil || !strings.Contains(err.Error(), "changed after state write") {
+		t.Fatalf("error = %v, want guarded rollback error", err)
+	}
+	after, readErr := os.ReadFile(statePath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(after, humanContent) {
+		t.Fatalf("human state content overwritten: %q", after)
+	}
+	if !errors.Is(err, errStateChangedDuringCommit) {
+		t.Fatalf("error = %v, want errStateChangedDuringCommit", err)
+	}
+}
+
+func TestSetStateUsesFullyQualifiedBranchWhenTagHasSameShortName(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	if _, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "state-tag-shadow"}); err != nil {
+		t.Fatal(err)
+	}
+	repo.git(t, "tag", "exp/foam/state-tag-shadow", "master")
+
+	state, _, err := manager.SetState(context.Background(), "foam/state-tag-shadow", StatusRunning)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != StatusRunning {
+		t.Fatalf("status = %s", state.Status)
 	}
 }
 

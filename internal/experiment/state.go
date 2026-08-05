@@ -1,6 +1,7 @@
 package experiment
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"time"
 )
+
+var errStateChangedDuringCommit = errors.New("state file changed after state write")
 
 // SetState validates and commits one lifecycle transition on its assigned branch.
 func (m *Manager) SetState(ctx context.Context, value string, target Status) (State, string, error) {
@@ -70,6 +73,9 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 	if !info.IsDir() {
 		return State{}, "", fmt.Errorf("assigned worktree path is not a directory: %s", expectedPath)
 	}
+	if assigned.Prunable {
+		return State{}, "", fmt.Errorf("assigned worktree has stale prunable metadata: %s", assigned.PrunableReason)
+	}
 	expectedRef := "refs/heads/" + branch
 	if assigned.Branch != expectedRef {
 		return State{}, "", fmt.Errorf("assigned worktree branch changed: got %q, want %q", assigned.Branch, expectedRef)
@@ -88,6 +94,12 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 	}
 	if state.Branch != branch {
 		return State{}, "", fmt.Errorf("state branch mismatch: got %q, want %q", state.Branch, branch)
+	}
+	if strings.HasPrefix(branch, "exp/") && state.Kind != KindExperiment {
+		return State{}, "", fmt.Errorf("state kind mismatch: branch %s requires %s, got %s", branch, KindExperiment, state.Kind)
+	}
+	if strings.HasPrefix(branch, "integrate/") && state.Kind != KindIntegration {
+		return State{}, "", fmt.Errorf("state kind mismatch: branch %s requires %s, got %s", branch, KindIntegration, state.Kind)
 	}
 	stateWorktree := filepath.Clean(filepath.Join(m.CoordinatorRoot, filepath.FromSlash(state.Worktree)))
 	if stateWorktree != expectedPath {
@@ -118,8 +130,16 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 	}
 	state.Status = target
 	state.UpdatedAt = now().UTC()
+	oldState, err := os.ReadFile(statePath)
+	if err != nil {
+		return State{}, "", fmt.Errorf("capture old state before transition: %w", err)
+	}
 	if err := writeJSONAtomic(statePath, state); err != nil {
 		return State{}, "", err
+	}
+	newState, err := os.ReadFile(statePath)
+	if err != nil {
+		return State{}, "", fmt.Errorf("capture written state before commit: %w", err)
 	}
 	recordDir := filepath.FromSlash(id.RecordDir())
 	commit, err := commitRecord(
@@ -131,10 +151,24 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 		branch,
 		parent,
 		m.gitEnv,
-		nil,
+		m.createCheckpoint,
 	)
 	if err != nil {
-		return state, "", err
+		return state, "", errors.Join(err, restoreStateAfterCommitFailure(statePath, oldState, newState))
 	}
 	return state, commit, nil
+}
+
+func restoreStateAfterCommitFailure(path string, oldState, writtenState []byte) error {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("inspect state for guarded rollback: %w", err)
+	}
+	if !bytes.Equal(current, writtenState) {
+		return fmt.Errorf("%w; preserving current content", errStateChangedDuringCommit)
+	}
+	if err := writeBytesAtomic(path, oldState); err != nil {
+		return fmt.Errorf("restore state after commit failure: %w", err)
+	}
+	return nil
 }

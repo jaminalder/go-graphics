@@ -584,7 +584,7 @@ func (m *Manager) enforceWriterLimit(ctx context.Context, maximum int) error {
 		if err != nil {
 			continue
 		}
-		data, err := runner.run(ctx, "show", branch+":"+filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json")))
+		data, err := runner.run(ctx, "show", "refs/heads/"+branch+":"+filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json")))
 		if err != nil {
 			return fmt.Errorf("read active writer state for %s: %w", branch, err)
 		}

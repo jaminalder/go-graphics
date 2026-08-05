@@ -209,6 +209,13 @@ func (m *Manager) reconcile(ctx context.Context, ref discoveredRef, worktrees []
 	if registered == nil {
 		registered = atExpected
 	}
+	if registered != nil && registered.Prunable {
+		message := fmt.Sprintf("Git marks worktree %s as prunable", registered.Path)
+		if registered.PrunableReason != "" {
+			message += ": " + registered.PrunableReason
+		}
+		experiment.Diagnostics = append(experiment.Diagnostics, Diagnostic{Code: "stale-worktree-metadata", Message: message})
+	}
 	directoryPresent := false
 	if registered != nil {
 		info, statErr := os.Stat(registered.Path)
@@ -218,8 +225,10 @@ func (m *Manager) reconcile(ctx context.Context, ref discoveredRef, worktrees []
 		case errors.Is(statErr, os.ErrNotExist):
 			experiment.Diagnostics = append(experiment.Diagnostics,
 				Diagnostic{Code: "missing-worktree-directory", Message: fmt.Sprintf("registered worktree directory is missing: %s", registered.Path)},
-				Diagnostic{Code: "stale-worktree-metadata", Message: fmt.Sprintf("Git still registers missing worktree %s", registered.Path)},
 			)
+			if !registered.Prunable {
+				experiment.Diagnostics = append(experiment.Diagnostics, Diagnostic{Code: "stale-worktree-metadata", Message: fmt.Sprintf("Git still registers missing worktree %s", registered.Path)})
+			}
 		case statErr != nil:
 			return Experiment{}, fmt.Errorf("inspect worktree directory %q: %w", registered.Path, statErr)
 		default:
@@ -231,7 +240,7 @@ func (m *Manager) reconcile(ctx context.Context, ref discoveredRef, worktrees []
 		return Experiment{}, fmt.Errorf("inspect expected worktree directory %q: %w", expectedPath, statErr)
 	}
 
-	validExpectedWorktree := byBranch != nil && atExpected != nil && byBranch == atExpected && directoryPresent
+	validExpectedWorktree := byBranch != nil && atExpected != nil && byBranch == atExpected && directoryPresent && !byBranch.Prunable
 	statePath := filepath.ToSlash(filepath.Join(ref.id.RecordDir(), "state.json"))
 	var state State
 	var stateErr error
@@ -262,8 +271,8 @@ func (m *Manager) reconcile(ctx context.Context, ref discoveredRef, worktrees []
 			experiment.Diagnostics = append(experiment.Diagnostics, Diagnostic{Code: "path-mismatch", Message: fmt.Sprintf("state worktree resolves to %s, expected %s", stateWorktree, expectedPath)})
 		}
 	}
-	if directoryPresent {
-		status, err := (gitRunner{dir: registered.Path, env: m.gitEnv}).run(ctx, "status", "--porcelain")
+	if directoryPresent && !registered.Prunable {
+		status, err := (gitRunner{dir: registered.Path, env: m.gitEnv, disableOptionalLocks: true}).run(ctx, "status", "--porcelain")
 		if err != nil {
 			return Experiment{}, err
 		}
@@ -275,7 +284,7 @@ func (m *Manager) reconcile(ctx context.Context, ref discoveredRef, worktrees []
 }
 
 func (m *Manager) readStateFromBranch(ctx context.Context, branch, path string) (State, error) {
-	data, err := (gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}).run(ctx, "show", branch+":"+path)
+	data, err := (gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}).run(ctx, "show", "refs/heads/"+branch+":"+path)
 	if err != nil {
 		return State{}, err
 	}

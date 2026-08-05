@@ -11,9 +11,10 @@ import (
 )
 
 type gitRunner struct {
-	dir       string
-	env       []string
-	indexFile string
+	dir                  string
+	env                  []string
+	indexFile            string
+	disableOptionalLocks bool
 }
 
 func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
@@ -26,6 +27,9 @@ func (g gitRunner) run(ctx context.Context, args ...string) (string, error) {
 	cmd.Env = sanitizedGitEnvironment(env)
 	if g.indexFile != "" {
 		cmd.Env = append(cmd.Env, "GIT_INDEX_FILE="+g.indexFile)
+	}
+	if g.disableOptionalLocks {
+		cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0")
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -58,7 +62,8 @@ func sanitizedGitEnvironment(env []string) []string {
 			"GIT_DISCOVERY_ACROSS_FILESYSTEM",
 			"GIT_CONFIG_COUNT",
 			"GIT_CONFIG_PARAMETERS",
-			"GIT_TEMPLATE_DIR":
+			"GIT_TEMPLATE_DIR",
+			"GIT_OPTIONAL_LOCKS":
 			return true
 		default:
 			return strings.HasPrefix(key, "GIT_CONFIG_KEY_") || strings.HasPrefix(key, "GIT_CONFIG_VALUE_")
@@ -79,11 +84,12 @@ func filterEnvironment(env []string, blocked func(string) bool) []string {
 
 // WorktreeInfo describes one record from git worktree list --porcelain.
 type WorktreeInfo struct {
-	Path     string
-	HEAD     string
-	Branch   string
-	Bare     bool
-	Prunable bool
+	Path           string
+	HEAD           string
+	Branch         string
+	Bare           bool
+	Prunable       bool
+	PrunableReason string
 }
 
 func parseWorktreeList(output string) ([]WorktreeInfo, error) {
@@ -122,6 +128,7 @@ func parseWorktreeList(output string) ([]WorktreeInfo, error) {
 			current.Bare = true
 		case "prunable":
 			current.Prunable = true
+			current.PrunableReason = value
 		case "detached", "locked":
 			// These records carry no data needed by the lifecycle manager.
 		}
