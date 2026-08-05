@@ -42,6 +42,7 @@ type VerifyReport struct {
 	RecordsPresent   bool
 	ArtifactsPresent bool
 	TestsPassed      bool
+	Passed           bool
 	Command          string
 	Drift            Drift
 	Diagnostics      []Diagnostic
@@ -93,6 +94,13 @@ func (m *Manager) Verify(ctx context.Context, value string, opts VerifyOptions) 
 	if head != tip {
 		return VerifyReport{}, fmt.Errorf("assigned worktree HEAD %s does not match branch tip %s", head, tip)
 	}
+	master, err := resolveCommit(ctx, runner, "refs/heads/master")
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return VerifyReport{}, errors.Join(ctxErr, err)
+		}
+		master = ""
+	}
 
 	report := VerifyReport{
 		ID:      id.String(),
@@ -113,8 +121,7 @@ func (m *Manager) Verify(ctx context.Context, value string, opts VerifyOptions) 
 	if err != nil {
 		return report, err
 	}
-	report.ArtifactsPresent, report.Diagnostics = checkArtifacts(worktree, id, state, report.Diagnostics)
-	report.Drift, report.Diagnostics, err = calculateDrift(ctx, runner, state, report.Diagnostics)
+	report.Drift, report.Diagnostics, err = calculateDrift(ctx, runner, state.BaseCommit, master, tip, report.Diagnostics)
 	if err != nil {
 		return report, err
 	}
@@ -135,23 +142,118 @@ func (m *Manager) Verify(ctx context.Context, value string, opts VerifyOptions) 
 		report.TestsPassed = true
 	}
 
-	clean, status, err = worktreeClean(ctx, runner)
-	if err != nil {
-		return report, err
+	changed, postDiagnostics, postErr := m.revalidateVerification(ctx, id, experiment, state, expectedRef, tip)
+	if postErr != nil {
+		return report, postErr
 	}
-	if !clean {
+	report.Diagnostics = append(report.Diagnostics, postDiagnostics...)
+	if changed {
 		report.Clean = false
 		report.TestsPassed = false
-		report.Diagnostics = append(report.Diagnostics, Diagnostic{Code: "dirty-after-command", Message: fmt.Sprintf("verification command left tracked or untracked changes: %s", status)})
-		return report, nil
 	}
+	if !changed {
+		report.RecordsPresent, report.Diagnostics, err = checkCommittedRecords(ctx, runner, id, tip, report.Diagnostics)
+		if err != nil {
+			return report, err
+		}
+		report.ArtifactsPresent, report.Diagnostics = checkArtifacts(worktree, id, state, report.Diagnostics)
+	}
+	report.Passed = verificationPassed(report)
 	if opts.Record {
-		passed := report.Clean && report.RecordsPresent && report.ArtifactsPresent && report.TestsPassed
-		if err := m.recordVerification(ctx, id, state, tip, command, passed); err != nil {
+		if changed {
+			return report, nil
+		}
+		if err := m.recordVerification(ctx, id, state, tip, command, report.Passed); err != nil {
 			return report, err
 		}
 	}
 	return report, nil
+}
+
+func verificationPassed(report VerifyReport) bool {
+	if !report.Clean || !report.RecordsPresent || !report.ArtifactsPresent || !report.TestsPassed {
+		return false
+	}
+	for _, diagnostic := range report.Diagnostics {
+		if diagnosticBlocksVerification(diagnostic.Code) {
+			return false
+		}
+	}
+	return true
+}
+
+func diagnosticBlocksVerification(code string) bool {
+	// Computable base drift is represented by Drift itself and is informational.
+	// Every diagnostic currently indicates missing or invalid verification evidence.
+	return code != "base-drift"
+}
+
+func (m *Manager) revalidateVerification(
+	ctx context.Context,
+	id ID,
+	initial Experiment,
+	state State,
+	expectedRef, tip string,
+) (bool, []Diagnostic, error) {
+	changed := false
+	diagnostics := make([]Diagnostic, 0, 2)
+	addChanged := func(message string) {
+		changed = true
+		diagnostics = append(diagnostics, Diagnostic{Code: "experiment-changed-after-command", Message: message})
+	}
+
+	experiment, err := m.Show(ctx, id.String())
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, nil, errors.Join(ctxErr, err)
+		}
+		addChanged(fmt.Sprintf("experiment reconciliation failed after command: %v", err))
+		return changed, diagnostics, nil
+	}
+	if len(experiment.Diagnostics) != 0 {
+		addChanged("experiment reconciliation changed after command: " + formatDiagnostics(experiment.Diagnostics))
+	}
+	if filepath.Clean(experiment.WorktreePath) != filepath.Clean(initial.WorktreePath) {
+		addChanged(fmt.Sprintf("assigned worktree changed from %s to %s", initial.WorktreePath, experiment.WorktreePath))
+	}
+	if !statesMatchForVerification(experiment.State, state) {
+		addChanged("experiment state changed after command")
+	}
+
+	runner := gitRunner{dir: initial.WorktreePath, env: m.gitEnv, disableOptionalLocks: true}
+	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, nil, errors.Join(ctxErr, err)
+		}
+		addChanged(err.Error())
+	}
+	branchTip, err := resolveCommit(ctx, runner, expectedRef)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, nil, errors.Join(ctxErr, err)
+		}
+		addChanged(fmt.Sprintf("experiment branch ref is unavailable after command: %v", err))
+	} else if branchTip != tip {
+		addChanged(fmt.Sprintf("experiment branch tip changed from %s to %s", tip, branchTip))
+	}
+	head, err := resolveCommit(ctx, runner, "HEAD")
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, nil, errors.Join(ctxErr, err)
+		}
+		addChanged(fmt.Sprintf("worktree HEAD is unavailable after command: %v", err))
+	} else if head != tip {
+		addChanged(fmt.Sprintf("worktree HEAD changed from %s to %s", tip, head))
+	}
+	clean, status, err := worktreeClean(ctx, runner)
+	if err != nil {
+		return false, nil, err
+	}
+	if !clean {
+		changed = true
+		diagnostics = append(diagnostics, Diagnostic{Code: "dirty-after-command", Message: fmt.Sprintf("verification command left tracked or untracked changes: %s", status)})
+	}
+	return changed, diagnostics, nil
 }
 
 func formatDiagnostics(diagnostics []Diagnostic) string {
@@ -209,7 +311,7 @@ func checkArtifacts(worktree string, id ID, state State, diagnostics []Diagnosti
 	present := true
 	for _, name := range []string{"baseline", "candidate"} {
 		directory := filepath.Join(output, name)
-		nonempty, inspectErr := containsNonemptyFile(directory)
+		nonempty, inspectErr := containsNonemptyRegularFile(directory, output)
 		if inspectErr != nil || !nonempty {
 			present = false
 			message := fmt.Sprintf("%s artifact directory has no nonempty files: %s", name, directory)
@@ -220,7 +322,7 @@ func checkArtifacts(worktree string, id ID, state State, diagnostics []Diagnosti
 		}
 	}
 	contactSheet := filepath.Join(output, "contact-sheet.png")
-	info, statErr := os.Stat(contactSheet)
+	info, statErr := os.Lstat(contactSheet)
 	if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 		present = false
 		message := fmt.Sprintf("required nonempty contact sheet is missing: %s", contactSheet)
@@ -242,6 +344,9 @@ func containedOutputPath(worktree string, id ID, stateOutput string) (string, er
 	if output != expected {
 		return "", fmt.Errorf("state output %q resolves to %s, want exact experiment output %s", stateOutput, output, expected)
 	}
+	if err := rejectSymlinkComponents(worktree, expected); err != nil {
+		return "", err
+	}
 	resolvedWorktree, err := filepath.EvalSymlinks(worktree)
 	if err != nil {
 		return "", fmt.Errorf("resolve assigned worktree: %w", err)
@@ -260,23 +365,56 @@ func containedOutputPath(worktree string, id ID, stateOutput string) (string, er
 	return output, nil
 }
 
+func rejectSymlinkComponents(root, path string) error {
+	relative, err := filepath.Rel(root, path)
+	if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path %q is outside root %q", path, root)
+	}
+	current := root
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return fmt.Errorf("inspect output path component %q: %w", current, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("output path component is a symlink: %s", current)
+		}
+	}
+	return nil
+}
+
 func pathWithin(path, root string) bool {
 	relative, err := filepath.Rel(root, path)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }
 
-func containsNonemptyFile(root string) (bool, error) {
-	info, err := os.Stat(root)
+func containsNonemptyRegularFile(root, outputRoot string) (bool, error) {
+	info, err := os.Lstat(root)
 	if err != nil {
 		return false, err
 	}
-	if !info.IsDir() {
-		return false, fmt.Errorf("not a directory")
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return false, fmt.Errorf("not a real directory")
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return false, err
+	}
+	resolvedOutput, err := filepath.EvalSymlinks(outputRoot)
+	if err != nil {
+		return false, err
+	}
+	if !pathWithin(resolvedRoot, resolvedOutput) {
+		return false, fmt.Errorf("artifact directory resolves outside output root")
 	}
 	found := false
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("artifact path is a symlink: %s", path)
 		}
 		if entry.Type().IsRegular() {
 			fileInfo, infoErr := entry.Info()
@@ -292,34 +430,34 @@ func containsNonemptyFile(root string) (bool, error) {
 	return found, err
 }
 
-func calculateDrift(ctx context.Context, runner gitRunner, state State, diagnostics []Diagnostic) (Drift, []Diagnostic, error) {
-	drift := Drift{BaseCommit: state.BaseCommit}
-	master, err := resolveCommit(ctx, runner, "refs/heads/master")
-	if err != nil {
-		return drift, diagnostics, err
-	}
-	drift.CurrentMaster = master
-	if _, err := resolveCommit(ctx, runner, state.BaseCommit); err != nil {
-		diagnostics = append(diagnostics, Diagnostic{Code: "missing-base-commit", Message: fmt.Sprintf("original base commit %s is unavailable: %v", state.BaseCommit, err)})
+func calculateDrift(ctx context.Context, runner gitRunner, base, master, experimentTip string, diagnostics []Diagnostic) (Drift, []Diagnostic, error) {
+	drift := Drift{BaseCommit: base, CurrentMaster: master}
+	if master == "" {
+		diagnostics = append(diagnostics, Diagnostic{Code: "missing-current-master", Message: "refs/heads/master is unavailable"})
 		return drift, diagnostics, nil
 	}
-	mergeBase, err := runner.run(ctx, "merge-base", state.BaseCommit, "refs/heads/master")
+	if _, err := resolveCommit(ctx, runner, base); err != nil {
+		diagnostics = append(diagnostics, Diagnostic{Code: "missing-base-commit", Message: fmt.Sprintf("original base commit %s is unavailable: %v", base, err)})
+		return drift, diagnostics, nil
+	}
+	mergeBase, err := runner.run(ctx, "merge-base", base, master)
 	if err != nil {
-		return drift, diagnostics, err
+		diagnostics = append(diagnostics, Diagnostic{Code: "missing-merge-base", Message: fmt.Sprintf("calculate merge base for %s and %s: %v", base, master, err)})
+		return drift, diagnostics, nil
 	}
 	drift.MergeBase = strings.TrimSpace(mergeBase)
-	drift.MasterPaths, err = changedPaths(ctx, runner, state.BaseCommit, "refs/heads/master")
+	drift.MasterPaths, err = changedPaths(ctx, runner, base, master)
 	if err != nil {
 		return drift, diagnostics, err
 	}
-	drift.ExperimentPaths, err = changedPaths(ctx, runner, state.BaseCommit, "refs/heads/"+state.Branch)
+	drift.ExperimentPaths, err = changedPaths(ctx, runner, base, experimentTip)
 	if err != nil {
 		return drift, diagnostics, err
 	}
 	sort.Strings(drift.MasterPaths)
 	sort.Strings(drift.ExperimentPaths)
 	drift.Overlap = sortedIntersection(drift.MasterPaths, drift.ExperimentPaths)
-	counts, err := runner.run(ctx, "rev-list", "--left-right", "--count", "refs/heads/master...refs/heads/"+state.Branch)
+	counts, err := runner.run(ctx, "rev-list", "--left-right", "--count", master+"..."+experimentTip)
 	if err != nil {
 		return drift, diagnostics, err
 	}
