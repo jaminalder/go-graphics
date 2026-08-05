@@ -94,6 +94,16 @@ func TestOutOfRangeIsRejected(t *testing.T) {
 	}
 }
 
+// Non-finite values do not belong to any finite range. In particular, NaN
+// compares false to both bounds and must not slip through ordered checks.
+func TestNonFiniteFloatsAreRejected(t *testing.T) {
+	for _, value := range []string{"NaN", "+Inf", "-Inf"} {
+		if _, _, _, err := run(t, "--alpha", value); err == nil {
+			t.Errorf("--alpha %s was accepted", value)
+		}
+	}
+}
+
 // TestNegativeRangesAreExpressible is the other thing a sentinel cost: a
 // knob whose useful range crosses zero could not be declared at all.
 func TestNegativeRangesAreExpressible(t *testing.T) {

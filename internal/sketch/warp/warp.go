@@ -166,28 +166,31 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 
 func (p plan) sample(u, v float64) fieldSample {
 	x, y := u*p.set.scale, v*p.set.scale
+	if p.set.mode == modePlain {
+		return fieldSample{value: p.fbm(p.value, x, y)}
+	}
+
 	activityField := p.activity.At(u*0.65+17.3, v*0.65-9.7)
 	activity := 0.12 + 1.28*mathx.Smoothstep(-0.4, 0.4, activityField)
 
 	qx := p.fbm(p.q[0], x+3.1, y-7.9)
 	qy := p.fbm(p.q[1], x-5.3, y+11.7)
 	firstStrength := p.set.warpStrength * activity
-	rx := p.fbm(p.r[0], x+qx*firstStrength+13.1, y+qy*firstStrength-4.7)
-	ry := p.fbm(p.r[1], x+qx*firstStrength-8.3, y+qy*firstStrength+6.1)
-
-	valueX, valueY := x, y
-	switch p.set.mode {
-	case modeSingle:
-		valueX += qx * firstStrength
-		valueY += qy * firstStrength
-	case modeNested:
-		secondStrength := p.set.nestedStrength * activity
-		valueX += rx * secondStrength
-		valueY += ry * secondStrength
+	if p.set.mode == modeSingle {
+		return fieldSample{
+			value:    p.fbm(p.value, x+qx*firstStrength, y+qy*firstStrength),
+			qx:       qx,
+			qy:       qy,
+			activity: activity,
+		}
 	}
 
+	rx := p.fbm(p.r[0], x+qx*firstStrength+13.1, y+qy*firstStrength-4.7)
+	ry := p.fbm(p.r[1], x+qx*firstStrength-8.3, y+qy*firstStrength+6.1)
+	secondStrength := p.set.nestedStrength * activity
+
 	return fieldSample{
-		value:    p.fbm(p.value, valueX, valueY),
+		value:    p.fbm(p.value, x+rx*secondStrength, y+ry*secondStrength),
 		qx:       qx,
 		qy:       qy,
 		rx:       rx,

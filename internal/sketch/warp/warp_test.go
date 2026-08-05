@@ -95,6 +95,36 @@ func TestModesAreDistinct(t *testing.T) {
 	}
 }
 
+// Shallower modes must not evaluate fields that cannot affect their output.
+// Zero components are the fieldSample contract for work deliberately skipped.
+func TestModesLeaveUnusedFieldsZero(t *testing.T) {
+	for _, tc := range []struct {
+		mode mode
+		want func(fieldSample) bool
+	}{
+		{modePlain, func(got fieldSample) bool {
+			return got.activity == 0 && got.qx == 0 && got.qy == 0 && got.rx == 0 && got.ry == 0
+		}},
+		{modeSingle, func(got fieldSample) bool {
+			return got.activity != 0 && (got.qx != 0 || got.qy != 0) && got.rx == 0 && got.ry == 0
+		}},
+		{modeNested, func(got fieldSample) bool {
+			return got.activity != 0 && (got.qx != 0 || got.qy != 0) && (got.rx != 0 || got.ry != 0)
+		}},
+	} {
+		s := New()
+		s.fieldMode = tc.mode
+		p, err := s.plan(testCtx(t, 13))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := p.sample(0.37, 0.61)
+		if !tc.want(got) {
+			t.Errorf("mode %d evaluated unused fields: %+v", tc.mode, got)
+		}
+	}
+}
+
 func configured(t testing.TB, args ...string) *Sketch {
 	t.Helper()
 	s := New()
@@ -143,18 +173,20 @@ func TestPlanIgnoresPixelDimensions(t *testing.T) {
 
 // Both mappings must stay inside finite sRGB for every field mode.
 func TestBothAppearancesProduceFiniteColors(t *testing.T) {
-	for _, appearance := range []string{"gradient", "structure"} {
-		for _, fieldMode := range []string{"plain", "single", "nested"} {
-			p, err := configured(t, "--appearance", appearance, "--warp", fieldMode).plan(testCtx(t, 13))
-			if err != nil {
-				t.Fatal(err)
-			}
-			for y := range 9 {
-				for x := range 9 {
-					color := p.At(float64(x)/8, float64(y)/8)
-					for _, component := range [...]float64{color.R, color.G, color.B} {
-						if math.IsNaN(component) || math.IsInf(component, 0) || component < 0 || component > 1 {
-							t.Fatalf("%s/%s at (%d,%d) produced %v", appearance, fieldMode, x, y, color)
+	for _, seed := range fixedSeeds {
+		for _, appearance := range []string{"gradient", "structure"} {
+			for _, fieldMode := range []string{"plain", "single", "nested"} {
+				p, err := configured(t, "--appearance", appearance, "--warp", fieldMode).plan(testCtx(t, seed))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for y := range 9 {
+					for x := range 9 {
+						color := p.At(float64(x)/8, float64(y)/8)
+						for _, component := range [...]float64{color.R, color.G, color.B} {
+							if math.IsNaN(component) || math.IsInf(component, 0) || component < 0 || component > 1 {
+								t.Fatalf("seed %d %s/%s at (%d,%d) produced %v", seed, appearance, fieldMode, x, y, color)
+							}
 						}
 					}
 				}
@@ -185,6 +217,38 @@ func TestOptionsAcceptBoundariesAndChoices(t *testing.T) {
 		{"--appearance", "structure"},
 	} {
 		configured(t, args...)
+	}
+}
+
+// Configure must propagate parsed values into the immutable render settings,
+// not merely accept their syntax and produce a filename suffix.
+func TestOptionsAlterResolvedSettings(t *testing.T) {
+	s := configured(t,
+		"--scale", "3.25",
+		"--octaves", "7",
+		"--gain", "0.7",
+		"--lacunarity", "2.75",
+		"--warp-strength", "6.5",
+		"--nested-strength", "7.5",
+		"--warp", "single",
+		"--appearance", "structure",
+	)
+	p, err := s.plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := settings{
+		scale:          3.25,
+		octaves:        7,
+		gain:           0.7,
+		lacunarity:     2.75,
+		warpStrength:   6.5,
+		nestedStrength: 7.5,
+		mode:           modeSingle,
+		appearance:     appearanceStructure,
+	}
+	if p.set != want {
+		t.Errorf("resolved settings %+v, want %+v", p.set, want)
 	}
 }
 

@@ -41,6 +41,7 @@ rendering. Existing sketches and shared noise behavior remain unchanged.
 
 - `docs/sketches/013-warp.md`
 - `docs/superpowers/specs/2026-08-05-warp-nested-fbm-design.md`
+- `docs/superpowers/plans/2026-08-05-warp-nested-fbm.md`
 - `internal/sketch/warp/` implementation, options, focused tests, and golden.
 - `cmd/staticart/main.go` registry wiring and its affected tests.
 - `experiments/warp-nested-fbm/brief.md` and `result.md`.
@@ -52,7 +53,7 @@ rendering. Existing sketches and shared noise behavior remain unchanged.
 - Changes to `internal/noise` unless an existing boundary demonstrably blocks
   the sketch-local implementation.
 - Animation, hatching, particles, Voronoi cells, subdivision, or extra layers.
-- More than two appearance mappings or the seven requested numeric controls.
+- More than two appearance mappings or the six requested numeric controls.
 - Exhaustive trait design, broad parameter exploration, or production tuning.
 
 ## Baseline
