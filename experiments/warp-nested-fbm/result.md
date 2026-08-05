@@ -61,7 +61,10 @@ all visual artifacts remain unchanged from the one permitted tuning pass.
 - `86fa56b` `art: tune nested warp movement`
 - `1d0481c` `docs: report nested warp experiment`
 - `db09a8b` `fix: harden warp field evaluation` (review-driven robustness, lazy evaluation, tests, and inventory corrections)
-- Final review report commit follows this list: `docs: update warp review results`.
+- `0765293` `docs: update warp review results`
+
+The documentation-closeout commit follows this chronology and records only the
+final Scope and commit-list corrections.
 
 ## Artifacts
 
