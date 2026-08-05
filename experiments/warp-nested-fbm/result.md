@@ -21,6 +21,12 @@ with concerns: several seeds read as directional marbling, but seed 3 remains
 mostly cloud-like, and structure appearance usually sharpens local separation
 rather than exposing a substantially new organization.
 
+Read-only reviews after the initial report prompted robustness and performance
+fixes, not another artistic pass. Ranged float options now reject non-finite
+values generically, and shallower warp modes no longer evaluate fields that
+cannot affect their output. Field constants, palette mapping, the golden, and
+all visual artifacts remain unchanged from the one permitted tuning pass.
+
 ## Verification
 
 - Baseline `go test ./...`: PASS before implementation.
@@ -28,10 +34,18 @@ rather than exposing a substantially new organization.
 - TDD appearance/options red run: `go test ./internal/sketch/warp -run 'Test(RenderIsDeterministic|PlanIgnoresPixelDimensions|BothAppearancesProduceFiniteColors|Options|RejectsTooSmallPalette)' -count=1` failed on the missing sketch, options, render, appearance, and palette contracts; it passed after implementation.
 - Golden red run: `go test ./cmd/staticart ./internal/sketch/warp -run 'Test(Golden|List|Registry)' -count=1` failed because `testdata/warp_seed13_64.png` did not exist.
 - Golden generation: `go test ./internal/sketch/warp -run TestGolden -update -count=1` passed; the generated PNG was read and retained after confirming folded broad movement. It was regenerated and read again after the one tuning pass.
+- Review TDD red run: `go test ./internal/opt -run TestNonFiniteFloatsAreRejected -count=1` failed because `--alpha NaN` was accepted. `+Inf` and `-Inf` were already rejected by range comparisons, but explicit finite validation now rejects all three.
+- Review TDD green run: `go test ./internal/opt -run 'Test(NonFiniteFloatsAreRejected|OutOfRangeIsRejected|SetKnobsApplyAndName|NegativeRangesAreExpressible)' -count=1` PASS.
+- Lazy-mode TDD red run: `go test ./internal/sketch/warp -run 'Test(ModesLeaveUnusedFieldsZero|ModesAreDistinct|FieldSamplesStayFinite)' -count=1` failed because plain populated activity/q/r and single populated r.
+- Lazy-mode TDD green run: `go test ./internal/sketch/warp -run 'Test(ModesLeaveUnusedFieldsZero|ModesAreDistinct|FieldSamplesStayFinite|Golden)' -count=1` PASS; the nested golden remained unchanged.
+- Expanded matrix: finite in-range colors pass for all eight fixed seeds, all three modes, both appearances, and a 9x9 coordinate grid.
+- Resolved options: `TestOptionsAlterResolvedSettings` proves all six numeric controls and both choices propagate into immutable plan settings.
+- Review affected packages: `go test ./internal/opt ./internal/sketch/warp -count=1` PASS.
 - Package tests: `go test ./internal/sketch/warp -count=1` PASS.
 - Command/package tests: `go test ./cmd/staticart ./internal/sketch/warp -count=1` PASS.
 - Registry: `go run ./cmd/staticart list` includes `warp` with `flowing organic fields from nested fBM domain warps`.
 - Sampling benchmark after tuning: `BenchmarkSample-10 5448380 219.7 ns/op 0 B/op 0 allocs/op` on Apple M1 Pro.
+- Sampling benchmark after review fixes: `BenchmarkSample-10 5366755 221.6 ns/op 0 B/op 0 allocs/op` on Apple M1 Pro. Nested-mode benchmark behavior remains allocation-free; lazy evaluation reduces work only in plain and single modes.
 - `make check` passed before every worker commit: formatter, vet, golangci-lint (`0 issues`), and `go test ./...` all passed.
 - Final pre-report `make check`: PASS with the same four gates.
 - `git diff --check master...HEAD`: PASS with no output before this report.
@@ -45,7 +59,9 @@ rather than exposing a substantially new organization.
 - `2d78058` `feat: render nested warp artwork`
 - `461b85d` `feat: register warp sketch`
 - `86fa56b` `art: tune nested warp movement`
-- Final report commit follows this list: `docs: report nested warp experiment`.
+- `1d0481c` `docs: report nested warp experiment`
+- `db09a8b` `fix: harden warp field evaluation` (review-driven robustness, lazy evaluation, tests, and inventory corrections)
+- Final review report commit follows this list: `docs: update warp review results`.
 
 ## Artifacts
 
@@ -123,8 +139,11 @@ falls closest to generic cloud output and has weak directional movement.
 
 ## Recommendation
 
-Recommend the sketch for review and possible integration as a successful
-self-contained field experiment, with the explicit concern that its output
-space still includes cloud-dominant seeds and that structure appearance is a
-subtle alternative rather than a decisive analytical view. The user should
-make the final artistic and integration decision.
+Recommend retaining the implementation as a successful self-contained field
+experiment, but revising its artistic output space before treating it as a
+finished sketch or integrating it on visual merit. Seed 3 does not meet the
+directional-movement target, and structure appearance remains a subtle
+alternative rather than a decisive analytical view. No further tuning belongs
+in this experiment because its one permitted pass is already complete; a later
+approved revision should start from these documented limitations. The user
+should make the final artistic and integration decision.
