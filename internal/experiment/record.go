@@ -256,7 +256,7 @@ func commitRecord(
 	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
 		return result, appliedCommitError(result, expectedRef, err)
 	}
-	if err := updateCommittedIndexPaths(ctx, runner, commit, cleanPaths); err != nil {
+	if err := updateCommittedIndexPathsWithCheckpoint(ctx, runner, commit, cleanPaths, checkpoint); err != nil {
 		return result, appliedCommitError(result, expectedRef, err)
 	}
 	if checkpoint != nil {
@@ -268,6 +268,10 @@ func commitRecord(
 }
 
 func updateCommittedIndexPaths(ctx context.Context, runner gitRunner, commit string, paths []string) error {
+	return updateCommittedIndexPathsWithCheckpoint(ctx, runner, commit, paths, nil)
+}
+
+func updateCommittedIndexPathsWithCheckpoint(ctx context.Context, runner gitRunner, commit string, paths []string, checkpoint func(string) error) error {
 	args := append([]string{"ls-tree", "-z", commit, "--"}, paths...)
 	output, err := runner.run(ctx, args...)
 	if err != nil {
@@ -285,10 +289,15 @@ func updateCommittedIndexPaths(ctx context.Context, runner gitRunner, commit str
 		}
 		entries[path] = [2]string{fields[0], fields[2]}
 	}
-	for _, path := range paths {
+	for i, path := range paths {
 		entry, ok := entries[path]
 		if !ok {
 			return fmt.Errorf("committed record path is missing from tree: %s", path)
+		}
+		if checkpoint != nil {
+			if err := checkpoint(fmt.Sprintf("before-record-index-path-%d", i)); err != nil {
+				return err
+			}
 		}
 		if _, err := runner.run(ctx, "update-index", "--add", "--cacheinfo", entry[0], entry[1], path); err != nil {
 			return fmt.Errorf("update real index for committed record path %q: %w", path, err)

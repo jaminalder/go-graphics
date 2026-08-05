@@ -3,6 +3,7 @@ package experiment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -50,6 +51,9 @@ func TestArchiveCommitsRetainedRecordBeforeSafeCleanup(t *testing.T) {
 	}
 	if result.ArchiveCommit == "" || result.ArchiveCommit != repo.gitOutput(t, "rev-parse", "master") {
 		t.Fatalf("archive result = %#v", result)
+	}
+	if result.RemainingCoordinator != "" || result.RemainingWorktree != "" || result.RemainingBranch != "" || len(result.RemainingCommands) != 0 {
+		t.Fatalf("successful archive retains recovery resources: %#v", result)
 	}
 	if got := repo.gitOutput(t, "rev-parse", result.ArchiveCommit+"^1"); got != masterBefore {
 		t.Fatalf("archive first parent = %s, want master %s", got, masterBefore)
@@ -273,7 +277,7 @@ func TestArchiveReportsResourcesWhenPostCommitSynchronizationFails(t *testing.T)
 	if result.ArchiveCommit == "" || result.ArchiveCommit != repo.gitOutput(t, "rev-parse", "master") {
 		t.Fatalf("archive result = %#v", result)
 	}
-	if result.RemainingWorktree != created.WorktreePath || result.RemainingBranch != created.State.Branch || len(result.RemainingCommands) != 3 {
+	if result.RemainingCoordinator != manager.CoordinatorRoot || result.RemainingWorktree != created.WorktreePath || result.RemainingBranch != created.State.Branch || len(result.RemainingCommands) != 5 {
 		t.Fatalf("remaining resources = %#v", result)
 	}
 }
@@ -336,7 +340,7 @@ func TestArchiveRevalidatesExperimentImmediatelyBeforeRefUpdate(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			want: "changed before archive ref update",
+			want: "changed before archive ref transaction",
 		},
 		{
 			name: "symbolic head",
@@ -395,7 +399,7 @@ func TestArchiveAtomicallyVerifiesExperimentRefWhileAdvancingMaster(t *testing.T
 	if !checkpointCalled {
 		t.Fatal("archive did not reach ref transaction checkpoint")
 	}
-	if err == nil || !strings.Contains(err.Error(), "atomic archive ref transaction") {
+	if err == nil || !strings.Contains(err.Error(), "changed before archive ref transaction") {
 		t.Fatalf("Archive error = %v", err)
 	}
 	if got := repo.gitOutput(t, "rev-parse", "master"); got != masterBefore {
@@ -403,6 +407,119 @@ func TestArchiveAtomicallyVerifiesExperimentRefWhileAdvancingMaster(t *testing.T
 	}
 	if _, statErr := os.Stat(created.WorktreePath); statErr != nil {
 		t.Fatalf("experiment ref race removed worktree: %v", statErr)
+	}
+}
+
+func TestArchiveRevalidatesAfterLastPreTransactionHook(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, testRepo, Created)
+		want   string
+	}{
+		{
+			name: "dirty worktree",
+			mutate: func(t *testing.T, _ testRepo, created Created) {
+				if err := os.WriteFile(filepath.Join(created.WorktreePath, "late-dirty.txt"), []byte("dirty\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "dirty-worktree",
+		},
+		{
+			name: "retained input",
+			mutate: func(t *testing.T, _ testRepo, created Created) {
+				id := IDFromState(t, created.State)
+				path := filepath.Join(created.WorktreePath, filepath.FromSlash(id.RecordDir()), "result.md")
+				if err := os.WriteFile(path, []byte("late result\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "dirty-worktree",
+		},
+		{
+			name: "contact sheet",
+			mutate: func(t *testing.T, _ testRepo, created Created) {
+				if err := os.WriteFile(filepath.Join(created.OutputPath, "contact-sheet.png"), []byte("late sheet\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "changed before archive ref transaction",
+		},
+		{
+			name: "symbolic head",
+			mutate: func(t *testing.T, repo testRepo, created Created) {
+				repo.gitAt(t, created.WorktreePath, "branch", "late-branch")
+				repo.gitAt(t, created.WorktreePath, "switch", "late-branch")
+			},
+			want: "branch-mismatch",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo, manager, created := createArchiveableExperiment(t, "last-hook-"+strings.ReplaceAll(test.name, " ", "-"))
+			masterBefore := repo.gitOutput(t, "rev-parse", "master")
+			manager.createCheckpoint = func(name string) error {
+				if name == "before-archive-ref-transaction" {
+					test.mutate(t, repo, created)
+				}
+				return nil
+			}
+
+			_, err := manager.Archive(context.Background(), created.State.ID)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Archive error = %v, want %q", err, test.want)
+			}
+			if got := repo.gitOutput(t, "rev-parse", "master"); got != masterBefore {
+				t.Fatalf("master changed after last-hook mutation: got %s, want %s", got, masterBefore)
+			}
+		})
+	}
+}
+
+func TestArchiveRetryRepairsAppliedMasterIndexBeforeCleanup(t *testing.T) {
+	repo, manager, created := createArchiveableExperiment(t, "master-index-recovery")
+	id := IDFromState(t, created.State)
+	indexLock := filepath.Join(repo.root, ".git", "index.lock")
+	manager.createCheckpoint = func(name string) error {
+		if name == "after-archive-ref-update" {
+			return os.WriteFile(indexLock, []byte("held\n"), 0o644)
+		}
+		return nil
+	}
+
+	first, err := manager.Archive(context.Background(), id.String())
+	if err == nil || !strings.Contains(err.Error(), "index.lock") {
+		t.Fatalf("first Archive error = %v", err)
+	}
+	if first.ArchiveCommit == "" || first.RemainingCoordinator != manager.CoordinatorRoot {
+		t.Fatalf("first archive recovery = %#v", first)
+	}
+	wantCoordinatorCommands := []string{
+		"git -C " + shellQuote(manager.CoordinatorRoot) + " status --short",
+		"git -C " + shellQuote(manager.CoordinatorRoot) + " diff --cached --name-only -- " + shellQuote(id.ArchiveDir()),
+	}
+	for _, command := range wantCoordinatorCommands {
+		if !slices.Contains(first.RemainingCommands, command) || !strings.Contains(err.Error(), command) {
+			t.Fatalf("archive recovery lacks %q: result=%#v error=%v", command, first, err)
+		}
+	}
+	if err := os.Remove(indexLock); err != nil {
+		t.Fatal(err)
+	}
+	manager.createCheckpoint = nil
+
+	second, err := manager.Archive(context.Background(), id.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ArchiveCommit != first.ArchiveCommit || second.RemainingCoordinator != "" {
+		t.Fatalf("second archive = %#v, first = %#v", second, first)
+	}
+	if _, statErr := os.Stat(created.WorktreePath); !os.IsNotExist(statErr) {
+		t.Fatalf("worktree remains after archive retry: %v", statErr)
+	}
+	if got := repo.gitOutput(t, "status", "--porcelain"); got != "" {
+		t.Fatalf("coordinator remains dirty after archive retry: %s", got)
 	}
 }
 
@@ -528,6 +645,87 @@ func TestDiscardRecoversAppliedCommitAfterIndexSyncFailure(t *testing.T) {
 	}
 	if _, statErr := os.Stat(created.WorktreePath); !os.IsNotExist(statErr) {
 		t.Fatalf("worktree remains after retry: %v", statErr)
+	}
+}
+
+func TestDiscardRetryRepairsEveryPartialIndexSyncState(t *testing.T) {
+	for _, failureIndex := range []int{0, 1} {
+		t.Run(fmt.Sprintf("path-%d", failureIndex), func(t *testing.T) {
+			repo, manager, created := createArchiveableExperiment(t, fmt.Sprintf("discard-partial-%d", failureIndex))
+			id := IDFromState(t, created.State)
+			gitDir := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "--git-dir")
+			if !filepath.IsAbs(gitDir) {
+				gitDir = filepath.Join(created.WorktreePath, gitDir)
+			}
+			indexLock := filepath.Join(gitDir, "index.lock")
+			manager.createCheckpoint = func(name string) error {
+				if name == fmt.Sprintf("before-record-index-path-%d", failureIndex) {
+					return os.WriteFile(indexLock, []byte("held\n"), 0o644)
+				}
+				return nil
+			}
+
+			first, err := manager.Discard(context.Background(), id.String())
+			if err == nil || !strings.Contains(err.Error(), "index.lock") {
+				t.Fatalf("first Discard error = %v", err)
+			}
+			if first.RemainingBranch != created.State.Branch {
+				t.Fatalf("first discard recovery = %#v", first)
+			}
+			if err := os.Remove(indexLock); err != nil {
+				t.Fatal(err)
+			}
+			manager.createCheckpoint = nil
+
+			second, err := manager.Discard(context.Background(), id.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if second.ArchiveCommit == "" {
+				t.Fatalf("second discard = %#v", second)
+			}
+		})
+	}
+}
+
+func TestDiscardFailureReportsActualIntegrationBranch(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	source, _ := createIntegrationSource(t, repo, manager, "discard-recovery-source")
+	created, err := manager.PrepareIntegration(context.Background(), IntegrationOptions{
+		Name:     "foam/discard-recovery-integration",
+		Sources:  []string{source.State.ID},
+		Keep:     "selected behavior",
+		Reject:   "unselected behavior",
+		Preserve: "stable behavior",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.SetState(context.Background(), created.State.ID, StatusIntegrating); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := manager.SetState(context.Background(), created.State.ID, StatusReviewPending); err != nil {
+		t.Fatal(err)
+	}
+	gitDir := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "--git-dir")
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(created.WorktreePath, gitDir)
+	}
+	indexLock := filepath.Join(gitDir, "index.lock")
+	manager.createCheckpoint = func(name string) error {
+		if name == "after-record-ref-update" {
+			return os.WriteFile(indexLock, []byte("held\n"), 0o644)
+		}
+		return nil
+	}
+
+	result, err := manager.Discard(context.Background(), created.State.ID)
+	if err == nil {
+		t.Fatal("Discard succeeded despite index lock")
+	}
+	if result.RemainingBranch != created.State.Branch || !strings.Contains(strings.Join(result.RemainingCommands, "\n"), "refs/heads/"+created.State.Branch) {
+		t.Fatalf("integration recovery = %#v, error = %v", result, err)
 	}
 }
 
