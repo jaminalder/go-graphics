@@ -147,7 +147,7 @@ func TestReconcileTreatsPrunableMetadataAsStaleWithoutStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, _ := ParseID("foam/prunable")
-	got, err := manager.reconcile(context.Background(), discoveredRef{id: id, branch: id.ExperimentBranch()}, []WorktreeInfo{{
+	got, err := manager.reconcile(context.Background(), discoveredRef{id: id, branch: id.ExperimentBranch(), refExists: true}, []WorktreeInfo{{
 		Path:           created.WorktreePath,
 		Branch:         "refs/heads/" + id.ExperimentBranch(),
 		Prunable:       true,
@@ -318,6 +318,61 @@ func TestListShowAndPathAreReadOnly(t *testing.T) {
 	after := repositorySnapshot(t, repo)
 	if before != after {
 		t.Fatalf("read-only inspection changed repository\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestInspectionIncludesWorktreeWhoseBranchRefDisappeared(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "orphan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.git(t, "update-ref", "-d", "refs/heads/exp/foam/orphan")
+
+	experiments, err := manager.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(experiments) != 1 || experiments[0].State.ID != "foam/orphan" || !hasDiagnostic(experiments[0], "missing-branch") {
+		t.Fatalf("List = %#v", experiments)
+	}
+	shown, err := manager.Show(context.Background(), "foam/orphan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown.State.ID != "foam/orphan" || shown.WorktreePath != created.WorktreePath || !hasDiagnostic(shown, "missing-branch") {
+		t.Fatalf("Show = %#v", shown)
+	}
+	if _, err := manager.Path(context.Background(), "foam/orphan"); err == nil || !strings.Contains(err.Error(), "missing-branch") {
+		t.Fatalf("Path error = %v", err)
+	}
+}
+
+func TestMalformedRefDoesNotHideValidExperiments(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "valid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.git(t, "branch", "exp/foam/malformed--name")
+
+	report, err := manager.ListReport(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Experiments) != 1 || report.Experiments[0].State.ID != "foam/valid" {
+		t.Fatalf("report experiments = %#v", report.Experiments)
+	}
+	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "malformed-ref" {
+		t.Fatalf("report diagnostics = %#v", report.Diagnostics)
+	}
+	if shown, err := manager.Show(context.Background(), "foam/valid"); err != nil || shown.State.ID != "foam/valid" {
+		t.Fatalf("Show = %#v error %v", shown, err)
+	}
+	if path, err := manager.Path(context.Background(), "foam/valid"); err != nil || path != created.WorktreePath {
+		t.Fatalf("Path = %q error %v", path, err)
 	}
 }
 

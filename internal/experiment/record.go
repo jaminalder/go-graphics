@@ -239,6 +239,11 @@ func commitRecord(
 	}
 	commit = strings.TrimSpace(commit)
 	result := recordCommitResult{Commit: commit}
+	if checkpoint != nil {
+		if err := checkpoint("before-record-ref-update"); err != nil {
+			return result, err
+		}
+	}
 	if _, err := runner.run(ctx, "update-ref", expectedRef, commit, expectedParent); err != nil {
 		return result, fmt.Errorf("compare-and-swap record branch %q: %w", expectedBranch, err)
 	}

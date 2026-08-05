@@ -24,20 +24,37 @@ type Experiment struct {
 }
 
 type discoveredRef struct {
-	id     ID
-	branch string
+	id        ID
+	branch    string
+	refExists bool
+}
+
+// ListReport contains valid experiments and repository-level discovery diagnostics.
+type ListReport struct {
+	Experiments []Experiment `json:"experiments"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
 }
 
 // List returns active experiments in deterministic ID order.
 func (m *Manager) List(ctx context.Context) ([]Experiment, error) {
-	refs, err := m.discoverExperimentRefs(ctx)
+	report, err := m.ListReport(ctx)
 	if err != nil {
 		return nil, err
+	}
+	return report.Experiments, nil
+}
+
+// ListReport returns active experiments plus malformed discovery diagnostics.
+func (m *Manager) ListReport(ctx context.Context) (ListReport, error) {
+	refs, diagnostics, err := m.discoverExperimentRefs(ctx)
+	if err != nil {
+		return ListReport{}, err
 	}
 	worktrees, err := m.worktrees(ctx)
 	if err != nil {
-		return nil, err
+		return ListReport{}, err
 	}
+	refs, diagnostics = unionWorktreeExperiments(refs, worktrees, diagnostics)
 	byID := make(map[string][]discoveredRef)
 	for _, ref := range refs {
 		byID[ref.id.String()] = append(byID[ref.id.String()], ref)
@@ -63,11 +80,11 @@ func (m *Manager) List(ctx context.Context) ([]Experiment, error) {
 		}
 		experiment, err := m.reconcile(ctx, candidates[0], worktrees)
 		if err != nil {
-			return nil, err
+			return ListReport{}, err
 		}
 		experiments = append(experiments, experiment)
 	}
-	return experiments, nil
+	return ListReport{Experiments: experiments, Diagnostics: diagnostics}, nil
 }
 
 // Show returns one active experiment after reconciling its resources.
@@ -76,10 +93,15 @@ func (m *Manager) Show(ctx context.Context, value string) (Experiment, error) {
 	if err != nil {
 		return Experiment{}, err
 	}
-	refs, err := m.discoverExperimentRefs(ctx)
+	refs, _, err := m.discoverExperimentRefs(ctx)
 	if err != nil {
 		return Experiment{}, err
 	}
+	worktrees, err := m.worktrees(ctx)
+	if err != nil {
+		return Experiment{}, err
+	}
+	refs, _ = unionWorktreeExperiments(refs, worktrees, nil)
 	var matches []discoveredRef
 	for _, ref := range refs {
 		if ref.id == id {
@@ -91,10 +113,6 @@ func (m *Manager) Show(ctx context.Context, value string) (Experiment, error) {
 	}
 	if len(matches) > 1 {
 		return Experiment{}, fmt.Errorf("ambiguous experiment %s: both %s and %s exist", id.String(), id.ExperimentBranch(), id.IntegrationBranch())
-	}
-	worktrees, err := m.worktrees(ctx)
-	if err != nil {
-		return Experiment{}, err
 	}
 	return m.reconcile(ctx, matches[0], worktrees)
 }
@@ -113,6 +131,7 @@ func (m *Manager) Path(ctx context.Context, value string) (string, error) {
 		"malformed-state":            true,
 		"branch-mismatch":            true,
 		"path-mismatch":              true,
+		"missing-branch":             true,
 	}
 	var codes []string
 	for _, diagnostic := range experiment.Diagnostics {
@@ -129,13 +148,14 @@ func (m *Manager) Path(ctx context.Context, value string) (string, error) {
 	return experiment.WorktreePath, nil
 }
 
-func (m *Manager) discoverExperimentRefs(ctx context.Context) ([]discoveredRef, error) {
+func (m *Manager) discoverExperimentRefs(ctx context.Context) ([]discoveredRef, []Diagnostic, error) {
 	runner := gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}
 	output, err := runner.run(ctx, "for-each-ref", "--format=%(refname)%00", "refs/heads/exp", "refs/heads/integrate")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var refs []discoveredRef
+	var diagnostics []Diagnostic
 	for _, field := range strings.Split(output, "\x00") {
 		name := strings.TrimPrefix(field, "\n")
 		name = strings.TrimSuffix(name, "\n")
@@ -155,11 +175,42 @@ func (m *Manager) discoverExperimentRefs(ctx context.Context) ([]discoveredRef, 
 		}
 		id, err := ParseID(value)
 		if err != nil {
-			return nil, fmt.Errorf("malformed active experiment ref %q: %w", name, err)
+			diagnostics = append(diagnostics, Diagnostic{Code: "malformed-ref", Message: fmt.Sprintf("malformed active experiment ref %q: %v", name, err)})
+			continue
+		}
+		refs = append(refs, discoveredRef{id: id, branch: branch, refExists: true})
+	}
+	return refs, diagnostics, nil
+}
+
+func unionWorktreeExperiments(refs []discoveredRef, worktrees []WorktreeInfo, diagnostics []Diagnostic) ([]discoveredRef, []Diagnostic) {
+	seen := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		seen[ref.branch] = true
+	}
+	for _, worktree := range worktrees {
+		branch := strings.TrimPrefix(worktree.Branch, "refs/heads/")
+		var value string
+		switch {
+		case strings.HasPrefix(branch, "exp/"):
+			value = strings.TrimPrefix(branch, "exp/")
+		case strings.HasPrefix(branch, "integrate/"):
+			value = strings.TrimPrefix(branch, "integrate/")
+		default:
+			continue
+		}
+		if seen[branch] {
+			continue
+		}
+		id, err := ParseID(value)
+		if err != nil {
+			diagnostics = append(diagnostics, Diagnostic{Code: "malformed-ref", Message: fmt.Sprintf("malformed experiment worktree branch %q: %v", worktree.Branch, err)})
+			continue
 		}
 		refs = append(refs, discoveredRef{id: id, branch: branch})
+		seen[branch] = true
 	}
-	return refs, nil
+	return refs, diagnostics
 }
 
 func (m *Manager) worktrees(ctx context.Context) ([]WorktreeInfo, error) {
@@ -173,6 +224,9 @@ func (m *Manager) worktrees(ctx context.Context) ([]WorktreeInfo, error) {
 func (m *Manager) reconcile(ctx context.Context, ref discoveredRef, worktrees []WorktreeInfo) (Experiment, error) {
 	expectedPath := filepath.Clean(ref.id.WorktreePath(m.CoordinatorRoot))
 	experiment := Experiment{State: State{ID: ref.id.String()}, WorktreePath: expectedPath}
+	if !ref.refExists {
+		experiment.Diagnostics = append(experiment.Diagnostics, Diagnostic{Code: "missing-branch", Message: fmt.Sprintf("worktree branch ref refs/heads/%s is missing", ref.branch)})
+	}
 	var byBranch, atExpected *WorktreeInfo
 	for i := range worktrees {
 		worktree := &worktrees[i]

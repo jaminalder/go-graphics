@@ -114,7 +114,7 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	if err := m.validateAvailableResources(ctx, runner, id, branch, worktreePath); err != nil {
 		return partial, resources, err
 	}
-	if err := m.enforceWriterLimit(ctx, opts.MaxWriters); err != nil {
+	if err := m.enforceWriterLimit(ctx, opts.MaxWriters, ID{}); err != nil {
 		return partial, resources, err
 	}
 
@@ -300,20 +300,29 @@ func normalizedCreateOptions(opts CreateOptions) (CreateOptions, error) {
 	if opts.WorkerTool == "" {
 		opts.WorkerTool = "unknown"
 	}
-	if opts.MaxWriters == 0 {
-		opts.MaxWriters = defaultMaxWriters
+	var err error
+	opts.MaxWriters, err = normalizedMaxWriters(opts.MaxWriters)
+	if err != nil {
+		return CreateOptions{}, err
+	}
+	return opts, nil
+}
+
+func normalizedMaxWriters(maximum int) (int, error) {
+	if maximum == 0 {
+		maximum = defaultMaxWriters
 		if value := os.Getenv("EXPERIMENT_MAX_WRITERS"); value != "" {
 			parsed, err := strconv.Atoi(value)
 			if err != nil {
-				return CreateOptions{}, fmt.Errorf("parse EXPERIMENT_MAX_WRITERS: %w", err)
+				return 0, fmt.Errorf("parse EXPERIMENT_MAX_WRITERS: %w", err)
 			}
-			opts.MaxWriters = parsed
+			maximum = parsed
 		}
 	}
-	if opts.MaxWriters < 1 {
-		return CreateOptions{}, fmt.Errorf("maximum writers must be positive")
+	if maximum < 1 {
+		return 0, fmt.Errorf("maximum writers must be positive")
 	}
-	return opts, nil
+	return maximum, nil
 }
 
 func (m *Manager) resolveCreateBase(ctx context.Context, runner gitRunner, opts CreateOptions) (string, string, error) {
@@ -570,7 +579,7 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
-func (m *Manager) enforceWriterLimit(ctx context.Context, maximum int) error {
+func (m *Manager) enforceWriterLimit(ctx context.Context, maximum int, exclude ID) error {
 	runner := gitRunner{dir: m.CoordinatorRoot, env: m.gitEnv}
 	refs, err := runner.run(ctx, "for-each-ref", "--format=%(refname:short)", "refs/heads/exp", "refs/heads/integrate")
 	if err != nil {
@@ -584,6 +593,9 @@ func (m *Manager) enforceWriterLimit(ctx context.Context, maximum int) error {
 		}
 		id, err := ParseID(strings.TrimPrefix(branch, prefix))
 		if err != nil {
+			continue
+		}
+		if id == exclude {
 			continue
 		}
 		data, err := runner.run(ctx, "show", "refs/heads/"+branch+":"+filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json")))

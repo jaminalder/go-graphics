@@ -222,8 +222,12 @@ func TestSetStateReturnsValidHumanStateWhenPreCommitRollbackIsGuarded(t *testing
 	if err == nil || !errors.Is(err, errStateChangedDuringCommit) {
 		t.Fatalf("error = %v, want guarded rollback error", err)
 	}
-	if commit != "" || !statesEqual(returned, humanState) {
-		t.Fatalf("returned state = %#v commit = %q, want current human state", returned, commit)
+	if commit != "" || !statesEqual(returned, created.State) {
+		t.Fatalf("returned state = %#v commit = %q, want authoritative branch state", returned, commit)
+	}
+	current, readErr := readState(statePath)
+	if readErr != nil || !statesEqual(current, humanState) {
+		t.Fatalf("human state was not preserved: state %#v error %v", current, readErr)
 	}
 }
 
@@ -493,6 +497,200 @@ func TestSetStateConcurrentUpdatesSerializeAndLeaveValidJSON(t *testing.T) {
 	if state.Status != StatusRunning {
 		t.Fatalf("status = %s", state.Status)
 	}
+}
+
+func TestSetStateRejectsThirdActiveWriter(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	for _, name := range []string{"first", "second", "third"} {
+		if _, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: name, MaxWriters: 3}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"first", "second"} {
+		if _, _, err := manager.SetStateWithOptions(context.Background(), "foam/"+name, StatusRunning, StateOptions{MaxWriters: 2}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	state, commit, err := manager.SetStateWithOptions(context.Background(), "foam/third", StatusRunning, StateOptions{MaxWriters: 2})
+	if err == nil || !strings.Contains(err.Error(), "maximum active writers reached (2)") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	if commit != "" || state.Status != "" {
+		t.Fatalf("rejected transition returned state %#v commit %q", state, commit)
+	}
+}
+
+func TestSetStateConcurrentWriterAdmissionHonorsOneWriterLimit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	for _, name := range []string{"first", "second"} {
+		if _, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: name, MaxWriters: 2}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, name := range []string{"first", "second"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _, err := manager.SetStateWithOptions(context.Background(), "foam/"+name, StatusRunning, StateOptions{MaxWriters: 1})
+			results <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	succeeded, rejected := 0, 0
+	for err := range results {
+		switch {
+		case err == nil:
+			succeeded++
+		case strings.Contains(err.Error(), "maximum active writers reached (1)"):
+			rejected++
+		default:
+			t.Fatalf("unexpected transition error: %v", err)
+		}
+	}
+	if succeeded != 1 || rejected != 1 {
+		t.Fatalf("successes=%d rejections=%d, want 1 each", succeeded, rejected)
+	}
+}
+
+func TestSetStateRecognizesExternallyAppliedGeneratedCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "external-generated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "before-record-ref-update" {
+			return nil
+		}
+		commit := findUnreachableCommitBySubject(t, repo, "experiment: set foam/external-generated running")
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/external-generated")
+		repo.git(t, "update-ref", "refs/heads/exp/foam/external-generated", commit, parent)
+		return nil
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/external-generated", StatusRunning)
+	if err == nil || commit == "" || state.Status != StatusRunning {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != commit {
+		t.Fatalf("applied error = %#v, commit %q", applied, commit)
+	}
+	if got := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/external-generated"); got != commit {
+		t.Fatalf("branch = %s, want %s", got, commit)
+	}
+	stored, readErr := readState(filepath.Join(filepath.Dir(created.BriefPath), "state.json"))
+	if readErr != nil || stored.Status != StatusRunning {
+		t.Fatalf("stored state = %#v error %v", stored, readErr)
+	}
+}
+
+func TestSetStateReconcilesLocalFileToDifferentAuthoritativeCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "external-different"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	resultPath := filepath.Join(filepath.Dir(created.BriefPath), "result.md")
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		attempted, err := os.ReadFile(statePath)
+		if err != nil {
+			return err
+		}
+		authoritative := created.State
+		authoritative.Status = StatusFailed
+		authoritative.UpdatedAt = authoritative.UpdatedAt.Add(time.Minute)
+		if err := writeJSONAtomic(statePath, authoritative); err != nil {
+			return err
+		}
+		if err := os.WriteFile(resultPath, []byte("external result\n"), 0o644); err != nil {
+			return err
+		}
+		repo.gitOutputAt(t, created.WorktreePath, "add", filepath.ToSlash(filepath.Join("experiments", "active", "foam--external-different", "state.json")), filepath.ToSlash(filepath.Join("experiments", "active", "foam--external-different", "result.md")))
+		repo.gitOutputAt(t, created.WorktreePath, "commit", "-m", "test: external authoritative state")
+		return os.WriteFile(statePath, attempted, 0o644)
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/external-different", StatusRunning)
+	if err == nil || commit != "" || state.Status != StatusFailed {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	stored, readErr := readState(statePath)
+	if readErr != nil || stored.Status != StatusFailed {
+		t.Fatalf("stored state = %#v error %v", stored, readErr)
+	}
+	if got := repo.gitOutputAt(t, created.WorktreePath, "status", "--porcelain"); got != "" {
+		t.Fatalf("reconciliation left dirty worktree: %s", got)
+	}
+}
+
+func TestSetStateReturnsCompetingCommitWhenItAppliesTargetState(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "external-target"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	resultPath := filepath.Join(filepath.Dir(created.BriefPath), "result.md")
+	competingCommit := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		attempted, err := os.ReadFile(statePath)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(resultPath, []byte("external result\n"), 0o644); err != nil {
+			return err
+		}
+		repo.gitOutputAt(t, created.WorktreePath, "add", filepath.ToSlash(filepath.Join("experiments", "active", "foam--external-target", "state.json")), filepath.ToSlash(filepath.Join("experiments", "active", "foam--external-target", "result.md")))
+		repo.gitOutputAt(t, created.WorktreePath, "commit", "-m", "test: external target state")
+		competingCommit = repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/external-target")
+		return os.WriteFile(statePath, attempted, 0o644)
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/external-target", StatusRunning)
+	if err == nil || commit != competingCommit || state.Status != StatusRunning {
+		t.Fatalf("SetState = state %#v commit %q error %v, want competing commit %q", state, commit, err, competingCommit)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != competingCommit {
+		t.Fatalf("applied error = %#v, want commit %q", applied, competingCommit)
+	}
+}
+
+func findUnreachableCommitBySubject(t *testing.T, repo testRepo, subject string) string {
+	t.Helper()
+	output := repo.gitOutput(t, "fsck", "--unreachable", "--no-reflogs")
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 3 || fields[1] != "commit" {
+			continue
+		}
+		if repo.gitOutput(t, "show", "-s", "--format=%s", fields[2]) == subject {
+			return fields[2]
+		}
+	}
+	t.Fatalf("unreachable commit with subject %q not found in %q", subject, output)
+	return ""
 }
 
 func assertOnlyStateChanged(t *testing.T, repo testRepo, commit, flatID string) {

@@ -13,8 +13,18 @@ import (
 
 var errStateChangedDuringCommit = errors.New("state file changed after state write")
 
+// StateOptions controls one lifecycle transition.
+type StateOptions struct {
+	MaxWriters int
+}
+
 // SetState validates and commits one lifecycle transition on its assigned branch.
 func (m *Manager) SetState(ctx context.Context, value string, target Status) (State, string, error) {
+	return m.SetStateWithOptions(ctx, value, target, StateOptions{})
+}
+
+// SetStateWithOptions validates and commits one lifecycle transition with explicit limits.
+func (m *Manager) SetStateWithOptions(ctx context.Context, value string, target Status, opts StateOptions) (State, string, error) {
 	id, err := ParseID(value)
 	if err != nil {
 		return State{}, "", err
@@ -22,16 +32,30 @@ func (m *Manager) SetState(ctx context.Context, value string, target Status) (St
 	if _, err := ParseStatus(string(target)); err != nil {
 		return State{}, "", err
 	}
-	lock, err := m.AcquireExperimentLock(ctx, id, "state "+id.String()+" "+string(target))
+	opts.MaxWriters, err = normalizedMaxWriters(opts.MaxWriters)
 	if err != nil {
 		return State{}, "", err
 	}
+	command := "state " + id.String() + " " + string(target)
+	globalLock, err := m.AcquireGlobalLock(ctx, command)
+	if err != nil {
+		return State{}, "", err
+	}
+	lock, err := m.AcquireExperimentLock(ctx, id, command)
+	if err != nil {
+		return State{}, "", errors.Join(err, m.release(globalLock))
+	}
+	if target == StatusRunning || target == StatusIntegrating {
+		if err := m.enforceWriterLimit(ctx, opts.MaxWriters, id); err != nil {
+			return State{}, "", errors.Join(err, m.release(lock), m.release(globalLock))
+		}
+	}
 	state, commit, transitionErr := m.setStateLocked(ctx, id, target)
-	return state, commit, errors.Join(transitionErr, m.release(lock))
+	return state, commit, errors.Join(transitionErr, m.release(lock), m.release(globalLock))
 }
 
 func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (State, string, error) {
-	refs, err := m.discoverExperimentRefs(ctx)
+	refs, _, err := m.discoverExperimentRefs(ctx)
 	if err != nil {
 		return State{}, "", err
 	}
@@ -158,13 +182,74 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 		if commitResult.RefUpdated {
 			return state, commitResult.Commit, appliedCommitError(commitResult, expectedRef, err)
 		}
-		recovered, recoveryErr := recoverStateAfterCommitFailure(statePath, oldDecoded, oldState, newState)
+		recovered, recoveredCommit, recoveryErr := m.recoverStateAfterCommitFailure(
+			ctx, runner, expectedRef, parent, commitResult, statePath,
+			filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json")),
+			target, oldDecoded, oldState, newState,
+		)
+		if recoveredCommit != "" {
+			applied := recordCommitResult{Commit: recoveredCommit, RefUpdated: true}
+			return recovered, recoveredCommit, appliedCommitError(applied, expectedRef, errors.Join(err, recoveryErr))
+		}
 		return recovered, "", errors.Join(err, recoveryErr)
 	}
 	return state, commitResult.Commit, nil
 }
 
-func recoverStateAfterCommitFailure(path string, oldDecoded State, oldState, writtenState []byte) (State, error) {
+func (m *Manager) recoverStateAfterCommitFailure(
+	ctx context.Context,
+	runner gitRunner,
+	expectedRef, expectedParent string,
+	result recordCommitResult,
+	path, recordPath string,
+	target Status,
+	oldDecoded State,
+	oldState, writtenState []byte,
+) (State, string, error) {
+	tipOutput, err := runner.run(ctx, "rev-parse", "--verify", expectedRef+"^{commit}")
+	if err != nil {
+		recovered, recoveryErr := recoverLocalStateAfterCommitFailure(path, oldDecoded, oldState, writtenState)
+		return recovered, "", errors.Join(fmt.Errorf("inspect authoritative branch after failed commit: %w", err), recoveryErr)
+	}
+	tip := strings.TrimSpace(tipOutput)
+	if result.Commit != "" && tip == result.Commit {
+		if syncErr := updateCommittedIndexPaths(ctx, runner, tip, []string{recordPath}); syncErr != nil {
+			return mustDecodeStateBytes(path, writtenState, oldDecoded), tip, fmt.Errorf("synchronize externally applied state commit: %w", syncErr)
+		}
+		return mustDecodeStateBytes(path, writtenState, oldDecoded), tip, nil
+	}
+	if tip == expectedParent {
+		recovered, recoveryErr := recoverLocalStateAfterCommitFailure(path, oldDecoded, oldState, writtenState)
+		return recovered, "", recoveryErr
+	}
+
+	authoritativeData, showErr := runner.run(ctx, "show", tip+":"+recordPath)
+	if showErr != nil {
+		return oldDecoded, "", fmt.Errorf("read authoritative state from competing commit %s: %w", tip, showErr)
+	}
+	authoritativeBytes := []byte(authoritativeData)
+	authoritative, decodeErr := decodeState(tip+":"+recordPath, authoritativeBytes)
+	if decodeErr != nil {
+		return oldDecoded, "", decodeErr
+	}
+	current, readErr := os.ReadFile(path)
+	if readErr != nil {
+		return authoritative, "", fmt.Errorf("inspect local state while reconciling competing commit %s: %w", tip, readErr)
+	}
+	appliedCommit := ""
+	if authoritative.Status == target {
+		appliedCommit = tip
+	}
+	if !bytes.Equal(current, writtenState) {
+		return authoritative, appliedCommit, fmt.Errorf("%w; authoritative branch is %s and local human content was preserved", errStateChangedDuringCommit, tip)
+	}
+	if writeErr := writeBytesAtomic(path, authoritativeBytes); writeErr != nil {
+		return authoritative, appliedCommit, fmt.Errorf("restore authoritative state from competing commit %s: %w", tip, writeErr)
+	}
+	return authoritative, appliedCommit, nil
+}
+
+func recoverLocalStateAfterCommitFailure(path string, oldDecoded State, oldState, writtenState []byte) (State, error) {
 	current, err := os.ReadFile(path)
 	if err != nil {
 		return oldDecoded, fmt.Errorf("inspect state for guarded rollback: %w", err)
@@ -187,4 +272,12 @@ func recoverStateAfterCommitFailure(path string, oldDecoded State, oldState, wri
 		return currentDecoded, fmt.Errorf("restore state after commit failure: %w", err)
 	}
 	return oldDecoded, nil
+}
+
+func mustDecodeStateBytes(source string, data []byte, fallback State) State {
+	state, err := decodeState(source, data)
+	if err != nil {
+		return fallback
+	}
+	return state
 }
