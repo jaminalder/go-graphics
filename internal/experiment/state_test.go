@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -628,15 +629,12 @@ func TestSetStateReconcilesLocalFileToDifferentAuthoritativeCommit(t *testing.T)
 	}
 
 	state, commit, err := manager.SetState(context.Background(), "foam/external-different", StatusRunning)
-	if err == nil || commit != "" || state.Status != StatusFailed {
+	if err == nil || commit != "" || state.Status != StatusFailed || !strings.Contains(err.Error(), "changed paths beyond") {
 		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
 	}
 	stored, readErr := readState(statePath)
-	if readErr != nil || stored.Status != StatusFailed {
+	if readErr != nil || stored.Status != StatusRunning {
 		t.Fatalf("stored state = %#v error %v", stored, readErr)
-	}
-	if got := repo.gitOutputAt(t, created.WorktreePath, "status", "--porcelain"); got != "" {
-		t.Fatalf("reconciliation left dirty worktree: %s", got)
 	}
 }
 
@@ -674,6 +672,262 @@ func TestSetStateReturnsCompetingCommitWhenItAppliesTargetState(t *testing.T) {
 	var applied *AppliedCommitError
 	if !errors.As(err, &applied) || applied.Commit != competingCommit {
 		t.Fatalf("applied error = %#v, want commit %q", applied, competingCommit)
+	}
+}
+
+func TestSetStatePreservesAttemptedFileWhenAuthoritativeRefCannotBeInspected(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "indeterminate-ref"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/indeterminate-ref")
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == "before-record-ref-update" {
+			repo.git(t, "update-ref", "-d", "refs/heads/exp/foam/indeterminate-ref")
+		}
+		return nil
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/indeterminate-ref", StatusRunning)
+	if err == nil || commit != "" || state.Status != StatusRunning {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	for _, fragment := range []string{
+		"indeterminate",
+		"refs/heads/exp/foam/indeterminate-ref",
+		parent,
+		"git rev-parse --verify",
+		"git show",
+	} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("error does not contain %q: %v", fragment, err)
+		}
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	stored, readErr := readState(statePath)
+	if readErr != nil || stored.Status != StatusRunning {
+		t.Fatalf("attempted state was rolled back: state %#v error %v", stored, readErr)
+	}
+}
+
+func TestSetStatePreservesAttemptedFileWhenAuthoritativeStateCannotBeRead(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "indeterminate-state"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/indeterminate-state")
+	recordPath := filepath.ToSlash(filepath.Join("experiments", "active", "foam--indeterminate-state", "state.json"))
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		indexPath := filepath.Join(t.TempDir(), "isolated-index")
+		indexRunner := gitRunner{dir: created.WorktreePath, env: repo.gitEnv, indexFile: indexPath}
+		if _, err := indexRunner.run(context.Background(), "read-tree", parent); err != nil {
+			return err
+		}
+		if _, err := indexRunner.run(context.Background(), "update-index", "--force-remove", "--", recordPath); err != nil {
+			return err
+		}
+		tree, err := indexRunner.run(context.Background(), "write-tree")
+		if err != nil {
+			return err
+		}
+		commit, err := (gitRunner{dir: created.WorktreePath, env: repo.gitEnv}).run(context.Background(), "commit-tree", strings.TrimSpace(tree), "-p", parent, "-m", "test: remove authoritative state")
+		if err != nil {
+			return err
+		}
+		repo.git(t, "update-ref", "refs/heads/exp/foam/indeterminate-state", strings.TrimSpace(commit), parent)
+		return nil
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/indeterminate-state", StatusRunning)
+	if err == nil || commit != "" || state.Status != StatusRunning || !strings.Contains(err.Error(), "indeterminate") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	for _, fragment := range []string{parent, "refs/heads/exp/foam/indeterminate-state", "git rev-parse --verify", "git show"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Errorf("error does not contain %q: %v", fragment, err)
+		}
+	}
+	stored, readErr := readState(filepath.Join(filepath.Dir(created.BriefPath), "state.json"))
+	if readErr != nil || stored.Status != StatusRunning {
+		t.Fatalf("attempted state was changed: state %#v error %v", stored, readErr)
+	}
+}
+
+func TestSetStateSynchronizesOnlyStateIndexForCompetingStateCommit(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "state-only-race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	recordPath := filepath.ToSlash(filepath.Join("experiments", "active", "foam--state-only-race", "state.json"))
+	unrelatedPath := filepath.Join(created.WorktreePath, "unrelated.txt")
+	unrelatedBlob := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		attempted, err := os.ReadFile(statePath)
+		if err != nil {
+			return err
+		}
+		authoritative := created.State
+		authoritative.Status = StatusFailed
+		authoritative.UpdatedAt = authoritative.UpdatedAt.Add(time.Minute)
+		if err := writeJSONAtomic(statePath, authoritative); err != nil {
+			return err
+		}
+		if err := os.WriteFile(unrelatedPath, []byte("staged user work\n"), 0o644); err != nil {
+			return err
+		}
+		repo.gitOutputAt(t, created.WorktreePath, "add", "unrelated.txt")
+		unrelatedBlob = repo.gitOutputAt(t, created.WorktreePath, "rev-parse", ":unrelated.txt")
+
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/state-only-race")
+		indexPath := filepath.Join(t.TempDir(), "isolated-index")
+		indexRunner := gitRunner{dir: created.WorktreePath, env: repo.gitEnv, indexFile: indexPath}
+		if _, err := indexRunner.run(context.Background(), "read-tree", parent); err != nil {
+			return err
+		}
+		if _, err := indexRunner.run(context.Background(), "add", "--", recordPath); err != nil {
+			return err
+		}
+		tree, err := indexRunner.run(context.Background(), "write-tree")
+		if err != nil {
+			return err
+		}
+		commit, err := (gitRunner{dir: created.WorktreePath, env: repo.gitEnv}).run(context.Background(), "commit-tree", strings.TrimSpace(tree), "-p", parent, "-m", "test: competing state only")
+		if err != nil {
+			return err
+		}
+		repo.git(t, "update-ref", "refs/heads/exp/foam/state-only-race", strings.TrimSpace(commit), parent)
+		return os.WriteFile(statePath, attempted, 0o644)
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/state-only-race", StatusRunning)
+	if err == nil || commit != "" || state.Status != StatusFailed {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	if got := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", ":unrelated.txt"); got != unrelatedBlob {
+		t.Fatalf("unrelated staged blob = %s, want %s", got, unrelatedBlob)
+	}
+	status := strings.Fields(repo.gitOutputAt(t, created.WorktreePath, "status", "--porcelain"))
+	if !slices.Equal(status, []string{"A", "unrelated.txt"}) {
+		t.Fatalf("status fields = %v, want only staged unrelated.txt", status)
+	}
+	stored, readErr := readState(statePath)
+	if readErr != nil || stored.Status != StatusFailed {
+		t.Fatalf("stored state = %#v error %v", stored, readErr)
+	}
+}
+
+func TestSetStatePreservesHumanStateIndexChangeDuringRecovery(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "index-human-race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	recordPath := filepath.ToSlash(filepath.Join("experiments", "active", "foam--index-human-race", "state.json"))
+	humanState := created.State
+	humanState.Status = StatusFailed
+	humanState.UpdatedAt = humanState.UpdatedAt.Add(2 * time.Minute)
+	humanBlob := ""
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		attempted, err := os.ReadFile(statePath)
+		if err != nil {
+			return err
+		}
+		authoritative := created.State
+		authoritative.Status = StatusFailed
+		authoritative.UpdatedAt = authoritative.UpdatedAt.Add(time.Minute)
+		if err := writeJSONAtomic(statePath, authoritative); err != nil {
+			return err
+		}
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/index-human-race")
+		indexPath := filepath.Join(t.TempDir(), "isolated-index")
+		indexRunner := gitRunner{dir: created.WorktreePath, env: repo.gitEnv, indexFile: indexPath}
+		if _, err := indexRunner.run(context.Background(), "read-tree", parent); err != nil {
+			return err
+		}
+		if _, err := indexRunner.run(context.Background(), "add", "--", recordPath); err != nil {
+			return err
+		}
+		tree, err := indexRunner.run(context.Background(), "write-tree")
+		if err != nil {
+			return err
+		}
+		commit, err := (gitRunner{dir: created.WorktreePath, env: repo.gitEnv}).run(context.Background(), "commit-tree", strings.TrimSpace(tree), "-p", parent, "-m", "test: authoritative state")
+		if err != nil {
+			return err
+		}
+		repo.git(t, "update-ref", "refs/heads/exp/foam/index-human-race", strings.TrimSpace(commit), parent)
+		if err := writeJSONAtomic(statePath, humanState); err != nil {
+			return err
+		}
+		repo.gitOutputAt(t, created.WorktreePath, "add", recordPath)
+		humanBlob = repo.gitOutputAt(t, created.WorktreePath, "rev-parse", ":"+recordPath)
+		return os.WriteFile(statePath, attempted, 0o644)
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/index-human-race", StatusRunning)
+	if err == nil || commit != "" || state.Status != StatusFailed || !strings.Contains(err.Error(), "state index changed") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	if got := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", ":"+recordPath); got != humanBlob {
+		t.Fatalf("human index blob = %s, want %s", got, humanBlob)
+	}
+}
+
+func TestSetStateRefusesPartialSyncForCompetingCommitWithOtherPaths(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "wide-race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	resultPath := filepath.Join(filepath.Dir(created.BriefPath), "result.md")
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		attempted, err := os.ReadFile(statePath)
+		if err != nil {
+			return err
+		}
+		authoritative := created.State
+		authoritative.Status = StatusFailed
+		if err := writeJSONAtomic(statePath, authoritative); err != nil {
+			return err
+		}
+		if err := os.WriteFile(resultPath, []byte("other branch change\n"), 0o644); err != nil {
+			return err
+		}
+		repo.gitOutputAt(t, created.WorktreePath, "add", filepath.ToSlash(filepath.Join("experiments", "active", "foam--wide-race", "state.json")), filepath.ToSlash(filepath.Join("experiments", "active", "foam--wide-race", "result.md")))
+		repo.gitOutputAt(t, created.WorktreePath, "commit", "-m", "test: wide competing commit")
+		return os.WriteFile(statePath, attempted, 0o644)
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/wide-race", StatusRunning)
+	if err == nil || commit != "" || state.Status != StatusFailed || !strings.Contains(err.Error(), "changed paths beyond") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	stored, readErr := readState(statePath)
+	if readErr != nil || stored.Status != StatusRunning {
+		t.Fatalf("attempted local state was partially synchronized: state %#v error %v", stored, readErr)
 	}
 }
 

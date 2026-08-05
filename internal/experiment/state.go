@@ -156,6 +156,11 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 	if err != nil {
 		return State{}, "", fmt.Errorf("capture old state before transition: %w", err)
 	}
+	recordPath := filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json"))
+	oldIndex, err := readIndexEntry(ctx, runner, recordPath)
+	if err != nil {
+		return State{}, "", fmt.Errorf("capture state index before transition: %w", err)
+	}
 	oldDecoded := state
 	state.Status = target
 	state.UpdatedAt = now().UTC()
@@ -184,8 +189,7 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 		}
 		recovered, recoveredCommit, recoveryErr := m.recoverStateAfterCommitFailure(
 			ctx, runner, expectedRef, parent, commitResult, statePath,
-			filepath.ToSlash(filepath.Join(id.RecordDir(), "state.json")),
-			target, oldDecoded, oldState, newState,
+			recordPath, target, oldDecoded, oldState, newState, oldIndex,
 		)
 		if recoveredCommit != "" {
 			applied := recordCommitResult{Commit: recoveredCommit, RefUpdated: true}
@@ -205,11 +209,12 @@ func (m *Manager) recoverStateAfterCommitFailure(
 	target Status,
 	oldDecoded State,
 	oldState, writtenState []byte,
+	oldIndex indexEntry,
 ) (State, string, error) {
 	tipOutput, err := runner.run(ctx, "rev-parse", "--verify", expectedRef+"^{commit}")
 	if err != nil {
-		recovered, recoveryErr := recoverLocalStateAfterCommitFailure(path, oldDecoded, oldState, writtenState)
-		return recovered, "", errors.Join(fmt.Errorf("inspect authoritative branch after failed commit: %w", err), recoveryErr)
+		attempted := mustDecodeStateBytes(path, writtenState, State{})
+		return attempted, "", indeterminateStateError(expectedRef, expectedParent, result.Commit, recordPath, err)
 	}
 	tip := strings.TrimSpace(tipOutput)
 	if result.Commit != "" && tip == result.Commit {
@@ -225,7 +230,8 @@ func (m *Manager) recoverStateAfterCommitFailure(
 
 	authoritativeData, showErr := runner.run(ctx, "show", tip+":"+recordPath)
 	if showErr != nil {
-		return oldDecoded, "", fmt.Errorf("read authoritative state from competing commit %s: %w", tip, showErr)
+		attempted := mustDecodeStateBytes(path, writtenState, State{})
+		return attempted, "", indeterminateStateError(expectedRef, expectedParent, result.Commit, recordPath, fmt.Errorf("read authoritative state from competing commit %s: %w", tip, showErr))
 	}
 	authoritativeBytes := []byte(authoritativeData)
 	authoritative, decodeErr := decodeState(tip+":"+recordPath, authoritativeBytes)
@@ -243,10 +249,92 @@ func (m *Manager) recoverStateAfterCommitFailure(
 	if !bytes.Equal(current, writtenState) {
 		return authoritative, appliedCommit, fmt.Errorf("%w; authoritative branch is %s and local human content was preserved", errStateChangedDuringCommit, tip)
 	}
+	changed, diffErr := changedPaths(ctx, runner, expectedParent, tip)
+	if diffErr != nil {
+		return authoritative, appliedCommit, fmt.Errorf("inspect competing branch drift %s..%s: %w", expectedParent, tip, diffErr)
+	}
+	for _, changedPath := range changed {
+		if changedPath != recordPath {
+			return authoritative, appliedCommit, fmt.Errorf("competing branch %s changed paths beyond %s: %v; recovery required and local attempted state preserved", tip, recordPath, changed)
+		}
+	}
+	currentIndex, indexErr := readIndexEntry(ctx, runner, recordPath)
+	if indexErr != nil {
+		return authoritative, appliedCommit, fmt.Errorf("inspect state index while reconciling competing commit %s: %w", tip, indexErr)
+	}
+	if currentIndex != oldIndex {
+		return authoritative, appliedCommit, fmt.Errorf("%w; state index changed during transition and local/index content was preserved", errStateChangedDuringCommit)
+	}
+	authoritativeIndex, treeErr := readTreeEntry(ctx, runner, tip, recordPath)
+	if treeErr != nil {
+		return authoritative, appliedCommit, fmt.Errorf("read authoritative state index entry from %s: %w", tip, treeErr)
+	}
 	if writeErr := writeBytesAtomic(path, authoritativeBytes); writeErr != nil {
 		return authoritative, appliedCommit, fmt.Errorf("restore authoritative state from competing commit %s: %w", tip, writeErr)
 	}
+	if indexErr := writeIndexEntry(ctx, runner, recordPath, authoritativeIndex); indexErr != nil {
+		return authoritative, appliedCommit, fmt.Errorf("synchronize authoritative state index from competing commit %s: %w", tip, indexErr)
+	}
 	return authoritative, appliedCommit, nil
+}
+
+type indexEntry struct {
+	mode string
+	blob string
+}
+
+func readIndexEntry(ctx context.Context, runner gitRunner, path string) (indexEntry, error) {
+	output, err := runner.run(ctx, "ls-files", "--stage", "-z", "--", path)
+	if err != nil {
+		return indexEntry{}, err
+	}
+	record := strings.TrimSuffix(output, "\x00")
+	metadata, gotPath, ok := strings.Cut(record, "\t")
+	fields := strings.Fields(metadata)
+	if !ok || gotPath != path || len(fields) != 3 || fields[2] != "0" {
+		return indexEntry{}, fmt.Errorf("parse index entry %q for %s", record, path)
+	}
+	return indexEntry{mode: fields[0], blob: fields[1]}, nil
+}
+
+func readTreeEntry(ctx context.Context, runner gitRunner, commit, path string) (indexEntry, error) {
+	output, err := runner.run(ctx, "ls-tree", "-z", commit, "--", path)
+	if err != nil {
+		return indexEntry{}, err
+	}
+	record := strings.TrimSuffix(output, "\x00")
+	metadata, gotPath, ok := strings.Cut(record, "\t")
+	fields := strings.Fields(metadata)
+	if !ok || gotPath != path || len(fields) != 3 || fields[1] != "blob" {
+		return indexEntry{}, fmt.Errorf("parse tree entry %q for %s", record, path)
+	}
+	return indexEntry{mode: fields[0], blob: fields[2]}, nil
+}
+
+func writeIndexEntry(ctx context.Context, runner gitRunner, path string, entry indexEntry) error {
+	_, err := runner.run(ctx, "update-index", "--add", "--cacheinfo", entry.mode, entry.blob, path)
+	return err
+}
+
+func changedPaths(ctx context.Context, runner gitRunner, from, to string) ([]string, error) {
+	output, err := runner.run(ctx, "diff", "--name-only", "-z", from, to, "--")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, path := range strings.Split(output, "\x00") {
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
+
+func indeterminateStateError(ref, expectedParent, generatedCommit, recordPath string, cause error) error {
+	return fmt.Errorf(
+		"state recovery is indeterminate for %s: cannot prove whether expected parent %s or generated commit %s is authoritative: %w; inspect without mutation:\ngit rev-parse --verify %s\ngit show %s:%s",
+		ref, expectedParent, generatedCommit, cause, shellQuote(ref+"^{commit}"), shellQuote(ref), shellQuote(recordPath),
+	)
 }
 
 func recoverLocalStateAfterCommitFailure(path string, oldDecoded State, oldState, writtenState []byte) (State, error) {
