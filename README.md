@@ -53,7 +53,8 @@ out/               rendered images (gitignored)
 
 - **Design & invariants:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **First sketch spec:** [docs/sketches/001-contour-noise.md](docs/sketches/001-contour-noise.md)
-- **Agent/contributor guide:** [CLAUDE.md](CLAUDE.md)
+- **Agent/contributor guide:** [AGENTS.md](AGENTS.md)
+- **Branch/worktree workflow:** [docs/WORKTREE-WORKFLOW.md](docs/WORKTREE-WORKFLOW.md)
 
 ## Credits & inspiration
 

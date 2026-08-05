@@ -12,6 +12,3 @@
 # Agent worktrees live inside the repo; they are checkouts, not content.
 .claude/worktrees/
 .worktrees/
-
-# Experiment renders are isolated per worktree and never committed here.
-/out/experiments/

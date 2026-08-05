@@ -1,12 +1,12 @@
-# Experiment {{.ID}}
+# Experiment brief
 
-- Created: {{.CreatedAt}}
-- Base commit: `{{.BaseCommit}}`
-- Stage: `{{.Stage}}`
-- Profile: `{{.Profile}}`
-- Fixed seeds: `{{.Seeds}}`
-- Source experiments: {{.SourceExperiments}}
-- Output path: `{{.OutputPath}}`
+- Name:
+- Branch: `exp/<name>`
+- Worktree: `../go-graphics-worktrees/<name>`
+- Base commit:
+- Stage:
+- Profile: `preview`
+- Fixed seeds: `1,2,3,5,8,13`
 
 ## Hypothesis
 
@@ -19,7 +19,7 @@ changing it.
 
 ## Stage
 
-Work only in `{{.Stage}}`.
+Name the one stage this experiment may change.
 
 ## Preserve
 
@@ -27,7 +27,7 @@ List behavior and visual qualities that must remain stable.
 
 ## Scope
 
-List the expected implementation and record files.
+List the expected implementation, test, and documentation files.
 
 ## Out of scope
 
@@ -35,41 +35,33 @@ List explicit exclusions and tempting adjacent changes.
 
 ## Baseline
 
-Run the fixed-seed baseline before implementation:
+Record and run the fixed-seed baseline before implementation:
 
 ```sh
-{{.BaselineCommand}}
+# Baseline command
 ```
 
 Render the candidate with the same profile and seeds:
 
 ```sh
-{{.CandidateCommand}}
+# Candidate command
 ```
 
-Keep all generated renders under `{{.OutputPath}}`.
-
-## Favorites
-
-`favorites.json` is an array of selected renders. Each entry has `seed`
-(uint64), `label` (string), `image` (record-relative artifact path), and
-`notes` (string).
+Keep generated renders under this worktree's ignored `out/` directory.
 
 ## Required deliverables
 
 - Focused implementation and tests for the permitted stage.
-- Coherent commits containing the worker's implementation and record changes.
-- Baseline and candidate renders using profile `{{.Profile}}` and fixed seeds
-  `{{.Seeds}}`.
+- Coherent commits containing the worker's scoped changes.
+- Baseline and candidate renders using the same profile and fixed seeds.
 - A visually inspected comparison contact sheet.
-- A completed `result.md` naming verification outcomes, commits, comparison
-  artifacts, visual consequences, failure modes, strongest and weakest seeds,
-  recommendation, reusable behavior, kept/rejected behavior, and possible
-  combinations.
-- State set to `review-pending`; stop without merging.
+- A completed result report naming verification outcomes, commits, comparison
+  artifacts, visual consequences, strongest and weakest seeds, recommendation,
+  and behavior to keep or reject.
+- Stop without merging or removing the worktree.
 
 ## Worker restrictions
 
-Operate only inside this worktree. Do not switch branches. Do not create or
-remove worktrees. Do not merge, rebase, or modify master. Do not work outside
-the assigned scope. Do not modify another experiment's files.
+Operate only inside the assigned worktree. Do not switch branches, create or
+remove worktrees, merge, rebase, or modify `master`. Do not work outside the
+assigned scope or modify another experiment's files.

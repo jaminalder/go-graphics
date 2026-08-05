@@ -1,21 +1,21 @@
 # AGENTS.md — agent guide for go-graphics
 
-## Mandatory experiment rules
+## Branch and worktree rules
 
-- The coordinator remains in the canonical checkout on `master`.
-- Create every experiment through `./tools/experiment`; do not construct its
-  branch, worktree, or record by hand.
-- Give each writing worker its own assigned worktree. Never share a writing
-  checkout or let two workers write in the same worktree.
-- Never switch the branch of an assigned worktree.
-- Keep all generated output under the experiment record's output path.
-- Workers commit coherent implementation and record changes before review.
-- Compare baseline and candidate with fixed-seed sweeps and visually inspect
-  the rendered contact sheets. Passing tests is not artistic approval.
-- Workers set the experiment to `review-pending` and stop without merging.
-- Merge or discard only after explicit user approval.
-- Never use `git reset --hard`, `git clean -fd`, forced worktree removal,
-  forced branch deletion, or direct merges from worker worktrees.
+- Keep the coordinator in the canonical checkout on `master`.
+- Give every writing worker one dedicated branch and sibling worktree; never
+  share a writing checkout.
+- Create, inspect, integrate, and remove worktrees with ordinary Git commands
+  from `docs/WORKTREE-WORKFLOW.md`.
+- Workers operate only in their assigned worktree, do not switch its branch,
+  and do not merge or remove worktrees.
+- Keep generated renders under `out/` in the assigned worktree. Commit only a
+  deliberately selected review sheet when useful.
+- Commit coherent changes before review. For artwork changes, compare fixed
+  seeds and visually inspect the output; passing tests is not artistic approval.
+- Integrate or discard work only after explicit user approval.
+- Do not use hard resets, cleans, force deletion, or forced worktree removal as
+  routine workflow commands. Inspect and resolve the condition Git reports.
 
 Generative static 2D art in Go. Deterministic sketches → PNG/JPEG at preview,
 web, and print resolution. Stdlib raster now; `tdewolff/canvas` later for
@@ -111,6 +111,8 @@ you.
 
 ## Docs map (read before working on the related area)
 
+- `docs/WORKTREE-WORKFLOW.md` — native Git commands and responsibilities for
+  isolated branch/worktree development, review, integration, and cleanup.
 - `docs/ARCHITECTURE.md` — package layout, dependency rules, **core
   invariants**, testing strategy, decision log. Update the decision log when
   making a non-obvious choice.

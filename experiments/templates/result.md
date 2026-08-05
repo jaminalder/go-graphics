@@ -1,12 +1,10 @@
-# Experiment result: {{.ID}}
+# Experiment result
 
-- Created: {{.CreatedAt}}
-- Base commit: `{{.BaseCommit}}`
-- Stage: `{{.Stage}}`
-- Profile: `{{.Profile}}`
-- Fixed seeds: `{{.Seeds}}`
-- Source experiments: {{.SourceExperiments}}
-- Output path: `{{.OutputPath}}`
+- Name:
+- Branch: `exp/<name>`
+- Base commit:
+- Profile:
+- Fixed seeds:
 
 ## Summary
 
@@ -14,7 +12,7 @@ Describe what changed and whether it supported the hypothesis.
 
 ## Verification
 
-Record each command and its outcome. Passing tests is not artistic approval.
+List each command and its outcome. Passing tests is not artistic approval.
 
 ## Commits
 
@@ -22,8 +20,8 @@ List commit hashes and the coherent change represented by each.
 
 ## Comparisons
 
-- Baseline command: `{{.BaselineCommand}}`
-- Candidate command: `{{.CandidateCommand}}`
+- Baseline command:
+- Candidate command:
 - Baseline artifacts:
 - Candidate artifacts:
 - Contact sheet:
@@ -43,12 +41,8 @@ Name the seeds and explain what fails.
 
 ## Recommendation
 
-Recommend merge, revise, selected-behavior integration, combination, keep
-open, or discard. The user makes the final artistic and lifecycle decision.
-
-## Reusable
-
-List independently reusable commits or behavior.
+Recommend full merge, selected commit(s), manual reimplementation, revision,
+or discard. The user makes the final artistic and integration decision.
 
 ## Keep
 
@@ -57,8 +51,3 @@ List behavior worth retaining.
 ## Reject
 
 List behavior that should not be integrated.
-
-## Combinations
-
-List promising combinations with other experiments and identify selected and
-rejected behavior from each source.
