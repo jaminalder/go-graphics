@@ -128,10 +128,26 @@ func renderTemplate(source, destination string, data any) error {
 
 func commitRecord(
 	ctx context.Context,
-	worktree, recordDir, message, expectedBranch, expectedParent string,
+	worktree, recordDir string, paths []string, message, expectedBranch, expectedParent string,
 	env []string,
 	checkpoint func(string) error,
 ) (string, error) {
+	recordDir = filepath.Clean(recordDir)
+	if filepath.IsAbs(recordDir) || recordDir == "." || recordDir == ".." || strings.HasPrefix(recordDir, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid record directory %q", recordDir)
+	}
+	if len(paths) == 0 {
+		return "", fmt.Errorf("record commit requires at least one path")
+	}
+	cleanPaths := make([]string, len(paths))
+	for i, path := range paths {
+		path = filepath.Clean(path)
+		relative, err := filepath.Rel(recordDir, path)
+		if err != nil || filepath.IsAbs(path) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("record commit path %q is not a file below %q", path, recordDir)
+		}
+		cleanPaths[i] = filepath.ToSlash(path)
+	}
 	runner := gitRunner{dir: worktree, env: env}
 	expectedRef := "refs/heads/" + expectedBranch
 	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
@@ -161,7 +177,8 @@ func commitRecord(
 	if _, err := indexRunner.run(ctx, "read-tree", expectedParent); err != nil {
 		return "", err
 	}
-	if _, err := indexRunner.run(ctx, "add", "--", filepath.ToSlash(recordDir)); err != nil {
+	addArgs := append([]string{"add", "--"}, cleanPaths...)
+	if _, err := indexRunner.run(ctx, addArgs...); err != nil {
 		return "", err
 	}
 	if checkpoint != nil {
@@ -185,7 +202,40 @@ func commitRecord(
 	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
 		return commit, err
 	}
+	if err := updateCommittedIndexPaths(ctx, runner, commit, cleanPaths); err != nil {
+		return commit, err
+	}
 	return commit, nil
+}
+
+func updateCommittedIndexPaths(ctx context.Context, runner gitRunner, commit string, paths []string) error {
+	args := append([]string{"ls-tree", "-z", commit, "--"}, paths...)
+	output, err := runner.run(ctx, args...)
+	if err != nil {
+		return err
+	}
+	entries := make(map[string][2]string, len(paths))
+	for _, record := range strings.Split(output, "\x00") {
+		if record == "" {
+			continue
+		}
+		metadata, path, ok := strings.Cut(record, "\t")
+		fields := strings.Fields(metadata)
+		if !ok || len(fields) != 3 || fields[1] != "blob" {
+			return fmt.Errorf("parse committed record index entry %q", record)
+		}
+		entries[path] = [2]string{fields[0], fields[2]}
+	}
+	for _, path := range paths {
+		entry, ok := entries[path]
+		if !ok {
+			return fmt.Errorf("committed record path is missing from tree: %s", path)
+		}
+		if _, err := runner.run(ctx, "update-index", "--add", "--cacheinfo", entry[0], entry[1], path); err != nil {
+			return fmt.Errorf("update real index for committed record path %q: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func requireSymbolicHEAD(ctx context.Context, runner gitRunner, expectedRef string) error {

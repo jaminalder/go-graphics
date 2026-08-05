@@ -230,7 +230,11 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	if err := m.validateAssignedWorktree(ctx, runner, branch, worktreePath, baseCommit); err != nil {
 		return partial, resources, err
 	}
-	recordCommit, err := commitRecord(ctx, worktreePath, recordDir, "experiment: create "+id.String(), branch, baseCommit, m.gitEnv, m.createCheckpoint)
+	recordFiles := []string{"brief.md", "favorites.json", "result.md", "state.json"}
+	for i := range recordFiles {
+		recordFiles[i] = filepath.Join(recordDir, recordFiles[i])
+	}
+	recordCommit, err := commitRecord(ctx, worktreePath, recordDir, recordFiles, "experiment: create "+id.String(), branch, baseCommit, m.gitEnv, m.createCheckpoint)
 	if err != nil {
 		return partial, resources, err
 	}

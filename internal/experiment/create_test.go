@@ -325,7 +325,8 @@ func TestCreateRejectsThirdActiveWriter(t *testing.T) {
 			t.Fatal(err)
 		}
 		parent := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "HEAD")
-		if _, err := commitRecord(context.Background(), created.WorktreePath, filepath.Join("experiments", "active", "foam--"+name), "experiment: start foam/"+name, created.State.Branch, parent, repo.gitEnv, nil); err != nil {
+		recordDir := filepath.Join("experiments", "active", "foam--"+name)
+		if _, err := commitRecord(context.Background(), created.WorktreePath, recordDir, []string{filepath.Join(recordDir, "state.json")}, "experiment: start foam/"+name, created.State.Branch, parent, repo.gitEnv, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -376,7 +377,8 @@ func TestCreateChildRejectsParentWithMismatchedState(t *testing.T) {
 		t.Fatal(err)
 	}
 	parentTip := repo.gitOutputAt(t, parent.WorktreePath, "rev-parse", "HEAD")
-	if _, err := commitRecord(context.Background(), parent.WorktreePath, filepath.Join("experiments", "active", "foam--parent"), "experiment: corrupt fixture", "exp/foam/parent", parentTip, repo.gitEnv, nil); err != nil {
+	recordDir := filepath.Join("experiments", "active", "foam--parent")
+	if _, err := commitRecord(context.Background(), parent.WorktreePath, recordDir, []string{filepath.Join(recordDir, "state.json")}, "experiment: corrupt fixture", "exp/foam/parent", parentTip, repo.gitEnv, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -400,7 +402,8 @@ func TestCreateCountsCommittedWriterStateWhenWorktreeRecordIsMissing(t *testing.
 			t.Fatal(err)
 		}
 		parent := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "HEAD")
-		if _, err := commitRecord(context.Background(), created.WorktreePath, filepath.Join("experiments", "active", "foam--"+name), "experiment: start foam/"+name, created.State.Branch, parent, repo.gitEnv, nil); err != nil {
+		recordDir := filepath.Join("experiments", "active", "foam--"+name)
+		if _, err := commitRecord(context.Background(), created.WorktreePath, recordDir, []string{filepath.Join(recordDir, "state.json")}, "experiment: start foam/"+name, created.State.Branch, parent, repo.gitEnv, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Remove(statePath); err != nil {
@@ -1030,8 +1033,7 @@ func TestCreateRecordCommitExcludesConcurrentRealIndexChanges(t *testing.T) {
 	id, _ := ParseID("foam/isolated-index")
 	branch := id.ExperimentBranch()
 	worktree := id.WorktreePath(manager.CoordinatorRoot)
-	expectedParent := repo.gitOutput(t, "rev-parse", "HEAD")
-	realIndexTree := ""
+	stagedUserBlob := ""
 	manager.createCheckpoint = func(checkpoint string) error {
 		if checkpoint != "during-record-commit" {
 			return nil
@@ -1040,7 +1042,7 @@ func TestCreateRecordCommitExcludesConcurrentRealIndexChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 		repo.gitOutputAt(t, worktree, "add", "user-staged.txt")
-		realIndexTree = repo.gitOutputAt(t, worktree, "write-tree")
+		stagedUserBlob = repo.gitOutputAt(t, worktree, "rev-parse", ":user-staged.txt")
 		return nil
 	}
 
@@ -1048,13 +1050,13 @@ func TestCreateRecordCommitExcludesConcurrentRealIndexChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if realIndexTree == "" {
+	if stagedUserBlob == "" {
 		t.Fatal("record commit checkpoint was not reached")
 	}
-	if got := repo.gitOutputAt(t, worktree, "write-tree"); got != realIndexTree {
-		t.Fatalf("real index tree changed to %s, want %s", got, realIndexTree)
+	if got := repo.gitOutputAt(t, worktree, "rev-parse", ":user-staged.txt"); got != stagedUserBlob {
+		t.Fatalf("staged user blob changed to %s, want %s", got, stagedUserBlob)
 	}
-	if got := repo.gitOutputAt(t, worktree, "diff", "--cached", "--name-only", expectedParent); got != "user-staged.txt" {
+	if got := repo.gitOutputAt(t, worktree, "diff", "--cached", "--name-only", branch); got != "user-staged.txt" {
 		t.Fatalf("real staged paths = %q, want only user-staged.txt", got)
 	}
 	commitPaths := strings.Fields(repo.gitOutput(t, "diff-tree", "--no-commit-id", "--name-only", "-r", branch))
