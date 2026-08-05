@@ -61,11 +61,11 @@ type Sketch struct {
 // New returns warp configured for a moderately folded nested field.
 func New() *Sketch {
 	s := &Sketch{
-		Scale:          2.2,
+		Scale:          1.65,
 		Gain:           0.5,
 		Lacunarity:     2,
-		WarpStrength:   2.2,
-		NestedStrength: 2.8,
+		WarpStrength:   3,
+		NestedStrength: 4,
 		Octaves:        5,
 		warpName:       "nested",
 		appearanceName: "gradient",
@@ -167,7 +167,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 func (p plan) sample(u, v float64) fieldSample {
 	x, y := u*p.set.scale, v*p.set.scale
 	activityField := p.activity.At(u*0.65+17.3, v*0.65-9.7)
-	activity := 0.25 + 0.95*mathx.Smoothstep(-0.4, 0.4, activityField)
+	activity := 0.12 + 1.28*mathx.Smoothstep(-0.4, 0.4, activityField)
 
 	qx := p.fbm(p.q[0], x+3.1, y-7.9)
 	qy := p.fbm(p.q[1], x-5.3, y+11.7)

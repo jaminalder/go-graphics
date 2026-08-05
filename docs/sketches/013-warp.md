@@ -68,8 +68,8 @@ by luminance before building their ramps.
 - `--appearance gradient|structure`: palette mapping.
 
 The defaults target useful preview iteration: nested mode with gradient
-appearance, moderate base scale, five octaves, and enough displacement for the
-broad activity envelope to separate calm and folded passages.
+appearance, a low base scale, five octaves, and strong displacement modulated
+from near-calm to turbulent by the broad activity envelope.
 
 ## Determinism And Resolution
 
