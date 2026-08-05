@@ -137,8 +137,12 @@ func TestSetStateRestoresOldFileWhenBranchAdvanceDefeatsCommit(t *testing.T) {
 		return nil
 	}
 
-	if _, _, err := manager.SetState(context.Background(), "foam/rollback", StatusRunning); err == nil || !strings.Contains(err.Error(), "compare-and-swap") {
+	returned, commit, err := manager.SetState(context.Background(), "foam/rollback", StatusRunning)
+	if err == nil || !strings.Contains(err.Error(), "compare-and-swap") {
 		t.Fatalf("error = %v, want compare-and-swap failure", err)
+	}
+	if commit != "" || returned.Status != StatusCreated || !statesEqual(returned, created.State) {
+		t.Fatalf("returned state = %#v commit = %q, want old created state and empty commit", returned, commit)
 	}
 	if got := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/rollback"); got != advanced {
 		t.Fatalf("branch = %s, want concurrent advance %s", got, advanced)
@@ -189,6 +193,73 @@ func TestSetStatePreservesHumanFileChangeWhenCommitFails(t *testing.T) {
 	}
 	if !errors.Is(err, errStateChangedDuringCommit) {
 		t.Fatalf("error = %v, want errStateChangedDuringCommit", err)
+	}
+}
+
+func TestSetStateReturnsValidHumanStateWhenPreCommitRollbackIsGuarded(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "human-valid-race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	humanState := created.State
+	humanState.Status = StatusFailed
+	humanState.UpdatedAt = humanState.UpdatedAt.Add(time.Minute)
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/human-valid-race")
+		tree := repo.gitOutput(t, "rev-parse", parent+"^{tree}")
+		advanced := repo.gitOutput(t, "commit-tree", tree, "-p", parent, "-m", "test: concurrent branch advance")
+		repo.git(t, "update-ref", "refs/heads/exp/foam/human-valid-race", advanced, parent)
+		return writeJSONAtomic(statePath, humanState)
+	}
+
+	returned, commit, err := manager.SetState(context.Background(), "foam/human-valid-race", StatusRunning)
+	if err == nil || !errors.Is(err, errStateChangedDuringCommit) {
+		t.Fatalf("error = %v, want guarded rollback error", err)
+	}
+	if commit != "" || !statesEqual(returned, humanState) {
+		t.Fatalf("returned state = %#v commit = %q, want current human state", returned, commit)
+	}
+}
+
+func TestSetStateFallsBackToOldStateWhenGuardedCurrentStateIsMalformed(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "human-malformed-race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(filepath.Dir(created.BriefPath), "state.json")
+	malformed := []byte("human content\n")
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint != "during-record-commit" {
+			return nil
+		}
+		parent := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/human-malformed-race")
+		tree := repo.gitOutput(t, "rev-parse", parent+"^{tree}")
+		advanced := repo.gitOutput(t, "commit-tree", tree, "-p", parent, "-m", "test: concurrent branch advance")
+		repo.git(t, "update-ref", "refs/heads/exp/foam/human-malformed-race", advanced, parent)
+		return os.WriteFile(statePath, malformed, 0o644)
+	}
+
+	returned, commit, err := manager.SetState(context.Background(), "foam/human-malformed-race", StatusRunning)
+	if err == nil || !errors.Is(err, errStateChangedDuringCommit) {
+		t.Fatalf("error = %v, want guarded rollback error", err)
+	}
+	if commit != "" || !statesEqual(returned, created.State) {
+		t.Fatalf("returned state = %#v commit = %q, want old state fallback", returned, commit)
+	}
+	current, readErr := os.ReadFile(statePath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(current, malformed) {
+		t.Fatalf("malformed human content changed to %q", current)
 	}
 }
 

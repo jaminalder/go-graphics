@@ -128,12 +128,13 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 	if now == nil {
 		now = time.Now
 	}
-	state.Status = target
-	state.UpdatedAt = now().UTC()
 	oldState, err := os.ReadFile(statePath)
 	if err != nil {
 		return State{}, "", fmt.Errorf("capture old state before transition: %w", err)
 	}
+	oldDecoded := state
+	state.Status = target
+	state.UpdatedAt = now().UTC()
 	if err := writeJSONAtomic(statePath, state); err != nil {
 		return State{}, "", err
 	}
@@ -157,21 +158,33 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 		if commitResult.RefUpdated {
 			return state, commitResult.Commit, appliedCommitError(commitResult, expectedRef, err)
 		}
-		return state, commitResult.Commit, errors.Join(err, restoreStateAfterCommitFailure(statePath, oldState, newState))
+		recovered, recoveryErr := recoverStateAfterCommitFailure(statePath, oldDecoded, oldState, newState)
+		return recovered, "", errors.Join(err, recoveryErr)
 	}
 	return state, commitResult.Commit, nil
 }
 
-func restoreStateAfterCommitFailure(path string, oldState, writtenState []byte) error {
+func recoverStateAfterCommitFailure(path string, oldDecoded State, oldState, writtenState []byte) (State, error) {
 	current, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("inspect state for guarded rollback: %w", err)
+		return oldDecoded, fmt.Errorf("inspect state for guarded rollback: %w", err)
 	}
 	if !bytes.Equal(current, writtenState) {
-		return fmt.Errorf("%w; preserving current content", errStateChangedDuringCommit)
+		currentDecoded, decodeErr := decodeState(path, current)
+		if decodeErr != nil {
+			return oldDecoded, errors.Join(
+				fmt.Errorf("%w; preserving current content", errStateChangedDuringCommit),
+				fmt.Errorf("decode current state after guarded rollback: %w", decodeErr),
+			)
+		}
+		return currentDecoded, fmt.Errorf("%w; preserving current content", errStateChangedDuringCommit)
 	}
 	if err := writeBytesAtomic(path, oldState); err != nil {
-		return fmt.Errorf("restore state after commit failure: %w", err)
+		currentDecoded, decodeErr := decodeState(path, current)
+		if decodeErr != nil {
+			return oldDecoded, errors.Join(fmt.Errorf("restore state after commit failure: %w", err), decodeErr)
+		}
+		return currentDecoded, fmt.Errorf("restore state after commit failure: %w", err)
 	}
-	return nil
+	return oldDecoded, nil
 }
