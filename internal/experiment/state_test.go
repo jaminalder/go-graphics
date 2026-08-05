@@ -192,6 +192,116 @@ func TestSetStatePreservesHumanFileChangeWhenCommitFails(t *testing.T) {
 	}
 }
 
+func TestSetStatePreservesAppliedCommitWhenHEADChangesAfterRefUpdate(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "post-commit-head"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.git(t, "branch", "human-branch")
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == "after-record-ref-update" {
+			repo.gitOutputAt(t, created.WorktreePath, "symbolic-ref", "HEAD", "refs/heads/human-branch")
+		}
+		return nil
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/post-commit-head", StatusRunning)
+	repo.gitOutputAt(t, created.WorktreePath, "symbolic-ref", "HEAD", "refs/heads/exp/foam/post-commit-head")
+	if err == nil || commit == "" || !strings.Contains(err.Error(), commit) || !strings.Contains(err.Error(), "was applied") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != commit {
+		t.Fatalf("applied commit error = %#v, want commit %s", applied, commit)
+	}
+	if state.Status != StatusRunning || repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/post-commit-head") != commit {
+		t.Fatalf("applied state/commit was lost: state=%#v commit=%q", state, commit)
+	}
+	stored, readErr := readState(filepath.Join(filepath.Dir(created.BriefPath), "state.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if stored.Status != StatusRunning {
+		t.Fatalf("stored status = %s, want running", stored.Status)
+	}
+}
+
+func TestSetStatePreservesAppliedCommitOnPostIndexSyncError(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "post-index-sync"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == "after-record-index-sync" {
+			return errors.New("injected post-index synchronization failure")
+		}
+		return nil
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/post-index-sync", StatusRunning)
+	if err == nil || commit == "" || !strings.Contains(err.Error(), commit) || !strings.Contains(err.Error(), "was applied") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	if state.Status != StatusRunning || repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/post-index-sync") != commit {
+		t.Fatalf("applied state/commit was lost: state=%#v commit=%q", state, commit)
+	}
+	stored, readErr := readState(filepath.Join(filepath.Dir(created.BriefPath), "state.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if stored.Status != StatusRunning {
+		t.Fatalf("stored status = %s, want running", stored.Status)
+	}
+	if status := repo.gitOutputAt(t, created.WorktreePath, "status", "--porcelain"); status != "" {
+		t.Fatalf("post-index-sync error left dirty worktree: %s", status)
+	}
+}
+
+func TestSetStateExposesAppliedCommitWhenRealIndexSyncFails(t *testing.T) {
+	repo := newTestRepo(t)
+	manager := testManager(t, repo)
+	created, err := manager.Create(context.Background(), CreateOptions{Piece: "foam", Name: "index-sync-failure"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexPath := repo.gitOutputAt(t, created.WorktreePath, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	indexLock := indexPath + ".lock"
+	manager.createCheckpoint = func(checkpoint string) error {
+		if checkpoint == "after-record-ref-update" {
+			return os.WriteFile(indexLock, []byte("locked\n"), 0o644)
+		}
+		return nil
+	}
+
+	state, commit, err := manager.SetState(context.Background(), "foam/index-sync-failure", StatusRunning)
+	if removeErr := os.Remove(indexLock); removeErr != nil {
+		t.Fatal(removeErr)
+	}
+	if err == nil || commit == "" || !strings.Contains(err.Error(), "update real index") {
+		t.Fatalf("SetState = state %#v commit %q error %v", state, commit, err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != commit {
+		t.Fatalf("applied commit error = %#v, want commit %s", applied, commit)
+	}
+	if got := repo.gitOutput(t, "rev-parse", "refs/heads/exp/foam/index-sync-failure"); got != commit {
+		t.Fatalf("branch = %s, want applied commit %s", got, commit)
+	}
+	statePath := filepath.ToSlash(filepath.Join("experiments", "active", "foam--index-sync-failure", "state.json"))
+	branchState := repo.gitOutput(t, "show", "refs/heads/exp/foam/index-sync-failure:"+statePath)
+	fileState, readErr := os.ReadFile(filepath.Join(created.WorktreePath, filepath.FromSlash(statePath)))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.TrimSpace(string(fileState)) != branchState || state.Status != StatusRunning {
+		t.Fatalf("state file does not match applied tree: state=%#v\nfile=%s\nbranch=%s", state, fileState, branchState)
+	}
+}
+
 func TestSetStateUsesFullyQualifiedBranchWhenTagHasSameShortName(t *testing.T) {
 	repo := newTestRepo(t)
 	manager := testManager(t, repo)

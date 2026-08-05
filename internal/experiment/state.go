@@ -142,7 +142,7 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 		return State{}, "", fmt.Errorf("capture written state before commit: %w", err)
 	}
 	recordDir := filepath.FromSlash(id.RecordDir())
-	commit, err := commitRecord(
+	commitResult, err := commitRecord(
 		ctx,
 		expectedPath,
 		recordDir,
@@ -154,9 +154,12 @@ func (m *Manager) setStateLocked(ctx context.Context, id ID, target Status) (Sta
 		m.createCheckpoint,
 	)
 	if err != nil {
-		return state, "", errors.Join(err, restoreStateAfterCommitFailure(statePath, oldState, newState))
+		if commitResult.RefUpdated {
+			return state, commitResult.Commit, appliedCommitError(commitResult, expectedRef, err)
+		}
+		return state, commitResult.Commit, errors.Join(err, restoreStateAfterCommitFailure(statePath, oldState, newState))
 	}
-	return state, commit, nil
+	return state, commitResult.Commit, nil
 }
 
 func restoreStateAfterCommitFailure(path string, oldState, writtenState []byte) error {

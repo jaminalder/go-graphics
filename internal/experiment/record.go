@@ -3,6 +3,7 @@ package experiment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -136,86 +137,129 @@ func renderTemplate(source, destination string, data any) error {
 	return nil
 }
 
+type recordCommitResult struct {
+	Commit     string
+	RefUpdated bool
+}
+
+// AppliedCommitError reports a failure after a record commit advanced its branch.
+// Commit remains authoritative and callers must not roll its files back.
+type AppliedCommitError struct {
+	Commit string
+	Ref    string
+	Cause  error
+}
+
+func (e *AppliedCommitError) Error() string {
+	return fmt.Sprintf("record commit %s was applied to %s, but post-commit synchronization failed: %v", e.Commit, e.Ref, e.Cause)
+}
+
+// Unwrap exposes the post-commit synchronization failure.
+func (e *AppliedCommitError) Unwrap() error { return e.Cause }
+
+func appliedCommitError(result recordCommitResult, ref string, cause error) error {
+	if cause == nil || !result.RefUpdated {
+		return cause
+	}
+	var applied *AppliedCommitError
+	if errors.As(cause, &applied) {
+		return cause
+	}
+	return &AppliedCommitError{Commit: result.Commit, Ref: ref, Cause: cause}
+}
+
 func commitRecord(
 	ctx context.Context,
 	worktree, recordDir string, paths []string, message, expectedBranch, expectedParent string,
 	env []string,
 	checkpoint func(string) error,
-) (string, error) {
+) (recordCommitResult, error) {
 	recordDir = filepath.Clean(recordDir)
 	if filepath.IsAbs(recordDir) || recordDir == "." || recordDir == ".." || strings.HasPrefix(recordDir, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("invalid record directory %q", recordDir)
+		return recordCommitResult{}, fmt.Errorf("invalid record directory %q", recordDir)
 	}
 	if len(paths) == 0 {
-		return "", fmt.Errorf("record commit requires at least one path")
+		return recordCommitResult{}, fmt.Errorf("record commit requires at least one path")
 	}
 	cleanPaths := make([]string, len(paths))
 	for i, path := range paths {
 		path = filepath.Clean(path)
 		relative, err := filepath.Rel(recordDir, path)
 		if err != nil || filepath.IsAbs(path) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("record commit path %q is not a file below %q", path, recordDir)
+			return recordCommitResult{}, fmt.Errorf("record commit path %q is not a file below %q", path, recordDir)
 		}
 		cleanPaths[i] = filepath.ToSlash(path)
 	}
 	runner := gitRunner{dir: worktree, env: env}
 	expectedRef := "refs/heads/" + expectedBranch
 	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
-		return "", err
+		return recordCommitResult{}, err
 	}
 	parent, err := runner.run(ctx, "rev-parse", "--verify", expectedRef+"^{commit}")
 	if err != nil {
-		return "", err
+		return recordCommitResult{}, err
 	}
 	if parent = strings.TrimSpace(parent); parent != expectedParent {
-		return "", fmt.Errorf("record branch %q changed before commit: got %s, want %s", expectedBranch, parent, expectedParent)
+		return recordCommitResult{}, fmt.Errorf("record branch %q changed before commit: got %s, want %s", expectedBranch, parent, expectedParent)
 	}
 	index, err := os.CreateTemp("", "experiment-index-*")
 	if err != nil {
-		return "", fmt.Errorf("create isolated record index: %w", err)
+		return recordCommitResult{}, fmt.Errorf("create isolated record index: %w", err)
 	}
 	indexPath := index.Name()
 	if err := index.Close(); err != nil {
 		_ = os.Remove(indexPath)
-		return "", fmt.Errorf("close isolated record index placeholder: %w", err)
+		return recordCommitResult{}, fmt.Errorf("close isolated record index placeholder: %w", err)
 	}
 	if err := os.Remove(indexPath); err != nil {
-		return "", fmt.Errorf("prepare absent isolated record index %q: %w", indexPath, err)
+		return recordCommitResult{}, fmt.Errorf("prepare absent isolated record index %q: %w", indexPath, err)
 	}
 	defer func() { _ = os.Remove(indexPath) }()
 	indexRunner := gitRunner{dir: worktree, env: env, indexFile: indexPath}
 	if _, err := indexRunner.run(ctx, "read-tree", expectedParent); err != nil {
-		return "", err
+		return recordCommitResult{}, err
 	}
 	addArgs := append([]string{"add", "--"}, cleanPaths...)
 	if _, err := indexRunner.run(ctx, addArgs...); err != nil {
-		return "", err
+		return recordCommitResult{}, err
 	}
 	if checkpoint != nil {
 		if err := checkpoint("during-record-commit"); err != nil {
-			return "", err
+			return recordCommitResult{}, err
 		}
 	}
 	tree, err := indexRunner.run(ctx, "write-tree")
 	if err != nil {
-		return "", err
+		return recordCommitResult{}, err
 	}
 	tree = strings.TrimSpace(tree)
 	commit, err := runner.run(ctx, "commit-tree", tree, "-p", expectedParent, "-m", message)
 	if err != nil {
-		return "", err
+		return recordCommitResult{}, err
 	}
 	commit = strings.TrimSpace(commit)
+	result := recordCommitResult{Commit: commit}
 	if _, err := runner.run(ctx, "update-ref", expectedRef, commit, expectedParent); err != nil {
-		return "", fmt.Errorf("compare-and-swap record branch %q: %w", expectedBranch, err)
+		return result, fmt.Errorf("compare-and-swap record branch %q: %w", expectedBranch, err)
+	}
+	result.RefUpdated = true
+	if checkpoint != nil {
+		if err := checkpoint("after-record-ref-update"); err != nil {
+			return result, appliedCommitError(result, expectedRef, err)
+		}
 	}
 	if err := requireSymbolicHEAD(ctx, runner, expectedRef); err != nil {
-		return commit, err
+		return result, appliedCommitError(result, expectedRef, err)
 	}
 	if err := updateCommittedIndexPaths(ctx, runner, commit, cleanPaths); err != nil {
-		return commit, err
+		return result, appliedCommitError(result, expectedRef, err)
 	}
-	return commit, nil
+	if checkpoint != nil {
+		if err := checkpoint("after-record-index-sync"); err != nil {
+			return result, appliedCommitError(result, expectedRef, err)
+		}
+	}
+	return result, nil
 }
 
 func updateCommittedIndexPaths(ctx context.Context, runner gitRunner, commit string, paths []string) error {

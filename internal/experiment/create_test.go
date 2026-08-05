@@ -952,6 +952,13 @@ func TestCreateCommitsOnlyIntendedBranchWhenHEADSwitchesInsideRecordCommit(t *te
 	if created.WorktreePath != worktree || !strings.Contains(err.Error(), "worktree=true") {
 		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
 	}
+	if created.RecordCommit == "" || !strings.Contains(err.Error(), created.RecordCommit) || !strings.Contains(err.Error(), "was applied") {
+		t.Fatalf("post-commit recovery details missing: created=%#v error=%v", created, err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != created.RecordCommit {
+		t.Fatalf("applied commit error = %#v, want commit %s", applied, created.RecordCommit)
+	}
 	if got := repo.gitOutput(t, "rev-parse", "human-branch"); got != original {
 		t.Fatalf("unrelated branch advanced to %s, want %s", got, original)
 	}
@@ -985,6 +992,13 @@ func TestCreateCommitsIntendedBranchButFailsWhenHEADDetachesInsideRecordCommit(t
 	}
 	if created.WorktreePath != worktree || !strings.Contains(err.Error(), "worktree=true") {
 		t.Fatalf("missing partial resource inventory: created=%#v error=%v", created, err)
+	}
+	if created.RecordCommit == "" || !strings.Contains(err.Error(), created.RecordCommit) || !strings.Contains(err.Error(), "was applied") {
+		t.Fatalf("post-commit recovery details missing: created=%#v error=%v", created, err)
+	}
+	var applied *AppliedCommitError
+	if !errors.As(err, &applied) || applied.Commit != created.RecordCommit {
+		t.Fatalf("applied commit error = %#v, want commit %s", applied, created.RecordCommit)
 	}
 	if got := repo.gitOutput(t, "log", "-1", "--format=%s", id.ExperimentBranch()); got != "experiment: create "+id.String() {
 		t.Fatalf("experiment commit message = %q", got)

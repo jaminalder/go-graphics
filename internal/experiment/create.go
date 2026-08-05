@@ -45,6 +45,7 @@ type Created struct {
 	BriefPath         string
 	OutputPath        string
 	WorkerInstruction string
+	RecordCommit      string
 }
 
 type briefData struct {
@@ -234,22 +235,23 @@ func (m *Manager) createLocked(ctx context.Context, id ID, opts CreateOptions) (
 	for i := range recordFiles {
 		recordFiles[i] = filepath.Join(recordDir, recordFiles[i])
 	}
-	recordCommit, err := commitRecord(ctx, worktreePath, recordDir, recordFiles, "experiment: create "+id.String(), branch, baseCommit, m.gitEnv, m.createCheckpoint)
+	recordResult, err := commitRecord(ctx, worktreePath, recordDir, recordFiles, "experiment: create "+id.String(), branch, baseCommit, m.gitEnv, m.createCheckpoint)
+	partial.RecordCommit = recordResult.Commit
 	if err != nil {
 		return partial, resources, err
 	}
 	currentRecordTip, err := runner.run(ctx, "rev-parse", "--verify", "refs/heads/"+branch+"^{commit}")
 	if err != nil {
-		return partial, resources, err
+		return partial, resources, appliedCommitError(recordResult, "refs/heads/"+branch, err)
 	}
-	if currentRecordTip = strings.TrimSpace(currentRecordTip); currentRecordTip != recordCommit {
-		return partial, resources, fmt.Errorf("record branch changed after commit: got %s, want %s", currentRecordTip, recordCommit)
+	if currentRecordTip = strings.TrimSpace(currentRecordTip); currentRecordTip != recordResult.Commit {
+		return partial, resources, appliedCommitError(recordResult, "refs/heads/"+branch, fmt.Errorf("record branch changed after commit: got %s, want %s", currentRecordTip, recordResult.Commit))
 	}
 	if err := m.checkpoint(checkpointAfterCommit); err != nil {
-		return partial, resources, err
+		return partial, resources, appliedCommitError(recordResult, "refs/heads/"+branch, err)
 	}
 	if _, err := m.validateCoordinator(ctx, runner, coordinatorHEAD); err != nil {
-		return partial, resources, err
+		return partial, resources, appliedCommitError(recordResult, "refs/heads/"+branch, err)
 	}
 
 	instruction := "Work on experiment " + id.String() + " only.\n" +
