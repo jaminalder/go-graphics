@@ -19,7 +19,7 @@ func (s *Sketch) declare() {
 	o.Float("nested-strength", "second domain displacement", "w2", 0, 8, &s.NestedStrength)
 	o.Choice("warp", "field development mode", "w", []string{"plain", "single", "nested"}, &s.warpName,
 		func(value int) { s.fieldMode = mode(value) })
-	o.Choice("appearance", "colour mapping", "ap", []string{"gradient", "structure"}, &s.appearanceName,
+	o.Choice("appearance", "colour mapping", "ap", []string{"gradient", "folded"}, &s.appearanceName,
 		func(value int) { s.appearance = appearance(value) })
 	s.knobs = o
 }
