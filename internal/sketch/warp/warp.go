@@ -16,18 +16,19 @@ import (
 )
 
 const (
-	seedQX        = 0x776172702d7178
-	seedQY        = 0x776172702d7179
-	seedRX        = 0x776172702d7278
-	seedRY        = 0x776172702d7279
-	seedValue     = 0x776172702d7661
-	seedActivity  = 0x776172702d6163
-	rRoleScale    = 1.17
-	valueScale    = 1.31
-	normalEpsilon = 0.0038
-	materialDepth = 0.012
-	ridgeStrength = 0.13
-	ridgeColorMix = 0.24
+	seedQX          = 0x776172702d7178
+	seedQY          = 0x776172702d7179
+	seedRX          = 0x776172702d7278
+	seedRY          = 0x776172702d7279
+	seedValue       = 0x776172702d7661
+	seedActivity    = 0x776172702d6163
+	rRoleScale      = 1.17
+	valueScale      = 1.31
+	normalEpsilon   = 0.0038
+	materialDepth   = 0.012
+	ridgeStrength   = 0.13
+	ridgeColorMix   = 0.24
+	uniformActivity = 1.28
 )
 
 type mode uint8
@@ -44,7 +45,15 @@ type settings struct {
 	octaves                      int
 	mode                         mode
 	appearance                   appearance
+	detail                       detail
 }
+
+type detail uint8
+
+const (
+	detailUniform detail = iota
+	detailVaried
+)
 
 type appearance uint8
 
@@ -59,8 +68,10 @@ type Sketch struct {
 	WarpStrength, NestedStrength float64
 	Octaves                      int
 	warpName, appearanceName     string
+	detailName                   string
 	fieldMode                    mode
 	appearance                   appearance
+	detail                       detail
 	knobs                        *opt.Set
 }
 
@@ -75,8 +86,10 @@ func New() *Sketch {
 		Octaves:        5,
 		warpName:       "nested",
 		appearanceName: "folded",
+		detailName:     "uniform",
 		fieldMode:      modeNested,
 		appearance:     appearanceFolded,
+		detail:         detailUniform,
 	}
 	s.declare()
 	return s
@@ -125,6 +138,7 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 			octaves:        s.Octaves,
 			mode:           s.fieldMode,
 			appearance:     s.appearance,
+			detail:         s.detail,
 		},
 		q:          [2]*noise.Perlin{noise.New(ctx.Seed ^ seedQX), noise.New(ctx.Seed ^ seedQY)},
 		r:          [2]*noise.Perlin{noise.New(ctx.Seed ^ seedRX), noise.New(ctx.Seed ^ seedRY)},
@@ -190,6 +204,14 @@ func (p plan) materialHeight(u, v float64) float64 {
 	return p.sample(u, v).height
 }
 
+func (p plan) activityAt(u, v float64) float64 {
+	if p.set.detail == detailUniform {
+		return uniformActivity
+	}
+	activityField := p.activity.At(u*0.65+17.3, v*0.65-9.7)
+	return 0.12 + 1.28*mathx.Smoothstep(-0.4, 0.4, activityField)
+}
+
 func (p plan) materialNormal(u, v float64) vector3 {
 	return normalFromHeights(
 		p.materialHeight(u-normalEpsilon, v),
@@ -253,12 +275,15 @@ func (p plan) sample(u, v float64) fieldSample {
 	x, y := u*p.set.scale, v*p.set.scale
 	if p.set.mode == modePlain {
 		value, fine := p.fbmWithFine(p.value, x, y)
-		material := material(value, fine, 0)
+		materialActivity := 0.0
+		if p.set.detail == detailUniform {
+			materialActivity = p.activityAt(u, v)
+		}
+		material := material(value, fine, materialActivity)
 		return fieldSample{value: value, fine: fine, height: material.height, ridge: material.ridge}
 	}
 
-	activityField := p.activity.At(u*0.65+17.3, v*0.65-9.7)
-	activity := 0.12 + 1.28*mathx.Smoothstep(-0.4, 0.4, activityField)
+	activity := p.activityAt(u, v)
 
 	qx := p.fbm(p.q[0], x+3.1, y-7.9)
 	qy := p.fbm(p.q[1], x-5.3, y+11.7)

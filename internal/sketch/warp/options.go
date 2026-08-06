@@ -21,6 +21,8 @@ func (s *Sketch) declare() {
 		func(value int) { s.fieldMode = mode(value) })
 	o.Choice("appearance", "colour mapping", "ap", []string{"gradient", "folded"}, &s.appearanceName,
 		func(value int) { s.appearance = appearance(value) })
+	o.Choice("detail", "distribution of nested field detail", "dt", []string{"uniform", "varied"}, &s.detailName,
+		func(value int) { s.detail = detail(value) })
 	s.knobs = o
 }
 

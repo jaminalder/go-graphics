@@ -1,13 +1,16 @@
 package warp
 
 import (
+	"crypto/sha256"
 	"flag"
+	"fmt"
 	"image"
 	"io"
 	"math"
 	"sort"
 	"testing"
 
+	"github.com/jaminalder/go-graphics/internal/mathx"
 	"github.com/jaminalder/go-graphics/internal/noise"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -18,6 +21,8 @@ var fixedSeeds = []uint64{1, 2, 3, 5, 8, 13, 21, 34}
 
 var update = flag.Bool("update", false, "regenerate golden files")
 
+const variedBaselineSHA256 = "952ae7ef551db600e4c25bfe5dfc49c30afc63e34588254852157c4394c9cd46"
+
 func testCtx(t testing.TB, seed uint64) sketch.Context {
 	t.Helper()
 	pal, ok := palette.ByName("kandinsky-soft-pressure")
@@ -25,6 +30,136 @@ func testCtx(t testing.TB, seed uint64) sketch.Context {
 		t.Fatal("kandinsky-soft-pressure palette missing")
 	}
 	return sketch.Context{Width: 64, Height: 64, Seed: seed, Palette: pal}
+}
+
+// Explicit varied detail must preserve the folded image that preceded the
+// detail axis. This hash is over raw NRGBA pixels, not PNG encoder output.
+func TestVariedDetailPreservesFoldedBaseline(t *testing.T) {
+	got := sketchtest.RenderNRGBA(t, configured(t, "--detail", "varied"), testCtx(t, 13))
+	hash := fmt.Sprintf("%x", sha256.Sum256(got.Pix))
+	if hash != variedBaselineSHA256 {
+		t.Fatalf("current folded baseline hash %s, want %s", hash, variedBaselineSHA256)
+	}
+}
+
+func TestUniformDetailIsDefault(t *testing.T) {
+	p, err := New().plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.set.detail != detailUniform {
+		t.Fatalf("default detail %v, want uniform", p.set.detail)
+	}
+}
+
+func TestVariedDetailUsesExistingActivityEnvelope(t *testing.T) {
+	p, err := configured(t, "--detail", "varied").plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range [][2]float64{{0, 0}, {0.37, 0.61}, {0.93, 0.12}} {
+		u, v := point[0], point[1]
+		field := p.activity.At(u*0.65+17.3, v*0.65-9.7)
+		want := 0.12 + 1.28*mathx.Smoothstep(-0.4, 0.4, field)
+		if got := p.activityAt(u, v); got != want {
+			t.Errorf("activity at %v = %v, want legacy envelope %v", point, got, want)
+		}
+	}
+}
+
+func TestUniformDetailUsesOneHighActivityEverywhere(t *testing.T) {
+	p, err := New().plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := p.activityAt(0, 0)
+	if want < 1.08 {
+		t.Fatalf("uniform activity %v does not fully enable ridges", want)
+	}
+	for y := range 9 {
+		for x := range 9 {
+			if got := p.activityAt(float64(x)/8, float64(y)/8); got != want {
+				t.Fatalf("uniform activity at (%d,%d) = %v, want %v", x, y, got, want)
+			}
+		}
+	}
+}
+
+// Uniform detail must not pay for or depend on the varied-only activity field
+// during repeated sampling.
+func TestUniformDetailDoesNotSampleActivityField(t *testing.T) {
+	p, err := New().plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.activity = nil
+	for _, point := range [][2]float64{{0.1, 0.2}, {0.5, 0.5}, {0.9, 0.8}} {
+		got := p.sample(point[0], point[1])
+		if got.activity != uniformActivity {
+			t.Fatalf("uniform sample at %v activity %v, want %v", point, got.activity, uniformActivity)
+		}
+	}
+}
+
+func TestDetailOptionChangesOnlyDetailSetting(t *testing.T) {
+	defaults, err := New().plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	varied, err := configured(t, "--detail", "varied").plan(testCtx(t, 13))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := defaults.set
+	want.detail = detailVaried
+	if varied.set != want {
+		t.Fatalf("varied settings %+v, want only detail changed %+v", varied.set, want)
+	}
+}
+
+// Uniform detail must keep ridge energy high across cells instead of letting
+// the broad activity envelope create separately focused and soft zones.
+func TestUniformDetailDistributesFineEnergyAcrossCanvas(t *testing.T) {
+	stats := func(detailName string) (mean, coefficient float64) {
+		var cells []float64
+		for _, seed := range []uint64{1, 5, 8} {
+			p, err := configured(t, "--detail", detailName).plan(testCtx(t, seed))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for cellY := range 6 {
+				for cellX := range 6 {
+					energy := 0.0
+					for subY := range 5 {
+						for subX := range 5 {
+							u := (float64(cellX) + (float64(subX)+0.5)/5) / 6
+							v := (float64(cellY) + (float64(subY)+0.5)/5) / 6
+							energy += p.sample(u, v).ridge
+						}
+					}
+					cells = append(cells, energy/25)
+				}
+			}
+		}
+		for _, value := range cells {
+			mean += value
+		}
+		mean /= float64(len(cells))
+		for _, value := range cells {
+			coefficient += (value - mean) * (value - mean)
+		}
+		coefficient = math.Sqrt(coefficient/float64(len(cells))) / mean
+		return mean, coefficient
+	}
+
+	uniformMean, uniformCV := stats("uniform")
+	variedMean, variedCV := stats("varied")
+	if uniformMean <= variedMean*1.15 {
+		t.Errorf("uniform ridge mean %v is not high relative to varied %v", uniformMean, variedMean)
+	}
+	if uniformCV >= variedCV*0.85 {
+		t.Errorf("uniform ridge CV %v is not materially below varied %v", uniformCV, variedCV)
+	}
 }
 
 // A non-finite field value would poison both domain displacement and colour.
@@ -258,7 +393,7 @@ func TestQuietActivitySuppressesFineRidges(t *testing.T) {
 	lowSum, highSum := 0.0, 0.0
 	lowCount, highCount := 0, 0
 	for _, seed := range fixedSeeds {
-		p, err := New().plan(testCtx(t, seed))
+		p, err := configured(t, "--detail", "varied").plan(testCtx(t, seed))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -527,6 +662,8 @@ func TestOptionsAcceptBoundariesAndChoices(t *testing.T) {
 		{"--warp", "nested"},
 		{"--appearance", "gradient"},
 		{"--appearance", "folded"},
+		{"--detail", "uniform"},
+		{"--detail", "varied"},
 	} {
 		configured(t, args...)
 	}
@@ -552,6 +689,7 @@ func TestOptionsAlterOnlySelectedResolvedSetting(t *testing.T) {
 		{"nested-strength", []string{"--nested-strength", "7.5"}, func(s *settings) { s.nestedStrength = 7.5 }},
 		{"warp", []string{"--warp", "single"}, func(s *settings) { s.mode = modeSingle }},
 		{"appearance", []string{"--appearance", "gradient"}, func(s *settings) { s.appearance = appearanceGradient }},
+		{"detail", []string{"--detail", "varied"}, func(s *settings) { s.detail = detailVaried }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -586,6 +724,7 @@ func TestOptionsRejectInvalidValues(t *testing.T) {
 		{"--warp", "triple"},
 		{"--appearance", "structure"},
 		{"--appearance", "rainbow"},
+		{"--detail", "sharp"},
 	} {
 		s := New()
 		fs := flag.NewFlagSet("test", flag.ContinueOnError)

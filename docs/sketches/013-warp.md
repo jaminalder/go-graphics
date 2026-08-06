@@ -3,9 +3,10 @@
 ## Purpose
 
 `warp` is a point-sampled field artwork whose nested domain warps form a folded
-material. Broad currents and calm passages remain the composition; rotated
-octaves add narrow nested filaments, while one coherent light turns the same
-visible height into dark cavities and pale raised ridges.
+material. Its default keeps turbulent detail sharp across the canvas; an
+explicit varied mode restores broad calm passages beside concentrated folds.
+Rotated octaves add narrow nested filaments, while one coherent light turns the
+same visible height into dark cavities and pale raised ridges.
 
 The sketch deliberately has no explicit lines, contours, marks, particles,
 cells, or post-processing layers. Its fine veins emerge continuously from the
@@ -20,9 +21,11 @@ rotated by a fixed sketch-local angle and scaled by `lacunarity`; amplitude is
 multiplied by `gain`. Rotation prevents every scale from accumulating along the
 same axes without adding randomness or another field type.
 
-A low-frequency Perlin envelope supplies activity `a(p)`. It suppresses both
-domain displacement and ridge emphasis in quiet passages, while active regions
-carry stronger folds. The nested field roles use fixed internal scale ratios:
+The detail policy supplies activity `a(p)`. Default `uniform` returns one fixed
+high value at every coordinate, so displacement and ridge emphasis remain
+fully active across the sheet. `varied` uses a low-frequency Perlin envelope
+that suppresses both mechanisms in quiet passages while active regions carry
+stronger folds. The nested field roles use fixed internal scale ratios:
 
 - `q` stays broad and bends the large composition;
 - `r` evaluates the q-warped coordinate at a somewhat finer scale;
@@ -43,10 +46,11 @@ deterministic seed and is built once in the private immutable plan.
 The final raw scalar is shaped continuously into a material height in `[0,1]`.
 An asymmetric smooth curve opens low values into cavities while preserving a
 broad middle-value body. A narrow smooth ridge response comes from the final
-field's high-octave residual and is multiplied by eased activity before being
-added to the body. It is not quantized, terraced, or sampled as an explicit
-contour, so finite differences remain stable and fine ridges belong to the same
-surface as the broad forms.
+field's high-octave residual and is multiplied by activity before being added
+to the body. Uniform detail fully enables that response everywhere; varied
+detail eases it with the envelope. It is not quantized, terraced, or sampled as
+an explicit contour, so finite differences remain stable and fine ridges belong
+to the same surface as the broad forms.
 
 ## Appearance
 
@@ -94,10 +98,13 @@ Both paths remain pure and allocation-free in ordinary point sampling.
 - `--nested-strength` in `[0,8]`: second domain displacement.
 - `--warp plain|single|nested`: field development mode.
 - `--appearance gradient|folded`: palette mapping and material treatment.
+- `--detail uniform|varied`: constant high detail or the preserved spatial activity envelope.
 
 The defaults target nested folded material with a low base scale, five octaves,
-and strong displacement modulated from near-calm to turbulent by the activity
-envelope. Rotation, role scales, material shaping, normal step, depth, and light
+and uniformly high displacement/ridge activity. `--detail varied` reproduces
+the preceding folded implementation byte-for-byte for the same recipe. Uniform
+changes the field policy itself; it is not post-process sharpening. Rotation,
+role scales, activity values, material shaping, normal step, depth, and light
 remain internal constants rather than public calibration controls.
 
 ## Determinism And Resolution
@@ -116,7 +123,9 @@ from the restrictive-license shader that motivated the follow-up study.
 
 - Preferred seeds 1, 2, 5, and 8 retain recognizable broad directional composition.
 - Dark cavities, middle-value bodies, and pale ridges read as folded material rather than embossed contours.
-- Fine filaments are narrower and denser than broad forms while calm areas remain calm.
+- Uniform detail carries fine folds across the entire frame without a locally blurred region.
+- Varied detail retains recognizable calm and turbulent passages exactly.
+- Fine filaments remain organized rather than becoming pixel-scale noise or uniform embossing.
 - Highlights and shadows agree under one fixed light direction.
 - Depth remains legible when desaturated; hue does not carry the illusion.
 - Plain, single, and nested remain useful and visibly distinct diagnostics.
