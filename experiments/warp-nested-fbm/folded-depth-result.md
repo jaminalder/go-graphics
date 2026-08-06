@@ -42,6 +42,12 @@ restrictive-license shader.
 - Rotation/role GREEN:
   `go test ./internal/sketch/warp -run 'Test(OctaveRotationChangesDirectionWithoutChangingBounds|NestedRolesUseDifferentSpatialScales|FieldSamplesStayFinite|ModesAreDistinct|ModesLeaveUnusedFieldsZero)' -count=1`
   passed after rotated octave stepping and q/r/final scale separation.
+- Review clarification: the rotation test is now named
+  `TestOctaveRotationPreservesScaledLengthAndChangesEvaluation`. It proves the
+  guaranteed geometric property (rotation preserves coordinate-vector length
+  before lacunarity scaling), plus finite evaluation distinct from the old
+  axis-aligned evaluator; it no longer claims to measure directional
+  correlation.
 - Material RED:
   `go test ./internal/sketch/warp -run 'Test(MaterialHeightCreatesCavitiesBodiesAndRidges|QuietActivitySuppressesFineRidges|MaterialSamplesStayFinite)' -count=1`
   failed to compile because `fieldSample` had no fine residual, height, or
@@ -55,6 +61,26 @@ restrictive-license shader.
   linear-shading helpers did not exist.
 - Normal/lighting GREEN: the same command passed after fixed canvas-unit
   central differences and bounded linear-light illumination were implemented.
+- Derivative-helper review RED:
+  `go test ./internal/sketch/warp -run TestMaterialNormalDerivativeAxesAndSigns -count=1`
+  failed to compile because the known-neighbor helper did not exist.
+- Derivative-helper review GREEN:
+  `go test ./internal/sketch/warp -run 'Test(MaterialNormalDerivativeAxesAndSigns|MaterialNormalsAreFiniteAndNormalized|Golden)' -count=1`
+  passed after extracting the exact existing central-difference expression.
+  Independent positive x and y slopes tilt the matching normal component
+  negative; the golden remained unchanged.
+- Linear-light review evidence:
+  `TestFoldedShadingPreservesColorBounds` now checks every output channel
+  against `LinearToSRGB(SRGBToLinear(channel)*factor)` within `1e-15`, in
+  addition to bounds and monotonic physical luminance.
+- Option-isolation mutation RED: with a temporary deliberate miswire from
+  `--gain` to `Scale`,
+  `go test ./internal/sketch/warp -run 'TestOptionsAlterOnlySelectedResolvedSetting/gain$' -count=1`
+  failed with `scale=0.7`, unchanged `gain=0.5`, versus expected default
+  `scale=1.65`, selected `gain=0.7`. The real declaration was restored.
+- Option-isolation GREEN: the table-driven test passes each of six numeric
+  options plus `warp` and `appearance` alone, compares the complete resolved
+  settings snapshot, and proves all unrelated settings remain at defaults.
 - Deliberate golden RED:
   `go test ./internal/sketch/warp -run TestGolden -count=1` failed with the
   expected pixel mismatch after the artwork changed.
@@ -100,13 +126,22 @@ line, or extra layer was introduced during calibration.
 - `make check`: passed before both implementation commits; formatter, vet,
   golangci-lint (`0 issues`), and `go test ./...` all passed.
 - Final pre-report `make check`: passed with the same gates.
+- Review-focused suite:
+  `go test ./internal/sketch/warp -run 'Test(OctaveRotationPreservesScaledLengthAndChangesEvaluation|MaterialNormalDerivativeAxesAndSigns|FoldedShadingPreservesColorBounds|OptionsAlterOnlySelectedResolvedSetting|Golden)' -count=1`
+  passed.
 - `git diff --check master...HEAD`: passed with no output before this report.
-- Direct folded sample benchmark on Apple M1 Pro:
-  `BenchmarkSample-10 3509832 342.7 ns/op 0 B/op 0 allocs/op`.
+- Field-only sample benchmark on Apple M1 Pro:
+  `BenchmarkSample-10 3509738 341.8 ns/op 0 B/op 0 allocs/op`. This measures
+  field/material evaluation only; it does not include palette mapping, nearby
+  height queries, normals, or lighting.
+- Complete folded point hot path:
+  `BenchmarkAt-10 542614 2163 ns/op 0 B/op 0 allocs/op`. `BenchmarkAt` varies
+  coordinates and captures `p.At`, including palette mapping, central-
+  difference normal queries, and linear-light shading. The actual rendering
+  hot path is therefore allocation-free.
 - 64px folded render benchmark:
   `BenchmarkRender64-10 658 1801393 ns/op 21400 B/op 42 allocs/op`.
-  Render allocations belong to raster/image construction; direct point
-  sampling remains allocation-free.
+  Render allocations belong to raster/image construction.
 - Timed seed-2 preview command:
 
   ```sh
@@ -199,6 +234,8 @@ Regressions and concerns:
 - `2326e38` `docs: plan folded warp depth`
 - `ce6da26` `feat: render folded warp material`
 - `734d657` `art: tune folded warp depth`
+- `b0045b7` `docs: report folded warp depth`
+- `727a36c` `test: strengthen folded warp evidence`
 
 ## Recommendation
 
