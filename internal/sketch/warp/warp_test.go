@@ -140,14 +140,19 @@ func axisAlignedFBM(p plan, field *noise.Perlin, x, y float64) float64 {
 	return sum / weight
 }
 
-// Rotating each octave must change directional correlation without changing
-// the normalized field's finite practical range.
-func TestOctaveRotationChangesDirectionWithoutChangingBounds(t *testing.T) {
+// Octave rotation must preserve coordinate length before lacunarity scaling,
+// while producing a different finite evaluation than axis-aligned stepping.
+func TestOctaveRotationPreservesScaledLengthAndChangesEvaluation(t *testing.T) {
 	p, err := New().plan(testCtx(t, 13))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, point := range [][2]float64{{0.37, 0.61}, {1.13, -0.42}, {-0.73, 1.29}} {
+		rx, ry := rotateScale(point[0], point[1], p.set.lacunarity)
+		wantLength := math.Hypot(point[0], point[1]) * p.set.lacunarity
+		if gotLength := math.Hypot(rx, ry); math.Abs(gotLength-wantLength) > 1e-14 {
+			t.Errorf("rotated/scaled %v length %v, want %v", point, gotLength, wantLength)
+		}
 		got := p.fbm(p.value, point[0], point[1])
 		old := axisAlignedFBM(p, p.value, point[0], point[1])
 		if got == old {
@@ -304,6 +309,24 @@ func TestMaterialNormalsAreFiniteAndNormalized(t *testing.T) {
 	}
 }
 
+// Increasing height along either canvas axis must tilt the corresponding
+// normal component toward the negative axis used by the lighting convention.
+func TestMaterialNormalDerivativeAxesAndSigns(t *testing.T) {
+	flat := normalFromHeights(0.4, 0.4, 0.4, 0.4)
+	xSlope := normalFromHeights(0.2, 0.6, 0.4, 0.4)
+	ySlope := normalFromHeights(0.4, 0.4, 0.2, 0.6)
+
+	if flat != (vector3{0, 0, 1}) {
+		t.Fatalf("flat heights produced normal %+v", flat)
+	}
+	if !(xSlope.x < 0 && xSlope.y == 0 && xSlope.z > 0) {
+		t.Fatalf("increasing x height produced normal %+v", xSlope)
+	}
+	if !(ySlope.x == 0 && ySlope.y < 0 && ySlope.z > 0) {
+		t.Fatalf("increasing y height produced normal %+v", ySlope)
+	}
+}
+
 // One oblique light must order opposite slopes consistently and retain an
 // ambient floor even when a face turns away.
 func TestLightOrdersOppositeSlopes(t *testing.T) {
@@ -350,9 +373,18 @@ func TestFoldedShadingPreservesColorBounds(t *testing.T) {
 	previous := -1.0
 	for _, factor := range []float64{0.35, 0.7, 1.0} {
 		got := shadeLinear(base, factor)
-		for _, component := range [...]float64{got.R, got.G, got.B} {
+		want := palette.Color{
+			R: palette.LinearToSRGB(palette.SRGBToLinear(base.R) * factor),
+			G: palette.LinearToSRGB(palette.SRGBToLinear(base.G) * factor),
+			B: palette.LinearToSRGB(palette.SRGBToLinear(base.B) * factor),
+		}
+		for i, component := range [...]float64{got.R, got.G, got.B} {
 			if math.IsNaN(component) || math.IsInf(component, 0) || component < 0 || component > 1 {
 				t.Fatalf("factor %v produced invalid color %+v", factor, got)
+			}
+			wantComponent := [...]float64{want.R, want.G, want.B}[i]
+			if math.Abs(component-wantComponent) > 1e-15 {
+				t.Errorf("factor %v channel %d = %v, want linear-light conversion %v", factor, i, component, wantComponent)
 			}
 		}
 		linearLuminance := 0.2126*palette.SRGBToLinear(got.R) +
@@ -500,35 +532,39 @@ func TestOptionsAcceptBoundariesAndChoices(t *testing.T) {
 	}
 }
 
-// Configure must propagate parsed values into the immutable render settings,
-// not merely accept their syntax and produce a filename suffix.
-func TestOptionsAlterResolvedSettings(t *testing.T) {
-	s := configured(t,
-		"--scale", "3.25",
-		"--octaves", "7",
-		"--gain", "0.7",
-		"--lacunarity", "2.75",
-		"--warp-strength", "6.5",
-		"--nested-strength", "7.5",
-		"--warp", "single",
-		"--appearance", "folded",
-	)
-	p, err := s.plan(testCtx(t, 13))
+// Each option must change only its own immutable setting. This catches
+// declaration plumbing that accidentally targets a neighboring field.
+func TestOptionsAlterOnlySelectedResolvedSetting(t *testing.T) {
+	defaults, err := New().plan(testCtx(t, 13))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := settings{
-		scale:          3.25,
-		octaves:        7,
-		gain:           0.7,
-		lacunarity:     2.75,
-		warpStrength:   6.5,
-		nestedStrength: 7.5,
-		mode:           modeSingle,
-		appearance:     appearanceFolded,
+	tests := []struct {
+		name   string
+		args   []string
+		change func(*settings)
+	}{
+		{"scale", []string{"--scale", "3.25"}, func(s *settings) { s.scale = 3.25 }},
+		{"octaves", []string{"--octaves", "7"}, func(s *settings) { s.octaves = 7 }},
+		{"gain", []string{"--gain", "0.7"}, func(s *settings) { s.gain = 0.7 }},
+		{"lacunarity", []string{"--lacunarity", "2.75"}, func(s *settings) { s.lacunarity = 2.75 }},
+		{"warp-strength", []string{"--warp-strength", "6.5"}, func(s *settings) { s.warpStrength = 6.5 }},
+		{"nested-strength", []string{"--nested-strength", "7.5"}, func(s *settings) { s.nestedStrength = 7.5 }},
+		{"warp", []string{"--warp", "single"}, func(s *settings) { s.mode = modeSingle }},
+		{"appearance", []string{"--appearance", "gradient"}, func(s *settings) { s.appearance = appearanceGradient }},
 	}
-	if p.set != want {
-		t.Errorf("resolved settings %+v, want %+v", p.set, want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := configured(t, tc.args...).plan(testCtx(t, 13))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := defaults.set
+			tc.change(&want)
+			if p.set != want {
+				t.Errorf("resolved settings %+v, want only selected change %+v", p.set, want)
+			}
+		})
 	}
 }
 
@@ -579,6 +615,7 @@ func TestGolden(t *testing.T) {
 
 var (
 	benchmarkSample fieldSample
+	benchmarkColor  palette.Color
 	benchmarkImage  image.Image
 )
 
@@ -591,6 +628,18 @@ func BenchmarkSample(b *testing.B) {
 	b.ResetTimer()
 	for i := range b.N {
 		benchmarkSample = p.sample(float64(i%97)/97, float64(i%89)/89)
+	}
+}
+
+func BenchmarkAt(b *testing.B) {
+	p, err := configured(b).plan(testCtx(b, 13))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		benchmarkColor = p.At(float64(i%97)/97, float64(i%89)/89)
 	}
 }
 

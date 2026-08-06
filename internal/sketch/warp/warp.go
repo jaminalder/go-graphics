@@ -191,8 +191,17 @@ func (p plan) materialHeight(u, v float64) float64 {
 }
 
 func (p plan) materialNormal(u, v float64) vector3 {
-	dx := p.materialHeight(u+normalEpsilon, v) - p.materialHeight(u-normalEpsilon, v)
-	dy := p.materialHeight(u, v+normalEpsilon) - p.materialHeight(u, v-normalEpsilon)
+	return normalFromHeights(
+		p.materialHeight(u-normalEpsilon, v),
+		p.materialHeight(u+normalEpsilon, v),
+		p.materialHeight(u, v-normalEpsilon),
+		p.materialHeight(u, v+normalEpsilon),
+	)
+}
+
+func normalFromHeights(xBefore, xAfter, yBefore, yAfter float64) vector3 {
+	dx := xAfter - xBefore
+	dy := yAfter - yBefore
 	return normalize3(vector3{-materialDepth * dx, -materialDepth * dy, 2 * normalEpsilon})
 }
 
