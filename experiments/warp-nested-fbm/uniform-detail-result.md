@@ -220,6 +220,23 @@ path.
 - `5113745` `docs: design uniform warp detail`
 - `b4eab67` `docs: plan uniform warp detail`
 - `f2e61e8` `feat: add uniform warp detail`
+- `3c844d3` `docs: report uniform warp detail`
+- `0a0a50b` `fix: report plain uniform warp activity`
+
+## Review Fix
+
+A code-quality review found that plain/uniform sampling shaped material with
+activity `1.28` but omitted that value from `fieldSample.activity`. The omission
+did not affect pixels because plain rendering consumed the separately computed
+material height and ridge. A detail-by-mode matrix test first failed only for
+plain/uniform (`reported activity 0, want material activity 1.28`); returning
+`materialActivity` made it pass. Plain/varied still reports and uses zero, and
+the varied raw-pixel preservation hash and default golden remain unchanged.
+
+Current package, inventory, and sketch documentation now distinguish the
+uniform default from the varied-only broad envelope. The material description
+also records that ridge shaping uses `Smoothstep(0.28,1.08,activity)`, rather
+than multiplying by raw activity.
 
 ## Recommendation
 
