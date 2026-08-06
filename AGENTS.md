@@ -34,6 +34,7 @@ make preview-pools # render sketch "pools" (watercolour circles)
 make preview-foam # render sketch "foam" (inked cells with pluggable fills)
 make preview-scree # render sketch "scree" (a river bed of faceted, lit stones)
 make preview-riffle # render sketch "riffle" (a small river seen from above)
+make preview-iris # render sketch "iris" (an abstract iris)
 make hatchbook  # render the internal/hatch specimen sheets + manifest
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
@@ -42,7 +43,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree, riffle, shallows, warp,
+scree, riffle, shallows, warp, iris,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -80,6 +81,16 @@ rendered images. See `docs/sketches/012-shallows.md`.
 nested-warp comparison modes. Uniform detail is the default; `--detail varied`
 uses a broad activity field to separate quiet passages from concentrated folds.
 See `docs/sketches/013-warp.md`.
+
+`iris` aims 013's warp vocabulary at a subject. Its one mechanism is a radial
+remap of the plane — `P = direction * (ringBase + stretch*s)` — which makes an
+ordinary 2D Perlin field run as fibres from pupil to limbus *and* be seamless
+around the disc by construction; warping then happens in the local
+tangential/radial frame, so a strong warp bends fibres instead of dissolving
+them. There is no lighting model at all: value is the field. Seven trait
+dimensions (`structure`, `weave`, `grain`, `reach`, `aperture`, `tint`,
+`ground`) carry the output space — see `docs/sketches/014-iris.md`, and read
+the radial remap section there before touching any coordinate.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so
