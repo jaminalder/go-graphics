@@ -77,8 +77,9 @@ on the bed before the final pixel is written; it is not a composite of two
 rendered images. See `docs/sketches/012-shallows.md`.
 
 `warp` is a point-sampled nested fBM field with plain, single-warp and
-nested-warp comparison modes. A broad activity field separates quiet passages
-from concentrated folds; see `docs/sketches/013-warp.md`.
+nested-warp comparison modes. Uniform detail is the default; `--detail varied`
+uses a broad activity field to separate quiet passages from concentrated folds.
+See `docs/sketches/013-warp.md`.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so

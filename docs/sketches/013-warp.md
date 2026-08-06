@@ -46,11 +46,12 @@ deterministic seed and is built once in the private immutable plan.
 The final raw scalar is shaped continuously into a material height in `[0,1]`.
 An asymmetric smooth curve opens low values into cavities while preserving a
 broad middle-value body. A narrow smooth ridge response comes from the final
-field's high-octave residual and is multiplied by activity before being added
-to the body. Uniform detail fully enables that response everywhere; varied
-detail eases it with the envelope. It is not quantized, terraced, or sampled as
-an explicit contour, so finite differences remain stable and fine ridges belong
-to the same surface as the broad forms.
+field's high-octave residual and is multiplied by an eased activity gate before
+being added to the body. The gate is `Smoothstep(0.28,1.08,activity)`, not raw
+activity: uniform detail fully enables it everywhere, while varied detail eases
+it with the envelope. It is not quantized, terraced, or sampled as an explicit
+contour, so finite differences remain stable and fine ridges belong to the same
+surface as the broad forms.
 
 ## Appearance
 

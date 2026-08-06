@@ -241,7 +241,7 @@ func TestModesLeaveUnusedFieldsZero(t *testing.T) {
 		want func(fieldSample) bool
 	}{
 		{modePlain, func(got fieldSample) bool {
-			return got.activity == 0 && got.qx == 0 && got.qy == 0 && got.rx == 0 && got.ry == 0
+			return got.qx == 0 && got.qy == 0 && got.rx == 0 && got.ry == 0
 		}},
 		{modeSingle, func(got fieldSample) bool {
 			return got.activity != 0 && (got.qx != 0 || got.qy != 0) && got.rx == 0 && got.ry == 0
@@ -259,6 +259,38 @@ func TestModesLeaveUnusedFieldsZero(t *testing.T) {
 		got := p.sample(0.37, 0.61)
 		if !tc.want(got) {
 			t.Errorf("mode %d evaluated unused fields: %+v", tc.mode, got)
+		}
+	}
+}
+
+// A field sample reports the activity used to shape its material. Plain varied
+// remains zero because that preserved mode does not apply its activity field.
+func TestSamplesReportMaterialActivityAcrossDetailAndMode(t *testing.T) {
+	const u, v = 0.37, 0.61
+	for _, detailCase := range []struct {
+		name   string
+		detail detail
+	}{
+		{"uniform", detailUniform},
+		{"varied", detailVaried},
+	} {
+		for fieldMode := modePlain; fieldMode <= modeNested; fieldMode++ {
+			t.Run(fmt.Sprintf("%s/mode-%d", detailCase.name, fieldMode), func(t *testing.T) {
+				s := New()
+				s.detail = detailCase.detail
+				s.fieldMode = fieldMode
+				p, err := s.plan(testCtx(t, 13))
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := p.activityAt(u, v)
+				if detailCase.detail == detailVaried && fieldMode == modePlain {
+					want = 0
+				}
+				if got := p.sample(u, v).activity; got != want {
+					t.Fatalf("reported activity %v, want material activity %v", got, want)
+				}
+			})
 		}
 	}
 }

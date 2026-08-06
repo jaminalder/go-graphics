@@ -1,5 +1,5 @@
-// Package warp implements sketch 013: nested fBM domain warping organized by
-// a broad activity field into quiet and strongly folded passages.
+// Package warp implements sketch 013: nested fBM domain warping with uniform
+// detail by default and an optional varied envelope for quiet passages.
 package warp
 
 import (
@@ -280,7 +280,13 @@ func (p plan) sample(u, v float64) fieldSample {
 			materialActivity = p.activityAt(u, v)
 		}
 		material := material(value, fine, materialActivity)
-		return fieldSample{value: value, fine: fine, height: material.height, ridge: material.ridge}
+		return fieldSample{
+			value:    value,
+			fine:     fine,
+			height:   material.height,
+			ridge:    material.ridge,
+			activity: materialActivity,
+		}
 	}
 
 	activity := p.activityAt(u, v)
