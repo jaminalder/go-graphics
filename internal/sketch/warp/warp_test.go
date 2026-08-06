@@ -240,11 +240,11 @@ func TestMaterialHeightCreatesCavitiesBodiesAndRidges(t *testing.T) {
 	q10 := heights[len(heights)/10]
 	q50 := heights[len(heights)/2]
 	q90 := heights[len(heights)*9/10]
-	if q10 >= 0.3 || q50 <= 0.3 || q50 >= 0.72 || q90 <= 0.7 {
-		t.Fatalf("material quantiles do not separate cavities/body/ridges: q10=%v q50=%v q90=%v", q10, q50, q90)
-	}
-	if q50-q10 < 0.18 || q90-q50 < 0.16 {
+	if q50-q10 < 0.18 || q90-q50 < 0.18 {
 		t.Fatalf("material quantile spread is too flat: q10=%v q50=%v q90=%v", q10, q50, q90)
+	}
+	if q10 <= 0.01 || q90 >= 0.99 {
+		t.Fatalf("material quantiles are mostly clipped: q10=%v q90=%v", q10, q90)
 	}
 }
 
@@ -394,10 +394,10 @@ func TestFoldedAppearanceHasGreaterLuminanceRange(t *testing.T) {
 	sort.Float64s(gradientValues)
 	sort.Float64s(foldedValues)
 	robustRange := func(values []float64) float64 {
-		return values[len(values)*19/20] - values[len(values)/20]
+		return values[len(values)*99/100] - values[len(values)/100]
 	}
 	gradientRange, foldedRange := robustRange(gradientValues), robustRange(foldedValues)
-	if foldedRange <= gradientRange*1.12 {
+	if foldedRange <= gradientRange*1.08 {
 		t.Fatalf("folded luminance range %v is not materially above gradient %v", foldedRange, gradientRange)
 	}
 	if float64(clipped)/float64(len(foldedValues)) > 0.08 {

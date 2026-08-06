@@ -25,7 +25,9 @@ const (
 	rRoleScale    = 1.17
 	valueScale    = 1.31
 	normalEpsilon = 0.0038
-	materialDepth = 0.082
+	materialDepth = 0.012
+	ridgeStrength = 0.13
+	ridgeColorMix = 0.24
 )
 
 type mode uint8
@@ -171,7 +173,7 @@ func material(raw, fine, activity float64) materialSample {
 	activityGate := mathx.Smoothstep(0.28, 1.08, activity)
 	fold := 1 - math.Abs(fine)*2.35
 	ridge := mathx.Smoothstep(0.68, 0.96, fold) * activityGate
-	height := mathx.Clamp01(body*0.86 + ridge*0.34)
+	height := mathx.Clamp01(body*0.86 + ridge*ridgeStrength)
 	return materialSample{height: height, ridge: ridge}
 }
 
@@ -224,8 +226,9 @@ func (p plan) At(u, v float64) palette.Color {
 	if p.set.appearance == appearanceGradient {
 		return color.Clamp()
 	}
-	color = palette.Lerp(color, p.ridgeColor, sample.ridge*0.18)
-	return shadeLinear(color, lightFactor(p.materialNormal(u, v)))
+	color = palette.Lerp(color, p.ridgeColor, sample.ridge*ridgeColorMix)
+	cavityFactor := 0.18 + 0.82*mathx.Smoothstep(0.08, 0.48, sample.height)
+	return shadeLinear(color, cavityFactor*lightFactor(p.materialNormal(u, v)))
 }
 
 // Render implements sketch.Sketch.

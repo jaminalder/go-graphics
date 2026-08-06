@@ -57,7 +57,8 @@ luminance.
   through a dark-middle-light HSL ramp.
 - `folded` is the default artwork. Material height maps darkest palette color
   to cavities, a middle color to the body, and the lightest suitable color to
-  raised ridges. Ridge color is mixed sparingly so value structure leads hue.
+  raised ridges. Low height continuously attenuates cavity color in linear
+  light, while ridge color is mixed sparingly, so value structure leads hue.
 
 `structure` was an unintegrated experiment name and is removed rather than kept
 as an alias.
