@@ -34,6 +34,7 @@ make preview-pools # render sketch "pools" (watercolour circles)
 make preview-foam # render sketch "foam" (inked cells with pluggable fills)
 make preview-scree # render sketch "scree" (a river bed of faceted, lit stones)
 make preview-riffle # render sketch "riffle" (a small river seen from above)
+make preview-glaze # render sketch "glaze" (a stone bed under a painted warped veil)
 make hatchbook  # render the internal/hatch specimen sheets + manifest
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
@@ -42,7 +43,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree, riffle, shallows, warp,
+scree, riffle, shallows, warp, glaze,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -80,6 +81,17 @@ rendered images. See `docs/sketches/012-shallows.md`.
 nested-warp comparison modes. Uniform detail is the default; `--detail varied`
 uses a broad activity field to separate quiet passages from concentrated folds.
 See `docs/sketches/013-warp.md`.
+
+`glaze` lays a *painted* water over the same faceted stone bed: a translucent
+veil whose entire structure is a nested fBM domain warp rather than a physical
+surface. `--veil glaze|marble|terrace|filament|silk` is the material (one
+knob, five materials — every other water flag is an override on it), `--cast`
+which pigment the palette supplies. The water is absorption in linear light
+with the extinction normalised off the pigment's *hue*, which is what lets a
+pale palette swatch still read as blue. See `docs/sketches/015-glaze.md`, and
+its "What did not work" section before retuning any field constant — the veil
+wants forms much broader than 013's defaults, and the drift needs its own
+finer frequency or it translates the bed instead of smearing it.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so
