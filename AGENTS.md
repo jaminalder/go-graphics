@@ -42,7 +42,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree, riffle, shallows,
+scree, riffle, shallows, warp,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -75,6 +75,11 @@ as water" section there before changing any of its textures.
 surface in one raster function. Ripple shadows, highlights and refraction act
 on the bed before the final pixel is written; it is not a composite of two
 rendered images. See `docs/sketches/012-shallows.md`.
+
+`warp` is a point-sampled nested fBM field with plain, single-warp and
+nested-warp comparison modes. Uniform detail is the default; `--detail varied`
+uses a broad activity field to separate quiet passages from concentrated folds.
+See `docs/sketches/013-warp.md`.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so

@@ -23,6 +23,7 @@ package opt
 import (
 	"flag"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 )
@@ -55,7 +56,7 @@ func (s *Set) Float(name, doc, tag string, lo, hi float64, dst *float64) {
 		name: name, doc: doc, tag: tag,
 		reg: func(fs *flag.FlagSet) { fs.Float64Var(dst, name, *dst, doc) },
 		check: func() error {
-			if *dst < lo || *dst > hi {
+			if math.IsNaN(*dst) || math.IsInf(*dst, 0) || *dst < lo || *dst > hi {
 				return fmt.Errorf("--%s must be within [%g, %g]", name, lo, hi)
 			}
 			return nil

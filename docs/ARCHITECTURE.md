@@ -81,7 +81,7 @@ internal/
     sketchtest/           shared test helpers (goldens etc.) → sketch
     contour/, tapestry/, circles/, drift/, rounds/,
     shoal/, qql/, pools/, foam/, scree/,
-    riffle/, shallows/                      the sketches     → all of the above
+    riffle/, shallows/, warp/               the sketches     → all of the above
     hatchbook/            specimen sheet for hatch (a
                           catalogue, not an artwork)         → hatch, palette
 docs/                     this file, sketch specs, idea backlog, reference data
