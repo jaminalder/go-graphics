@@ -133,6 +133,44 @@ chose (`opt.Set.WasSet`).
 - **`silk`** — the anisotropic case: long drawn-out bands with the nested
   warp rippling across them. Watered silk rather than water.
 
+## How much water, and how dense
+
+Three separate questions, and it matters that they stay separate:
+
+**How much of the sheet is under water at all** is a *place*, not a dial.
+Scaling the load globally only makes a thin veil out of a thick one — the same
+picture, paler. `--coverage` is therefore a low-frequency envelope multiplied
+into the load: one broad two-octave field, read at `--cover-scale` cycles per
+canvas unit and dragged about by the veil's own first displacement so that a
+shoreline follows the currents instead of lying under them as an unrelated
+blob. One threshold sweeps across the whole field, so `--coverage 1` is
+edge-to-edge water (exactly the veil the manner was tuned on, at no cost in
+the sampler) and `--coverage 0` is a dry bed. In between, one sheet holds
+broad passages of dry stone against concentrated water — which is the
+composition this sketch is actually for, and something no global dial reaches.
+
+The threads go with it. Left on the dry stone they would be a net drawn over
+nothing, so the envelope multiplies the filament response as well as the body.
+
+**How opaque the water is where it does cover** needs no new knob: `--opacity`
+already runs from a glass-clear film that barely tints the stone to a deep,
+light-absorbing blue, and `--body` decides whether that depth is a clear glaze
+(0, the joints stay black and the blue is rich) or a milky one (high, the
+medium scatters light back into the joints and the sheet goes hazy).
+
+**How many threads there are** is `--density`. The residual is folded into a
+triangle wave rather than taken as a single ridge off zero: both give the same
+line where the field crosses zero, but the wave repeats, so more density draws
+*more lines* — the way a contour map gets busier at a finer interval — instead
+of widening the one line there is. Widening it was the first thing tried and it
+turns filaments into slugs. At density 1 the first fold has exactly the slope
+the single ridge had, so the manner's own picture is unchanged.
+
+**How tightly they gather** is `--gather`, which moves the window on the
+water's own depth that the threads are already gated by. Low, they spread over
+everything the water touches; high, they pack into the deepest passages and
+leave long calm stretches of plain water between.
+
 ## Colour
 
 `--cast` picks the pigment out of the palette rather than inventing it
@@ -168,6 +206,24 @@ Every scree trait and knob (`--bed`, `--stones`, `--facets`, `--light`,
 - `--terraces` in `[2,12]` — plateaus when the manner terraces.
 - `--glint` in `[0,1.2]` — strength of the filament highlight.
 - `--grain-water` in `[0,0.5]` — paper tooth in the veil.
+- `--coverage` in `[0,1]` — how much of the sheet the water reaches at all;
+  1 is edge to edge. Useful from about 0.25 to 0.8; past 0.8 the dry passages
+  are too small to compose with.
+- `--cover-scale` in `[0.15,6]` — the size of those wet and dry passages, in
+  cycles per canvas unit. Around 0.5 gives one great flooded region and one
+  dry one; 3 and up gives scattered pools and drying patches.
+- `--density` in `[0,4]` — how many threads. 1 is the manner's own; 2 to 2.5
+  is a fine engraved reticulation that needs `--profile web` to resolve; past
+  3 the lines are below a pixel at 2000px and grey out.
+- `--gather` in `[0,1]` — how tightly they pack into the deep water. 0.35 is
+  the manner's own; past 0.8 there is almost nothing left to see.
+
+Big stone under filament is worth naming as a recipe: `--bed boulders` or
+`--bed cobbles`, or `--base` past what `boulders` draws (0.14 to 0.18 puts
+three or four stones in the frame). The threads then read as intricate detail
+inside a very plain structure, which is what the manner is best at. A hand-set
+`--base` scales the joint with it, so a very large stone also gets a very
+heavy black joint; `--ink` pulls that back.
 
 ## Determinism and resolution
 
@@ -197,6 +253,17 @@ etched glass or frost — the same failure 011 records for its caustic net.
 The threads are gated by the water's own depth so they gather in the deep
 passages and leave the shallows alone.
 
+**Coverage as a global multiplier on the load.** It is the obvious reading of
+"less water" and it produces the same picture with the colour turned down.
+What the eye reads as *less water* is dry ground next to wet, which needs the
+amount to vary over the sheet — hence the envelope. The same argument says the
+envelope must stay at two octaves: given fine detail it stops being a
+composition and becomes a second texture arguing with the threads.
+
+**Density as a wider ridge window.** More thread was taken to mean more of the
+residual qualifying, which widens the single line rather than adding lines.
+The filaments went from drawn to bloated with no more of them in the frame.
+
 **Refraction from the warp fields that shape the load.** Those are broad by
 construction, and a broad displacement translates the bed rather than
 stretching it. Four times the drift gave the same picture in a slightly
@@ -211,5 +278,8 @@ different place.
 - [ ] Stones, joints and facets stay identifiable where the veil is thin.
 - [ ] The five manners are different materials at thumbnail size, not five
       settings of one.
+- [ ] At a middling `--coverage` one sheet holds broad dry stone and open
+      water, and the threads stop where the water does.
+- [ ] `--density` adds threads rather than fattening the ones there are.
 - [ ] `--water-seed` moves only the water; `--seed` re-plans the bed.
 - [ ] Preview and print of one recipe show the same composition.

@@ -23,6 +23,7 @@ const (
 	seedRY    = 0x676c617a652d7279
 	seedBody  = 0x676c617a652d6264
 	seedPaper = 0x676c617a652d7061
+	seedCover = 0x676c617a652d6376
 
 	// rRole evaluates the second warp somewhat finer than the first, and
 	// bodyRole the water field finer again, so the three roles stay
@@ -43,6 +44,31 @@ const (
 	// bandCosine/bandSine turn the anisotropic frame 22 degrees off the axes.
 	bandCosine = 0.9271838545667874
 	bandSine   = 0.3746065934159120
+
+	// coverShore is how wide the crossing from dry stone to open water is, in
+	// units of the envelope field. Wide enough that the water thins toward a
+	// shore rather than being cut out of the sheet with scissors.
+	coverShore = 0.34
+	// coverDrag is how far the veil's own first displacement pulls the
+	// envelope about, so a shoreline follows the water's currents instead of
+	// lying under them as an unrelated blob.
+	coverDrag = 0.45
+	// coverSpread widens the envelope's distribution. Perlin seldom reaches
+	// its nominal extremes, and an envelope that never approaches 0 or 1
+	// spends the ends of the coverage knob on nothing.
+	coverSpread = 1.35
+
+	// threadFold is the slope of the residual's first fold. It is the number
+	// the single-ridge filament was tuned on, kept exactly so that density 1
+	// is the veil the manner was designed around.
+	threadFold = 1.45
+	// threadWindow is how much of a fold counts as a thread. Tight on
+	// purpose: most of the sheet is not in it at all, which is the only way a
+	// highlight reads as a highlight.
+	threadWindow = 0.72
+	// gatherMid is the gather value that reproduces the original depth gate,
+	// so the knob's default is the picture the manner already had.
+	gatherMid = 0.35
 )
 
 // manner is the material the water is made of. It is one knob because its
@@ -71,6 +97,10 @@ type veilConfig struct {
 	drift        float64
 	glint        float64
 	grain        float64
+	coverage     float64
+	coverScale   float64
+	density      float64
+	gather       float64
 	terraces     int
 	octaves      int
 	gain         float64
@@ -91,6 +121,13 @@ func preset(m manner, seed uint64) veilConfig {
 		grain:      0.14,
 		terraces:   5,
 		manner:     m,
+		// A veil covers the sheet edge to edge until asked not to, so every
+		// manner keeps the composition it was tuned on and the envelope is a
+		// deliberate act rather than a default.
+		coverage:   1,
+		coverScale: 1.1,
+		density:    1,
+		gather:     gatherMid,
 	}
 	switch m {
 	case mannerGlaze:
@@ -127,6 +164,7 @@ type veil struct {
 	r     [2]*noise.Perlin
 	body  *noise.Perlin
 	paper *noise.Perlin
+	cover *noise.Perlin
 }
 
 // veilSample is deliberately small: how much water is here, how bright the
@@ -144,6 +182,7 @@ func newVeil(cfg veilConfig) *veil {
 		r:     [2]*noise.Perlin{noise.New(cfg.seed ^ seedRX), noise.New(cfg.seed ^ seedRY)},
 		body:  noise.New(cfg.seed ^ seedBody),
 		paper: noise.New(cfg.seed ^ seedPaper),
+		cover: noise.New(cfg.seed ^ seedCover),
 	}
 }
 
@@ -217,6 +256,14 @@ func (v *veil) At(u, w float64) veilSample {
 
 	depth := mathx.Smoothstep(-0.28, 0.32, raw)
 	load := c.opacity * v.shape(depth)
+
+	// How much of the sheet is under water at all is a *place*, not a dial.
+	// Scaling the load globally only makes a thin veil out of a thick one and
+	// leaves the same composition; a broad envelope instead holds dry stone
+	// and flooded passages in the same frame, which is where the drawing is.
+	cover := v.envelope(u, w, qx, qy)
+	load *= cover
+
 	if c.grain > 0 {
 		// The tooth is a multiplicative speckle on the load, so it disappears
 		// where the water does instead of dusting the dry passages.
@@ -232,11 +279,36 @@ func (v *veil) At(u, w float64) veilSample {
 	dy := v.fbm(v.r[1], fx-17.7, fy-2.3)
 
 	return veilSample{
-		load:     math.Max(0, load),
-		filament: v.thread(fine, depth),
+		load: math.Max(0, load),
+		// Threads belong to the water: on dry stone they would be a net drawn
+		// over nothing, so the envelope takes them away with the body.
+		filament: v.thread(fine, depth) * cover,
 		dx:       math.Tanh(driftGain * dx),
 		dy:       math.Tanh(driftGain * dy),
 	}
+}
+
+// envelope says how much of the water reaches this point at all. It is read
+// at its own low frequency, dragged about by the veil's first displacement so
+// that a shoreline follows the currents, and shaped by one threshold: at
+// coverage 1 it is 1 everywhere and the veil is edge to edge, at 0 it is 0
+// everywhere and the bed is dry.
+func (v *veil) envelope(u, w, qx, qy float64) float64 {
+	c := v.cfg
+	if c.coverage >= 1 {
+		return 1
+	}
+	x := u*c.coverScale + qx*coverDrag
+	y := w*c.coverScale + qy*coverDrag
+	// Two octaves, no more: an envelope with fine detail in it stops being a
+	// composition and becomes a second texture competing with the threads.
+	fx, fy := rotateScale(x, y, 2)
+	e := (v.cover.At(x+2.7, y-8.1) + 0.5*v.cover.At(fx+19.3, fy+4.7)) / 1.5
+	t := mathx.Clamp01(0.5 + coverSpread*e)
+	// The threshold sweeps past both ends of the field, so the knob really
+	// does reach "all of it" and "none of it" rather than asymptotes.
+	lo := 1.10 - 1.45*c.coverage
+	return mathx.Smoothstep(lo, lo+coverShore, t)
 }
 
 // thread is the narrow bright response the filament manner draws. Two things
@@ -244,10 +316,31 @@ func (v *veil) At(u, w float64) veilSample {
 // tight, so most of the sheet is not in it at all; and it is gated by the
 // water's own depth, so threads gather in the currents and leave the shallows
 // alone. Ungated it covered the whole frame evenly and read as etched glass.
+//
+// The residual is folded into a triangle wave rather than taken as one ridge
+// off zero. Both give the same line where the field crosses zero, but the
+// wave *repeats*, so asking for more threads draws more of them — the way a
+// contour map gets busier at a finer interval — instead of merely widening
+// the single line there is. Widening it was the first thing tried and it
+// turns filaments into slugs.
 func (v *veil) thread(fine, depth float64) float64 {
-	fold := 1 - math.Abs(fine)*2.9
-	ridge := mathx.Smoothstep(0.72, 0.99, fold)
-	return ridge * mathx.Smoothstep(0.12, 0.62, depth)
+	t := fine*threadFold*v.cfg.density + 0.5
+	fold := 1 - math.Abs(2*(t-math.Floor(t))-1)
+	ridge := mathx.Smoothstep(threadWindow, 0.99, fold)
+	lo, hi := v.gate()
+	return ridge * mathx.Smoothstep(lo, hi, depth)
+}
+
+// gate is the window on the water's own depth in which threads are drawn.
+// Low gather spreads them over everything the water touches; high gather
+// packs them into the deepest passages and leaves long calm stretches of thin
+// water between. gatherMid reproduces the window the manner was tuned on
+// exactly, so the knob's default is not a new picture.
+func (v *veil) gate() (float64, float64) {
+	g := v.cfg.gather - gatherMid
+	centre := 0.37 + 0.62*g
+	width := 0.50 * (1 - 0.60*g)
+	return centre - width/2, centre + width/2
 }
 
 // shape turns the field's depth into a quantity of water. It is where the

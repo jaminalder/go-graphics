@@ -88,10 +88,16 @@ surface. `--veil glaze|marble|terrace|filament|silk` is the material (one
 knob, five materials — every other water flag is an override on it), `--cast`
 which pigment the palette supplies. The water is absorption in linear light
 with the extinction normalised off the pigment's *hue*, which is what lets a
-pale palette swatch still read as blue. See `docs/sketches/015-glaze.md`, and
+pale palette swatch still read as blue. How much of the sheet is wet at all is
+`--coverage`, a spatial envelope rather than a global dial, so one frame can
+hold broad dry stone against flooded passages; `--opacity` and `--body` say
+how dense the water is where it covers, and `--density` and `--gather` how
+many threads the filament draws and how tightly they pack. See
+`docs/sketches/015-glaze.md`, and
 its "What did not work" section before retuning any field constant — the veil
-wants forms much broader than 013's defaults, and the drift needs its own
-finer frequency or it translates the bed instead of smearing it.
+wants forms much broader than 013's defaults, the drift needs its own finer
+frequency or it translates the bed instead of smearing it, and neither
+coverage nor density is the global multiplier it first looks like.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so

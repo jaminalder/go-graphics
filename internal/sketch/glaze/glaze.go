@@ -30,6 +30,10 @@ type Sketch struct {
 	Drift      float64
 	Glint      float64
 	GrainWater float64
+	Coverage   float64
+	CoverScale float64
+	Density    float64
+	Gather     float64
 	Terraces   int
 
 	veilName, castName string
@@ -62,6 +66,8 @@ func (s *Sketch) adopt(c veilConfig) {
 	s.Stretch, s.Opacity, s.Body = c.stretch, c.opacity, c.body
 	s.DriftScale = c.driftScale
 	s.Drift, s.Glint, s.GrainWater = c.drift, c.glint, c.grain
+	s.Coverage, s.CoverScale = c.coverage, c.coverScale
+	s.Density, s.Gather = c.density, c.gather
 	s.Terraces = c.terraces
 }
 
@@ -103,6 +109,10 @@ func (s *Sketch) config() veilConfig {
 	set("drift-scale", &c.driftScale, s.DriftScale)
 	set("glint", &c.glint, s.Glint)
 	set("grain-water", &c.grain, s.GrainWater)
+	set("coverage", &c.coverage, s.Coverage)
+	set("cover-scale", &c.coverScale, s.CoverScale)
+	set("density", &c.density, s.Density)
+	set("gather", &c.gather, s.Gather)
 	if s.knobs.WasSet("terraces") {
 		c.terraces = s.Terraces
 	}

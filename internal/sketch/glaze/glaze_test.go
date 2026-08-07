@@ -105,6 +105,15 @@ func TestAMannerKeepsItsOwnNumbersUntilAFlagOverridesThem(t *testing.T) {
 	if pinned.opacity != marble.opacity || pinned.scale != marble.scale {
 		t.Fatal("overriding one knob disturbed the rest of the manner")
 	}
+
+	wet := configured(t, "--veil", "filament", "--coverage", "0.4").config()
+	if wet.coverage != 0.4 {
+		t.Fatalf("explicit --coverage was ignored: got %v", wet.coverage)
+	}
+	if plain := preset(mannerFilament, wet.seed); wet.opacity != plain.opacity ||
+		wet.density != plain.density || wet.gather != plain.gather {
+		t.Fatal("setting --coverage disturbed the filament's other numbers")
+	}
 }
 
 // The water and the bed are separately re-dealable: a different --water-seed
@@ -178,6 +187,111 @@ func TestTheBedSurvivesTheVeil(t *testing.T) {
 	}
 	if len(tones) < 60 {
 		t.Fatalf("only %d green levels survive; the veil has flattened the bed", len(tones))
+	}
+}
+
+// Coverage has to be a *place*, not a dial. Scaling the load globally makes a
+// thin veil out of a thick one and keeps the same composition; what this
+// defends is that one sheet holds broad dry stone and flooded passages at
+// once, which is the whole reason the envelope is spatial.
+func TestCoverageLeavesDryStoneAndOpenWaterInTheSameFrame(t *testing.T) {
+	share := func(args ...string) (dry, wet float64) {
+		v := newVeil(configured(t, append([]string{"--veil", "filament"}, args...)...).config())
+		total := 0
+		for i := range 160 {
+			for j := range 160 {
+				s := v.At(float64(i)/160, float64(j)/160)
+				total++
+				switch {
+				case s.load < 0.02:
+					dry++
+				case s.load > 0.25:
+					wet++
+				}
+			}
+		}
+		return dry / float64(total), wet / float64(total)
+	}
+
+	if dry, _ := share(); dry > 0.01 {
+		t.Fatalf("coverage 1 left %.0f%% of the sheet dry; the default must be edge to edge", 100*dry)
+	}
+	// At its own default scale the envelope is barely a cycle across the
+	// frame, so how much dry stone a *particular* seed shows is a fact about
+	// that seed. Two cycles is enough for the claim to be about the mechanism
+	// rather than about seed 42.
+	dry, wet := share("--coverage", "0.5", "--cover-scale", "2.2")
+	if dry < 0.15 {
+		t.Fatalf("coverage 0.5 left only %.0f%% dry; there are no dry passages to compose with", 100*dry)
+	}
+	if wet < 0.15 {
+		t.Fatalf("coverage 0.5 left only %.0f%% open water; the envelope has drowned the veil", 100*wet)
+	}
+	if allDry, _ := share("--coverage", "0"); allDry < 0.99 {
+		t.Fatalf("coverage 0 still wetted %.0f%% of the sheet", 100*(1-allDry))
+	}
+}
+
+// Density has to add threads, not fatten the one thread there is. Widening
+// the ridge window was the obvious way to do it and turns filaments into
+// slugs; the triangle fold is what makes "more" mean more lines.
+func TestDensityDrawsMoreThreadsRatherThanOneThickerOne(t *testing.T) {
+	count := func(density string) (threads, lit int) {
+		v := newVeil(configured(t, "--veil", "filament", "--density", density).config())
+		const steps = 1500
+		for _, row := range []float64{0.21, 0.47, 0.73} {
+			on := false
+			for i := range steps {
+				f := v.At(float64(i)/steps, row).filament
+				if f > 0.35 {
+					lit++
+					if !on {
+						threads++
+						on = true
+					}
+				} else if f < 0.05 {
+					on = false
+				}
+			}
+		}
+		return threads, lit
+	}
+
+	few, fewLit := count("1")
+	many, manyLit := count("2.5")
+	if many <= few {
+		t.Fatalf("density 2.5 drew %d threads against density 1's %d", many, few)
+	}
+	// More lines, each no fatter: the lit share may not grow faster than the
+	// count, or the knob is thickening rather than multiplying.
+	if fewWidth, manyWidth := float64(fewLit)/float64(few), float64(manyLit)/float64(many); manyWidth > fewWidth {
+		t.Fatalf("threads got wider with density: %.1f px against %.1f px", manyWidth, fewWidth)
+	}
+}
+
+// The threads are gated by the water's own depth so they gather in the
+// currents. Gather is that gate made a knob: turned up, the detail concentrates
+// and leaves long calm stretches, which is the composition the sketch is for.
+func TestGatherPacksTheThreadsIntoTheDeepWater(t *testing.T) {
+	mean := func(gather string) float64 {
+		v := newVeil(configured(t, "--veil", "filament", "--gather", gather).config())
+		sum, n := 0.0, 0
+		for i := range 200 {
+			for j := range 200 {
+				s := v.At(float64(i)/200, float64(j)/200)
+				if s.filament > 0.3 {
+					sum += s.load
+					n++
+				}
+			}
+		}
+		if n == 0 {
+			t.Fatalf("gather %s drew no threads at all", gather)
+		}
+		return sum / float64(n)
+	}
+	if loose, tight := mean("0"), mean("0.9"); tight <= loose {
+		t.Fatalf("gather 0.9 sat in load %.3f water, no deeper than gather 0's %.3f", tight, loose)
 	}
 }
 

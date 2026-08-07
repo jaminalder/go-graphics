@@ -34,6 +34,10 @@ func (s *Sketch) declare() {
 	o.Float("drift", "bed displacement by the veil, canvas units", "dr", 0, 0.25, &s.Drift)
 	o.Float("drift-scale", "how fine that displacement varies, x the veil scale", "dz", 0.5, 24, &s.DriftScale)
 	o.Float("glint", "strength of the filament highlight", "gt", 0, 1.2, &s.Glint)
+	o.Float("coverage", "share of the sheet the water reaches at all; 1 is edge to edge", "cv", 0, 1, &s.Coverage)
+	o.Float("cover-scale", "size of the wet and dry passages, cycles per canvas unit", "cw", 0.15, 6, &s.CoverScale)
+	o.Float("density", "how many threads the veil draws", "dn", 0, 4, &s.Density)
+	o.Float("gather", "how tightly the threads pack into the deep water", "gh", 0, 1, &s.Gather)
 	o.Float("grain-water", "paper tooth in the veil", "gw", 0, 0.5, &s.GrainWater)
 	o.Int("terraces", "plateaus when the veil terraces", "tr", 2, 12, &s.Terraces)
 
