@@ -106,6 +106,15 @@ On top of that ramp:
   marks where the stroma meets the pupil. These are the only places radius
   overrules the field.
 
+The pupil is dark but not dead: the same field the stroma is made of survives
+inside it as a barely visible turbulence, and the aperture deepens toward its
+own centre. A flat black disc reads as a hole cut in the picture rather than as
+part of it.
+
+The ground is never neutral. Every level carries the palette's own hue — a
+tinted paper, a deep tone, or a receding mid — because a disc this saturated
+sitting on undifferentiated white reads as a cut-out rather than as a picture.
+
 `tint sector` adds a slow field read on a small circle — a function of angle
 only — that slides whole wedges of the stroma along the value ramp, the way a
 real sectoral heterochromia does.

@@ -29,6 +29,9 @@ const (
 	seedSector = 0x697269732d7365
 	seedCrypt  = 0x697269732d6372
 
+	// cryptGrainSalt separates the fine in-cell generation from the cells.
+	cryptGrainSalt = 0x6772
+
 	// Named RNG streams. Traits are resolved before any number is drawn, so
 	// adding a numeric range later never moves an existing seed's traits.
 	streamTraits = 1
@@ -227,14 +230,19 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 	// the structure stays legible everywhere on the sheet.
 	body := newValueRamp(colors)
 
+	// The ground is never neutral. A disc this saturated on undifferentiated
+	// white reads as a cut-out; every level therefore keeps some of the
+	// palette's own hue while staying far enough from the stroma in value
+	// that the rim still cuts.
+	accentColor := accent(colors)
 	var groundColor palette.Color
 	switch set.ground {
 	case groundDark:
-		groundColor = darkest.ContrastShade(0.06).Desaturate(0.35)
+		groundColor = palette.Lerp(darkest, accentColor, 0.16).Desaturate(0.3).ContrastShade(0.03)
 	case groundPalette:
-		groundColor = palette.Lerp(colors[1], darkest, 0.4).Desaturate(0.3)
+		groundColor = palette.Lerp(colors[1], darkest, 0.45).Desaturate(0.42).Lighten(0.08)
 	default:
-		groundColor = lightest.Lighten(0.88).Desaturate(0.55)
+		groundColor = palette.Lerp(lightest, accentColor, 0.14).Lighten(0.74).Desaturate(0.3)
 	}
 
 	aspect := float64(ctx.Width) / float64(ctx.Height)
@@ -249,7 +257,7 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 		centreU:     aspect / 2,
 		centreV:     0.5,
 		body:        body,
-		accent:      accent(colors),
+		accent:      accentColor,
 		light:       lightest,
 		dark:        darkest,
 		limbal:      palette.Lerp(darkest, colors[1], 0.25),
@@ -263,6 +271,25 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 func (p plan) fbm(field *noise.Perlin, x, y float64) float64 {
 	value, _ := p.fbmWithFine(field, x, y)
 	return value
+}
+
+// fbmBroad is the same field truncated to its first few octaves. Contour work
+// needs a field whose level sets are curves, not a field whose level sets are
+// everywhere: with all six octaves in, the crossings land closer together than
+// any line width and the drawing collapses into hair.
+func (p plan) fbmBroad(field *noise.Perlin, x, y float64, octaves int) float64 {
+	if octaves > p.set.octaves {
+		octaves = p.set.octaves
+	}
+	sum, weight := 0.0, 0.0
+	amplitude := 1.0
+	for range octaves {
+		sum += field.At(x, y) * amplitude
+		weight += amplitude
+		x, y = rotateScale(x, y, p.set.lacunarity)
+		amplitude *= p.set.gain
+	}
+	return sum / weight
 }
 
 // fbmWithFine also returns the top two octaves on their own, the residual the
@@ -401,12 +428,32 @@ func (p plan) readFiber(pt polar) stroma {
 // contour is placed by the field, and only the warp makes them run outward.
 func (p plan) readFilament(pt polar) stroma {
 	value, fine := p.fbmWithFine(p.value, pt.warpX, pt.warpY)
-	level := (value*2.6 + fine*0.7) * p.set.bands / 7
-	distance := math.Abs(level - math.Round(level))
-	thread := mathx.Smoothstep(0.19, 0.03, distance)
-	body := mathx.Smoothstep(-0.42, 0.42, value)
+
+	// The contour is placed by a three-octave field, so the lines are wide
+	// apart and legible as drawing; the full field's fine residual only
+	// nudges each line off true, which is what keeps them from looking
+	// mechanically drafted.
+	broad := p.fbmBroad(p.value, pt.warpX, pt.warpY, 3)
+	level := (broad*3.1 + fine*0.28) * p.set.bands / 7
+	nearest := math.Round(level)
+	distance := math.Abs(level - nearest)
+
+	// Index contours: every fourth line is drawn heavy and the rest fine,
+	// the way a survey map does it. Without the hierarchy an even comb of
+	// identical threads reads as brushed hair rather than as drawing.
+	width, weight := 0.11, 0.52
+	if index := math.Mod(math.Abs(nearest), 4) < 0.5; index {
+		width, weight = 0.19, 0.95
+	}
+	thread := mathx.Smoothstep(width, 0.02, distance) * weight
+
+	// The body comes from the same broad field the lines do, so the colour
+	// underneath them is a few calm zones. Reading it from the full field
+	// instead fills every one of those zones with its own fur, and then the
+	// lines are the least of what you see.
+	body := mathx.Smoothstep(-0.38, 0.38, broad) + value*0.12
 	return stroma{
-		tone:   mathx.Clamp01(0.16 + body*0.5 + thread*0.42),
+		tone:   mathx.Clamp01(0.14 + body*0.52 + thread*0.34),
 		spark:  thread,
 		shadow: mathx.Smoothstep(0.3, 0.46, distance) * 0.5,
 	}
@@ -445,11 +492,20 @@ func (p plan) readCrypt(pt polar) stroma {
 	cellX, cellY, f1, f2 := noise.WorleyCell(p.crypt, pt.warpX*density, pt.warpY*density)
 	web := mathx.Smoothstep(0.015, 0.11, f2-f1)
 	flat := noise.Hash01(p.crypt, cellX, cellY)
+
+	// A second, much finer generation of cells inside each lacuna. A flat
+	// tile is a shape at any size; a flat tile subdivided is a shape that
+	// still holds something to look at when the print is a metre across.
+	innerX, innerY, g1, g2 := noise.WorleyCell(p.crypt^cryptGrainSalt,
+		pt.warpX*density*3.7, pt.warpY*density*3.7)
+	grain := noise.Hash01(p.crypt^cryptGrainSalt, innerX, innerY)
+	seam := mathx.Smoothstep(0.01, 0.06, g2-g1)
+
 	value, _ := p.fbmWithFine(p.value, pt.warpX*0.7, pt.warpY*0.7)
 	return stroma{
-		tone:   mathx.Clamp01(0.22 + flat*0.62 + value*0.24),
+		tone:   mathx.Clamp01(0.22 + flat*0.56 + grain*0.1 + value*0.24),
 		spark:  mathx.Smoothstep(0.42, 0.06, f1) * 0.5 * flat,
-		shadow: 1 - web,
+		shadow: (1 - web) + (1-seam)*0.35*web,
 	}
 }
 
@@ -492,7 +548,7 @@ func (p plan) At(u, v float64) palette.Color {
 		return p.groundColor
 	}
 	if radius <= p.set.pupil-edge {
-		return p.pupil
+		return p.pupilAt(du, dv, radius)
 	}
 	scale := math.Hypot(du, dv)
 	dirX, dirY := du/scale, dv/scale
@@ -508,6 +564,15 @@ func (p plan) At(u, v float64) palette.Color {
 		color = palette.Lerp(p.pupil, color, mathx.Smoothstep(p.set.pupil-edge, p.set.pupil+edge, radius))
 	}
 	return color.Clamp()
+}
+
+// pupilAt keeps the pupil dark but not dead: the same field the stroma is made
+// of survives in it as a barely visible turbulence, and the aperture deepens
+// toward its own centre. A flat black disc reads as a hole cut in the picture.
+func (p plan) pupilAt(du, dv, radius float64) palette.Color {
+	turbulence := p.fbm(p.value, du*7.3+21.7, dv*7.3-14.9)
+	well := 1 - mathx.Smoothstep(0.1, 0.98, radius/p.set.pupil)*0.55
+	return palette.Lerp(p.pupil, p.limbal, mathx.Clamp01(0.06+turbulence*0.22)*well).Clamp()
 }
 
 // Render implements sketch.Sketch.

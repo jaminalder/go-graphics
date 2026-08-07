@@ -35,10 +35,12 @@ var schema = trait.Schema{
 	{
 		Name: dimWeave, Key: "w", InName: true,
 		Doc: "which way the stroma runs out of the pupil",
+		// Weighted hard toward radial: a wound stroma is a strong effect and
+		// a rare one, and a sheet of them stops reading as an iris at all.
 		Values: []trait.Value{
-			{Name: "radial", Weight: 4},
-			{Name: "swirl", Weight: 3},
-			{Name: "vortex", Weight: 1.5},
+			{Name: "radial", Weight: 7},
+			{Name: "swirl", Weight: 2},
+			{Name: "vortex", Weight: 0.8},
 		},
 	},
 	{
@@ -121,7 +123,7 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 	}
 	switch set.Get(dimWeave) {
 	case "swirl":
-		s.twist = turn * rnd.Uniform(rng, 0.55, 1.35)
+		s.twist = turn * rnd.Uniform(rng, 0.45, 1.05)
 	case "vortex":
 		s.twist = turn * rnd.Uniform(rng, 1.9, 3.6)
 	default:
