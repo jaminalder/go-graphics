@@ -100,7 +100,7 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		gleam:      rnd.Uniform(rng, 0.1, 0.24),
 		warmth:     rnd.Uniform(rng, 0.18, 0.52),
 		bands:      rnd.Uniform(rng, 9, 20),
-		cells:      rnd.Uniform(rng, 7, 17),
+		cells:      rnd.Uniform(rng, 10, 26),
 		limbus:     rnd.Uniform(rng, 0.4, 0.445),
 		octaves:    5,
 	}
