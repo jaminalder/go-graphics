@@ -608,7 +608,7 @@ func (p plan) rimAt(pt polar, read stroma, color palette.Color, radius, edge flo
 	default:
 		// Soft: a wide fall into shadow, then a clean edge. The blur is the
 		// point — it is what stops the mosaic from looking cut out.
-		color = palette.Lerp(color, p.limbal, mathx.Smoothstep(1-width, 1, radius)*0.62)
+		color = palette.Lerp(color, p.limbal, mathx.Smoothstep(1-width, 1, radius)*0.78)
 		return palette.Lerp(color, p.groundColor, mathx.Smoothstep(1-edge, 1+edge, radius))
 	}
 }
