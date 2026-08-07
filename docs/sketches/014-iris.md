@@ -112,9 +112,8 @@ On top of that ramp:
   most saturated warm colour that is neither the lightest nor the darkest;
 - `gleam` mixes the lightest colour into narrow crests, `shadow` mixes the
   darkest into crypts, risers and cell webs;
-- a soft outer zone sinks into a crisp limbal ring, and a collar of shadow
-  marks where the stroma meets the pupil. These are the only places radius
-  overrules the field.
+- a collar of shadow marks where the stroma meets the pupil. That and the rim
+  below are the only places radius overrules the field.
 
 The pupil is dark but not dead: the same field the stroma is made of survives
 inside it as a barely visible turbulence, and the aperture deepens toward its
@@ -129,9 +128,35 @@ sitting on undifferentiated white reads as a cut-out rather than as a picture.
 only — that slides whole wedges of the stroma along the value ramp, the way a
 real sectoral heterochromia does.
 
+## The rim
+
+How the disc ends is an axis of the work, not a finishing touch: the border is
+most of what makes the piece read as an object on a ground rather than as a
+texture cropped to a circle. `rim-width` sets how far inward each treatment
+reaches; past the limbus the annulus position `s` is clamped, so the stroma
+simply continues at its outermost reading and a dissolving or torn edge has
+something left to eat into.
+
+- `soft` — a wide fall into shadow, then a clean edge. The blur is the point:
+  it is what stops the mosaic from looking cut out.
+- `ring` — a drawn keyline. The stroma runs at full strength to within a hair
+  of the edge and a hard dark ring closes it.
+- `halo` — no ring at all. The stroma thins into the ground over a wide band,
+  so the disc has no drawn edge and reads as something dissolving.
+- `frayed` — the field decides where the disc ends. The boundary wanders in and
+  out by up to half the rim width, so the circle is a circle only in the way a
+  torn sheet of paper is rectangular.
+- `band` — a flat annulus around the disc: a mount rather than an edge. The
+  stroma stops crisply and the frame carries the eye out to the ground.
+
+The `ground` levels are `light` (tinted paper), `dark` (a deep tone with the
+accent mixed in), `shade` (a receding mid) and `ink` — the palette's darkest
+colour untouched, which puts the disc in its own shadow instead of on a
+surface.
+
 ## Output space
 
-Seven weighted dimensions (`internal/trait`), resolved from the seed before
+Eight weighted dimensions (`internal/trait`), resolved from the seed before
 any number is drawn:
 
 | dimension | values |
@@ -142,7 +167,8 @@ any number is drawn:
 | `reach` | long, broken |
 | `aperture` | narrow, even, wide |
 | `tint` | plain, sector |
-| `ground` | light, dark, shade |
+| `rim` | soft, ring, halo, frayed, band |
+| `ground` | light, dark, shade, ink |
 
 Each level resolves to *ranges*, not numbers, so two seeds sharing a level
 still draw different irises. Every numeric knob (`--scale`, `--twist`,

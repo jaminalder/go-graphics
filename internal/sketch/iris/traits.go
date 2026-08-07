@@ -18,6 +18,7 @@ const (
 	dimReach     = "reach"
 	dimAperture  = "aperture"
 	dimTint      = "tint"
+	dimRim       = "rim"
 	dimGround    = "ground"
 )
 
@@ -78,12 +79,24 @@ var schema = trait.Schema{
 		},
 	},
 	{
+		Name: dimRim, Key: "e", InName: true,
+		Doc: "how the disc ends",
+		Values: []trait.Value{
+			{Name: "soft", Weight: 4},
+			{Name: "ring", Weight: 2},
+			{Name: "halo", Weight: 2},
+			{Name: "frayed", Weight: 2},
+			{Name: "band", Weight: 1},
+		},
+	},
+	{
 		Name: dimGround, Key: "b",
 		Doc: "what surrounds the iris",
 		Values: []trait.Value{
 			{Name: "light", Weight: 4},
 			{Name: "dark", Weight: 1.5},
 			{Name: "shade", Weight: 1},
+			{Name: "ink", Weight: 1.5},
 		},
 	},
 }
@@ -102,6 +115,7 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		bands:      rnd.Uniform(rng, 9, 20),
 		cells:      rnd.Uniform(rng, 10, 26),
 		limbus:     rnd.Uniform(rng, 0.4, 0.445),
+		rimWidth:   rnd.Uniform(rng, 0.2, 0.42),
 		octaves:    5,
 	}
 
@@ -161,11 +175,27 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 	if set.Is(dimTint, "sector") {
 		s.tint = tintSector
 	}
+	switch set.Get(dimRim) {
+	case "ring":
+		s.rim = rimRing
+	case "halo":
+		s.rim = rimHalo
+	case "frayed":
+		s.rim = rimFrayed
+	case "band":
+		s.rim = rimBand
+		s.rimWidth = rnd.Uniform(rng, 0.05, 0.16)
+	default:
+		s.rim = rimSoft
+	}
+
 	switch set.Get(dimGround) {
 	case "dark":
 		s.ground = groundDark
 	case "shade":
 		s.ground = groundPalette
+	case "ink":
+		s.ground = groundInk
 	default:
 		s.ground = groundLight
 	}

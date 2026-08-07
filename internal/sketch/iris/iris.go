@@ -67,12 +67,26 @@ const (
 	tintSector
 )
 
+// rim is how the disc ends. The border is most of what makes the piece read
+// as an object on a ground rather than as a texture cropped to a circle, so
+// it is an axis of the work and not a finishing touch.
+type rimStyle uint8
+
+const (
+	rimSoft rimStyle = iota
+	rimRing
+	rimHalo
+	rimFrayed
+	rimBand
+)
+
 type ground uint8
 
 const (
 	groundLight ground = iota
 	groundDark
 	groundPalette
+	groundInk
 )
 
 type settings struct {
@@ -81,6 +95,8 @@ type settings struct {
 	fiber, radial, nested   float64
 	depth, gleam, warmth    float64
 	bands, cells            float64
+	rimWidth                float64
+	rim                     rimStyle
 	limbus, pupil           float64
 	octaves                 int
 	structure               structure
@@ -95,6 +111,7 @@ type Sketch struct {
 	Fiber, Radial, Nested   float64
 	Depth, Gleam, Warmth    float64
 	Bands, Cells            float64
+	RimWidth                float64
 	Limbus, Pupil           float64
 	Octaves                 int
 
@@ -118,6 +135,7 @@ func New() *Sketch {
 		Gleam:      0.16,
 		Warmth:     0.35,
 		Bands:      14,
+		RimWidth:   0.3,
 		Cells:      12,
 		Limbus:     0.42,
 		Pupil:      0.28,
@@ -150,6 +168,7 @@ type plan struct {
 	accent      palette.Color
 	light, dark palette.Color
 	limbal      palette.Color
+	frame       palette.Color
 	pupil       palette.Color
 	groundColor palette.Color
 }
@@ -241,6 +260,10 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 		groundColor = palette.Lerp(darkest, accentColor, 0.16).Desaturate(0.3).ContrastShade(0.03)
 	case groundPalette:
 		groundColor = palette.Lerp(colors[1], darkest, 0.45).Desaturate(0.42).Lighten(0.08)
+	case groundInk:
+		// The palette's darkest colour, untouched. The disc then sits in its
+		// own shadow instead of on a surface.
+		groundColor = darkest
 	default:
 		groundColor = palette.Lerp(lightest, accentColor, 0.14).Lighten(0.74).Desaturate(0.3)
 	}
@@ -261,6 +284,7 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 		light:       lightest,
 		dark:        darkest,
 		limbal:      palette.Lerp(darkest, colors[1], 0.25),
+		frame:       palette.Lerp(darkest, colors[1], 0.3).Desaturate(0.35),
 		pupil:       darkest.ContrastShade(-0.22).Desaturate(0.2),
 		groundColor: groundColor,
 	}, nil
@@ -530,12 +554,63 @@ func (p plan) shade(pt polar, read stroma) palette.Color {
 	color = palette.Lerp(color, p.light, read.spark*p.set.gleam)
 	color = palette.Lerp(color, p.dark, read.shadow*(0.35+p.set.depth*0.55))
 
-	// The two drawn edges: a soft outer zone sinking into a crisp limbal
-	// ring, and a collar of shadow where the stroma meets the pupil. They
-	// are the only places radius is allowed to overrule the field.
-	color = palette.Lerp(color, p.limbal, mathx.Smoothstep(0.72, 0.97, pt.s)*0.45)
-	color = palette.Lerp(color, p.limbal, mathx.Smoothstep(0.955, 0.995, pt.s)*0.85)
+	// A collar of shadow marks where the stroma meets the pupil. The outer
+	// edge is the rim's business, not shade's.
 	return palette.Lerp(color, p.pupil, (1-mathx.Smoothstep(0, 0.05, pt.s))*0.5)
+}
+
+// overshoot is how far past the limbus the rim still draws something.
+func (p plan) overshoot() float64 {
+	switch p.set.rim {
+	case rimFrayed:
+		return p.set.rimWidth * 0.55
+	case rimBand:
+		return p.set.rimWidth
+	default:
+		return 0
+	}
+}
+
+// rimAt ends the disc. Each style answers the same two questions differently:
+// how the stroma darkens on its way out, and where exactly it stops being the
+// stroma at all.
+func (p plan) rimAt(pt polar, read stroma, color palette.Color, radius, edge float64) palette.Color {
+	width := p.set.rimWidth
+	switch p.set.rim {
+	case rimRing:
+		// A drawn keyline. Almost no gradient: the stroma runs full strength
+		// to within a hair of the edge and then a hard dark ring closes it.
+		color = palette.Lerp(color, p.limbal, mathx.Smoothstep(1-width*0.22, 0.995, radius)*0.95)
+		return palette.Lerp(color, p.groundColor, mathx.Smoothstep(1-edge, 1+edge, radius))
+
+	case rimHalo:
+		// No ring at all. The stroma thins into the ground over a wide band,
+		// so the disc has no drawn edge and reads as something dissolving.
+		fade := math.Pow(mathx.Smoothstep(1-width*0.85, 1+edge, radius), 0.85)
+		return palette.Lerp(color, p.groundColor, fade)
+
+	case rimFrayed:
+		// The field decides where the disc ends. The boundary wanders in and
+		// out by up to half the rim width, so the circle is a circle only in
+		// the way a torn sheet of paper is rectangular.
+		wander := pt.broad*1.7 + (read.tone-0.5)*0.55
+		limit := 1 + width*0.5*wander
+		color = palette.Lerp(color, p.limbal, mathx.Smoothstep(limit-width*0.9, limit, radius)*0.6)
+		return palette.Lerp(color, p.groundColor, mathx.Smoothstep(limit-edge*2.5, limit+edge*2.5, radius))
+
+	case rimBand:
+		// A flat annulus around the disc: a mount, not an edge. The stroma
+		// stops crisply and the frame carries the eye out to the ground.
+		color = palette.Lerp(color, p.limbal, mathx.Smoothstep(1-width*0.35, 0.995, radius)*0.7)
+		color = palette.Lerp(color, p.frame, mathx.Smoothstep(1-edge, 1+edge, radius))
+		return palette.Lerp(color, p.groundColor, mathx.Smoothstep(1+width-edge, 1+width+edge, radius))
+
+	default:
+		// Soft: a wide fall into shadow, then a clean edge. The blur is the
+		// point — it is what stops the mosaic from looking cut out.
+		color = palette.Lerp(color, p.limbal, mathx.Smoothstep(1-width, 1, radius)*0.62)
+		return palette.Lerp(color, p.groundColor, mathx.Smoothstep(1-edge, 1+edge, radius))
+	}
 }
 
 // At maps one canvas coordinate to colour.
@@ -544,7 +619,7 @@ func (p plan) At(u, v float64) palette.Color {
 	radius := math.Hypot(du, dv) / p.set.limbus
 	edge := edgeSoftness / p.set.limbus
 
-	if radius >= 1+edge {
+	if radius >= 1+p.overshoot()+edge {
 		return p.groundColor
 	}
 	if radius <= p.set.pupil-edge {
@@ -554,12 +629,13 @@ func (p plan) At(u, v float64) palette.Color {
 	dirX, dirY := du/scale, dv/scale
 	s := mathx.Clamp01((radius - p.set.pupil) / (1 - p.set.pupil))
 
+	// s is clamped, so past the limbus the stroma simply continues at its
+	// outermost reading — which is what a frayed or dissolving edge needs to
+	// have something left to eat into.
 	pt := p.remap(dirX, dirY, s)
-	color := p.shade(pt, p.read(pt))
+	read := p.read(pt)
+	color := p.rimAt(pt, read, p.shade(pt, read), radius, edge)
 
-	if radius > 1-edge {
-		color = palette.Lerp(color, p.groundColor, mathx.Smoothstep(1-edge, 1+edge, radius))
-	}
 	if radius < p.set.pupil+edge {
 		color = palette.Lerp(p.pupil, color, mathx.Smoothstep(p.set.pupil-edge, p.set.pupil+edge, radius))
 	}

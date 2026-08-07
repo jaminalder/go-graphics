@@ -29,6 +29,7 @@ func (s *Sketch) declare() {
 	o.Float("warmth", "how far the pupillary zone pulls toward the accent colour", "wm", 0, 1, &s.Warmth)
 	o.Float("bands", "strata terraces across the stroma, or filament contour levels", "bd", 1, 40, &s.Bands)
 	o.Float("cells", "crypt: cell density across the stroma", "cl", 2, 40, &s.Cells)
+	o.Float("rim-width", "how far the disc's edge treatment reaches inward", "rw", 0.02, 0.6, &s.RimWidth)
 	o.Float("limbus", "iris radius as a fraction of canvas height", "lb", 0.15, 0.5, &s.Limbus)
 	o.Float("pupil", "pupil radius as a fraction of the iris", "pu", 0.05, 0.6, &s.Pupil)
 	s.knobs = o
@@ -82,6 +83,7 @@ func (s *Sketch) pin(set settings) settings {
 		"bands":      func() { set.bands = s.Bands },
 		"cells":      func() { set.cells = s.Cells },
 		"limbus":     func() { set.limbus = s.Limbus },
+		"rim-width":  func() { set.rimWidth = s.RimWidth },
 		"pupil":      func() { set.pupil = s.Pupil },
 	} {
 		if s.knobs.WasSet(name) {
