@@ -74,14 +74,24 @@ draws one.
   Lines crowd where the field is steep and vanish where it is calm, so the
   stroma comes out as intricate whorls separated by plain passages. The one
   structure with no radial term at all: only the warp makes the contours run
-  outward.
+  outward. Two things make it read as *drawing* rather than as fur: the contour
+  and its body are placed by a **three-octave truncation** of the field, since
+  with all six octaves in, the crossings land closer together than any line
+  width and the drawing collapses into hair; and every fourth line is drawn
+  **heavy** and the rest fine, the way a survey map indexes its contours. The
+  full field's fine residual only nudges each line off true, which is what
+  keeps them from looking mechanically drafted.
 - `strata` — the radial coordinate itself, displaced by the field and
   terraced. Alternate rings sit high and low so neighbours always contrast,
   and the step edge is a drawn line. Reads as growth rings, or as a contour
   map of an eye.
 - `crypt` — Worley cells in the warped space. The space is already stretched
   radially, so the cells come out as elongated lacunae; each takes one flat
-  tone from its own identity, and the gaps draw the web.
+  tone from its own identity, and the gaps draw the web. A second, much finer
+  generation of cells subdivides each lacuna: a flat tile is a shape at any
+  size, but a subdivided one still holds something to look at when the print is
+  a metre across. The drawn density range is set high for the same reason — a
+  coarse mosaic is a poster, a fine one is a picture you can stand close to.
 
 ## Colour
 
