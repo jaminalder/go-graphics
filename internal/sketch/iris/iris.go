@@ -87,6 +87,7 @@ const (
 	groundDark
 	groundPalette
 	groundInk
+	groundBlack
 )
 
 type settings struct {
@@ -264,6 +265,11 @@ func (s *Sketch) plan(ctx sketch.Context) (plan, error) {
 		// The palette's darkest colour, untouched. The disc then sits in its
 		// own shadow instead of on a surface.
 		groundColor = darkest
+	case groundBlack:
+		// One fixed near-black, the same for every palette. It is the only
+		// ground that is not palette-derived, and it exists so that several
+		// panels in different palettes can hang together on one field.
+		groundColor = palette.Color{R: 0.016, G: 0.016, B: 0.018}
 	default:
 		groundColor = palette.Lerp(lightest, accentColor, 0.14).Lighten(0.74).Desaturate(0.3)
 	}

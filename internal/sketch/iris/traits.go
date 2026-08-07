@@ -97,6 +97,7 @@ var schema = trait.Schema{
 			{Name: "dark", Weight: 1.5},
 			{Name: "shade", Weight: 1},
 			{Name: "ink", Weight: 1.5},
+			{Name: "black", Weight: 1},
 		},
 	},
 }
@@ -196,6 +197,8 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		s.ground = groundPalette
 	case "ink":
 		s.ground = groundInk
+	case "black":
+		s.ground = groundBlack
 	default:
 		s.ground = groundLight
 	}

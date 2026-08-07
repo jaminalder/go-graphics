@@ -150,9 +150,11 @@ something left to eat into.
   stroma stops crisply and the frame carries the eye out to the ground.
 
 The `ground` levels are `light` (tinted paper), `dark` (a deep tone with the
-accent mixed in), `shade` (a receding mid) and `ink` — the palette's darkest
+accent mixed in), `shade` (a receding mid), `ink` — the palette's darkest
 colour untouched, which puts the disc in its own shadow instead of on a
-surface.
+surface — and `black`, one fixed near-black shared by every palette. `black` is
+the only ground that is not palette-derived; it exists so that several panels
+in different palettes can hang together on one field.
 
 ## Output space
 
@@ -168,7 +170,7 @@ any number is drawn:
 | `aperture` | narrow, even, wide |
 | `tint` | plain, sector |
 | `rim` | soft, ring, halo, frayed, band |
-| `ground` | light, dark, shade, ink |
+| `ground` | light, dark, shade, ink, black |
 
 Each level resolves to *ranges*, not numbers, so two seeds sharing a level
 still draw different irises. Every numeric knob (`--scale`, `--twist`,
