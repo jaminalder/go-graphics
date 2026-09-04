@@ -35,6 +35,7 @@ make preview-foam # render sketch "foam" (inked cells with pluggable fills)
 make preview-scree # render sketch "scree" (a river bed of faceted, lit stones)
 make preview-riffle # render sketch "riffle" (a small river seen from above)
 make preview-iris # render sketch "iris" (an abstract iris)
+make preview-glaze # render sketch "glaze" (a stone bed under a painted warped veil)
 make hatchbook  # render the internal/hatch specimen sheets + manifest
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
@@ -43,7 +44,7 @@ go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + 
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree, riffle, shallows, warp, iris,
+scree, riffle, shallows, warp, iris, glaze,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
@@ -91,6 +92,23 @@ them. There is no lighting model at all: value is the field. Seven trait
 dimensions (`structure`, `weave`, `grain`, `reach`, `aperture`, `tint`,
 `ground`) carry the output space — see `docs/sketches/014-iris.md`, and read
 the radial remap section there before touching any coordinate.
+
+`glaze` lays a *painted* water over the same faceted stone bed: a translucent
+veil whose entire structure is a nested fBM domain warp rather than a physical
+surface. `--veil glaze|marble|terrace|filament|silk` is the material (one
+knob, five materials — every other water flag is an override on it), `--cast`
+which pigment the palette supplies. The water is absorption in linear light
+with the extinction normalised off the pigment's *hue*, which is what lets a
+pale palette swatch still read as blue. How much of the sheet is wet at all is
+`--coverage`, a spatial envelope rather than a global dial, so one frame can
+hold broad dry stone against flooded passages; `--opacity` and `--body` say
+how dense the water is where it covers, and `--density` and `--gather` how
+many threads the filament draws and how tightly they pack. See
+`docs/sketches/015-glaze.md`, and
+its "What did not work" section before retuning any field constant — the veil
+wants forms much broader than 013's defaults, the drift needs its own finer
+frequency or it translates the bed instead of smearing it, and neither
+coverage nor density is the global multiplier it first looks like.
 
 `qql` is 4:5 — render it with `--profile preview-tall|web-tall|print-tall`.
 It also has `--medium wash` (watercolour instead of ink); it needs room, so
