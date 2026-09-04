@@ -4,10 +4,28 @@ Use ordinary Git branches and sibling worktrees for isolated experiments and
 parallel development. Git is the lifecycle mechanism; the optional files in
 `experiments/templates/` are working notes, not a state database.
 
+## Layout
+
+One container folder holds the coordinator checkout and every worker
+worktree. The container itself is not a Git repository.
+
+```text
+go-graphics/                 container (not a clone)
+  master/                    coordinator: ordinary clone, branch master
+  worktrees/<name>/          one worktree per experiment, branch exp/<name>
+```
+
+Open Cursor on `master/`. That is the workspace root: Go tooling, `AGENTS.md`,
+and project skills all live there. A worker's *working directory* is its
+worktree; do not open a worktree as its own Cursor workspace.
+
+A bare (headless) clone is unnecessary. The coordinator is a privileged
+`master` checkout, so clone into `master/` and add worktrees beside it.
+
 ## Roles
 
-The coordinator stays in the canonical checkout on `master`. It creates and
-removes worktrees, reviews branches, and integrates approved work.
+The coordinator stays in `master/` on `master`. It creates and removes
+worktrees, reviews branches, and integrates approved work.
 
 A writing worker gets one branch and one worktree. It edits only there, does
 not switch branches, and does not merge, rebase, or remove worktrees. A
@@ -17,15 +35,40 @@ does not modify the branch.
 Two concurrent rendering workers is a practical default limit for CPU and
 memory use. This is guidance, not an enforced lock.
 
+## Skills
+
+Project agent skills live on `master` only, under `.claude/skills/` (and
+`.cursor/skills/` if a Cursor-native copy is added). Edit and install them
+from the coordinator checkout. Because Cursor is opened on `master/`, every
+worker in that window sees those skills even when its cwd is a worktree.
+
+Do not copy or symlink skills into experiment worktrees. Do not commit skill
+edits on `exp/*` branches.
+
+Install a published skill into this repo from `master/`:
+
+```sh
+npx skills add <owner/repo@skill> -y
+```
+
+Install a personal skill that should follow you across all projects:
+
+```sh
+npx skills add <owner/repo@skill> -g -y
+```
+
+Personal skills land in `~/.cursor/skills/` (or `~/.claude/skills/`). Never
+install into `~/.cursor/skills-cursor/` — that directory is Cursor's own.
+
 ## Create
 
 Choose a short lower-case `<name>` such as `foam-depth-hatching`. From the
 coordinator checkout on a clean `master`:
 
 ```sh
-mkdir -p ../go-graphics-worktrees
-git worktree add ../go-graphics-worktrees/<name> -b exp/<name> master
-git -C ../go-graphics-worktrees/<name> status --short --branch
+mkdir -p ../worktrees
+git worktree add ../worktrees/<name> -b exp/<name> master
+git -C ../worktrees/<name> status --short --branch
 ```
 
 Give the worker the absolute worktree path, branch name, scope, relevant sketch
@@ -63,7 +106,7 @@ From the coordinator checkout:
 git log --oneline master..exp/<name>
 git diff --stat master...exp/<name>
 git diff master...exp/<name>
-git -C ../go-graphics-worktrees/<name> status --short --branch
+git -C ../worktrees/<name> status --short --branch
 ```
 
 Review the hypothesis, commits, test results, fixed-seed comparison, visible
@@ -120,8 +163,8 @@ After approved work has been integrated or deliberately discarded, ensure the
 worker worktree is clean:
 
 ```sh
-git -C ../go-graphics-worktrees/<name> status --short --branch
-git worktree remove ../go-graphics-worktrees/<name>
+git -C ../worktrees/<name> status --short --branch
+git worktree remove ../worktrees/<name>
 git branch -d exp/<name>
 ```
 

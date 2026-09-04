@@ -2,11 +2,15 @@
 
 ## Branch and worktree rules
 
-- Keep the coordinator in the canonical checkout on `master`.
-- Give every writing worker one dedicated branch and sibling worktree; never
-  share a writing checkout.
+- Keep the coordinator in `master/` on `master`. The container above it
+  (`go-graphics/master` plus `go-graphics/worktrees`) is not a repository.
+- Give every writing worker one dedicated branch and sibling worktree under
+  `../worktrees/<name>`; never share a writing checkout.
 - Create, inspect, integrate, and remove worktrees with ordinary Git commands
   from `docs/WORKTREE-WORKFLOW.md`.
+- Project skills live on `master` (`.claude/skills/`, optionally
+  `.cursor/skills/`). Open Cursor on `master/` so every worker sees them.
+  Do not copy skills into experiment worktrees.
 - Workers operate only in their assigned worktree, do not switch its branch,
   and do not merge or remove worktrees.
 - Keep generated renders under `out/` in the assigned worktree. Commit only a
@@ -145,8 +149,8 @@ you.
 
 ## Docs map (read before working on the related area)
 
-- `docs/WORKTREE-WORKFLOW.md` — native Git commands and responsibilities for
-  isolated branch/worktree development, review, integration, and cleanup.
+- `docs/WORKTREE-WORKFLOW.md` — container layout (`master/` + `worktrees/`),
+  native Git commands, skills, review, integration, and cleanup.
 - `docs/ARCHITECTURE.md` — package layout, dependency rules, **core
   invariants**, testing strategy, decision log. Update the decision log when
   making a non-obvious choice.

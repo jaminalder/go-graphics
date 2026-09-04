@@ -2,7 +2,7 @@
 
 - Name:
 - Branch: `exp/<name>`
-- Worktree: `../go-graphics-worktrees/<name>`
+- Worktree: `../worktrees/<name>`
 - Base commit:
 - Stage:
 - Profile: `preview`
