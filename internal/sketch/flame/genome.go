@@ -47,64 +47,69 @@ func post(x *fl.Xform, sx, sy, rot, tx, ty float64) {
 func spindleGenome(set settings, rng *rand.Rand) fl.System {
 	r := set.reach
 	n := set.weave
-	power := 4.0 + float64(rng.IntN(4)) // 4–7: branching nest, not a filled disc
-	// Julian nest = cyan crystalline crossing (colour pinned in colorize).
+	// Nest spreads the branching; copies thin it into open silk. Nest
+	// plots faint so its filled mass does not bury the hairlines.
+	power := 4.0 + float64(rng.IntN(3)) // 4–6
+	nr := 0.65 + 0.35*r
 	nest := xf(
-		[]fl.Var{{Kind: fl.JulianN, Weight: 1, P: [4]float64{power, rnd.Uniform(rng, 0.78, 1.12)}}},
-		rnd.Uniform(rng, 0.28, 0.46)*r, rnd.Uniform(rng, 0.28, 0.46)*r,
+		[]fl.Var{{Kind: fl.JulianN, Weight: 1, P: [4]float64{power, rnd.Uniform(rng, 0.58, 0.88)}}},
+		rnd.Uniform(rng, 0.34, 0.55)*nr, rnd.Uniform(rng, 0.34, 0.55)*nr,
 		rnd.Uniform(rng, -0.4, 0.4), rnd.Uniform(rng, -0.04, 0.04), rnd.Uniform(rng, -0.04, 0.04),
-		0, rnd.Uniform(rng, 0.75, 1.15),
+		0, rnd.Uniform(rng, 0.4, 0.65),
 	)
-	// Contractive linear copies reprint the nest at smaller scales — the
-	// filigree engine. Two copies are the minimum for recursive hairlines.
+	nest.Opacity = rnd.Uniform(rng, 0.12, 0.25)
+	// Anisotropic linears (narrow in x, taller in y) draw strands instead
+	// of packing area — black stays visible between filaments.
 	copy1 := xf(
 		[]fl.Var{{Kind: fl.Linear, Weight: 1}},
-		rnd.Uniform(rng, 0.2, 0.34), rnd.Uniform(rng, 0.28, 0.48),
-		rnd.Uniform(rng, -0.22, 0.22), rnd.Uniform(rng, -0.1, 0.1), rnd.Uniform(rng, -0.05, 0.05),
-		1, rnd.Uniform(rng, 0.8, 1.15),
+		rnd.Uniform(rng, 0.14, 0.24), rnd.Uniform(rng, 0.42, 0.62),
+		rnd.Uniform(rng, -0.18, 0.18), rnd.Uniform(rng, -0.08, 0.08), rnd.Uniform(rng, -0.04, 0.04),
+		1, rnd.Uniform(rng, 1.1, 1.5),
 	)
 	copy2 := xf(
-		[]fl.Var{{Kind: fl.Linear, Weight: 0.7}, {Kind: fl.Swirl, Weight: 0.3 * r}},
-		rnd.Uniform(rng, 0.18, 0.3), rnd.Uniform(rng, 0.26, 0.42),
-		rnd.Uniform(rng, -0.9, 0.9), rnd.Uniform(rng, -0.08, 0.08), rnd.Uniform(rng, -0.06, 0.06),
-		1, rnd.Uniform(rng, 0.55, 0.9),
+		[]fl.Var{{Kind: fl.Linear, Weight: 0.85}, {Kind: fl.Swirl, Weight: 0.15 * r}},
+		rnd.Uniform(rng, 0.12, 0.2), rnd.Uniform(rng, 0.32, 0.5),
+		rnd.Uniform(rng, -1.0, 1.0), rnd.Uniform(rng, -0.06, 0.06), rnd.Uniform(rng, -0.04, 0.04),
+		1, rnd.Uniform(rng, 0.8, 1.15),
 	)
-	sys := fl.System{X: []fl.Xform{nest, copy1, copy2}}
+	copy3 := xf(
+		[]fl.Var{{Kind: fl.Linear, Weight: 1}},
+		rnd.Uniform(rng, 0.1, 0.18), rnd.Uniform(rng, 0.28, 0.44),
+		rnd.Uniform(rng, -0.28, 0.28), rnd.Uniform(rng, -0.05, 0.05), rnd.Uniform(rng, -0.03, 0.03),
+		1, rnd.Uniform(rng, 0.55, 0.85),
+	)
+	sys := fl.System{X: []fl.Xform{nest, copy1, copy2, copy3}}
 
-	// Faint spherical arcs off the equator — Zander's secondary loops.
 	if n >= 4 {
 		arc := xf(
-			[]fl.Var{{Kind: fl.Spherical, Weight: 0.55}, {Kind: fl.Linear, Weight: 0.45}},
-			rnd.Uniform(rng, 0.42, 0.7), rnd.Uniform(rng, 0.42, 0.7),
-			rnd.Uniform(rng, -0.5, 0.5), rnd.Uniform(rng, -0.12, 0.12), rnd.Uniform(rng, -0.12, 0.12),
-			1, rnd.Uniform(rng, 0.22, 0.4),
+			[]fl.Var{{Kind: fl.Spherical, Weight: 0.3}, {Kind: fl.Linear, Weight: 0.7}},
+			rnd.Uniform(rng, 0.36, 0.55), rnd.Uniform(rng, 0.36, 0.55),
+			rnd.Uniform(rng, -0.5, 0.5), rnd.Uniform(rng, -0.1, 0.1), rnd.Uniform(rng, -0.1, 0.1),
+			1, rnd.Uniform(rng, 0.1, 0.18),
 		)
-		post(&arc, rnd.Uniform(rng, 0.88, 1.05), rnd.Uniform(rng, 0.88, 1.05), rnd.Uniform(rng, -0.15, 0.15), 0, 0)
+		arc.Opacity = 0.45
+		post(&arc, rnd.Uniform(rng, 0.9, 1.05), rnd.Uniform(rng, 0.9, 1.05), rnd.Uniform(rng, -0.12, 0.12), 0, 0)
 		sys.X = append(sys.X, arc)
 	}
 	if n >= 5 {
-		// Second nest branch at a different power, low weight: denser
-		// crossing without filling the plane.
 		nest2 := xf(
-			[]fl.Var{{Kind: fl.JulianN, Weight: 1, P: [4]float64{power - 1, rnd.Uniform(rng, 0.7, 1)}}},
-			rnd.Uniform(rng, 0.35, 0.55)*r, rnd.Uniform(rng, 0.35, 0.55)*r,
-			rnd.Uniform(rng, -0.6, 0.6), rnd.Uniform(rng, -0.06, 0.06), rnd.Uniform(rng, -0.06, 0.06),
-			0, rnd.Uniform(rng, 0.2, 0.38),
+			[]fl.Var{{Kind: fl.JulianN, Weight: 1, P: [4]float64{power - 1, rnd.Uniform(rng, 0.55, 0.8)}}},
+			rnd.Uniform(rng, 0.3, 0.48)*nr, rnd.Uniform(rng, 0.3, 0.48)*nr,
+			rnd.Uniform(rng, -0.55, 0.55), rnd.Uniform(rng, -0.05, 0.05), rnd.Uniform(rng, -0.05, 0.05),
+			0, rnd.Uniform(rng, 0.12, 0.22),
 		)
+		nest2.Opacity = rnd.Uniform(rng, 0.2, 0.35)
 		sys.X = append(sys.X, nest2)
 		needle := xf(
-			[]fl.Var{{Kind: fl.Heart, Weight: 0.7}, {Kind: fl.Linear, Weight: 0.3}},
-			rnd.Uniform(rng, 0.35, 0.5), rnd.Uniform(rng, 0.7, 1.0),
+			[]fl.Var{{Kind: fl.Heart, Weight: 0.5}, {Kind: fl.Linear, Weight: 0.5}},
+			rnd.Uniform(rng, 0.28, 0.42), rnd.Uniform(rng, 0.7, 1.0),
 			rnd.Uniform(rng, -0.08, 0.08), 0, 0,
-			1, rnd.Uniform(rng, 0.1, 0.2),
+			1, rnd.Uniform(rng, 0.08, 0.14),
 		)
 		post(&needle, 0.78, 1.48, 0, 0, 0)
 		sys.X = append(sys.X, needle)
 	}
 
-	// Final is a vertical post on a linear camera. A spherical final —
-	// even mild — opened a black-hole eye on every seed and killed the
-	// spindle. Nonlinear finals stay available for other structures.
 	fin := xf([]fl.Var{{Kind: fl.Linear, Weight: 1}}, 0.78, 0.78, 0, 0, 0, 0.5, 1)
 	post(&fin, 0.72, 1.52, 0, 0, 0)
 	sys.Final = &fin
@@ -138,11 +143,11 @@ func spindleXaos(sys *fl.System) {
 	}
 	for _, i := range body {
 		for _, j := range nest {
-			sys.SetXaos(i, j, 1.4)
+			sys.SetXaos(i, j, 1.5)
 		}
-		// Mild body→body so the gold mass does not clog into a solid.
+		// Keep body→body low so the gold mass stays open silk, not a sponge.
 		for _, j := range body {
-			sys.SetXaos(i, j, 0.55)
+			sys.SetXaos(i, j, 0.18)
 		}
 	}
 }

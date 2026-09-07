@@ -202,8 +202,8 @@ func TestSpindleHasAtLeastThreeCreativeMaps(t *testing.T) {
 			n++
 		}
 	}
-	if n < 3 {
-		t.Fatalf("sparse spindle has %d creative maps; want ≥3 (nest + two copies)", n)
+	if n < 4 {
+		t.Fatalf("sparse spindle has %d creative maps; want ≥4 (nest + three copies)", n)
 	}
 }
 

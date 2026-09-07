@@ -91,17 +91,18 @@ stretch; those are not three flags.
 | `tint`      | how colour is assigned     | split (4), walk (3), stain (1.5)                      |
 | `ground`    | what it sits on            | void (6), dusk (1.5), paper (0.8)                     |
 
-`spindle` is the Zander-like default mass: 180° symmetry, a JulianN nest
-(cyan), two contractive linear copies for the filigree (gold), a vertical
-final post, and xaos that forbids nest-after-nest so the copies reprint
-the crossing. At `weave=chorus` a faint spherical adds equatorial arcs;
-at `dense` a second Julian branch and a low-weight heart needle join.
-Heart is never the primary map — it filled a teardrop of fuzzy hair. A
-spherical *final* was tried and rejected: even mild weight opened a
-black-hole eye on every seed. `filament` drops the required symmetry
-and lets the nest run more asymmetric. `bloom` leans on bubble/eyefish
-(rounder, more filled). `spiral` / `fold` / `julia` are the recognisable
-variation families.
+`spindle` is the Zander-like default mass: 180° symmetry, a low-opacity
+JulianN nest (cyan), three anisotropic linear copies that draw strands
+rather than packing area (gold), a vertical final post, and xaos that
+keeps body→body low so black can show between hairlines. Mild isotropic
+contraction plus DE was what made the sponge fill. At `weave=chorus` a
+faint spherical adds equatorial arcs; at `dense` a second Julian branch
+and a low-weight heart needle join. Heart is never the primary map. A
+spherical *final* was tried and rejected. For open silk on a given
+seed, prefer `--estimator 2–4` and a modest gamma (~2.3); the default
+estimator 9 smooths cores but fills the gaps. `filament` drops the
+required symmetry. `bloom` / `spiral` / `fold` / `julia` are the other
+families.
 
 `split` on spindle pins Julian maps to the cool end and body maps to the
 warm end. Other structures still use order-based split (coolest on the
