@@ -259,8 +259,9 @@ traits + overrides
 ```
 
 `--aa` multiplies samples per pixel rather than evaluating a function on a
-subpixel grid. Spatial anti-aliasing is a bilinear splat. See decision 56
-and [sketches/016-flame.md](sketches/016-flame.md).
+subpixel grid. Spatial anti-aliasing is histogram oversample plus a
+Gaussian downsample (`--oversample`). See decisions 56 and 59 and
+[sketches/016-flame.md](sketches/016-flame.md).
 
 ### Output rendering
 
@@ -475,6 +476,7 @@ correlation is deliberate and documented.
 | 56 | Fractal flames are a chaos-game histogram in `internal/flame`, not a point sampler | A flame is a measure estimated by iterating maps. There is no closed form to put behind `At(u,v)`, and stretching `sketch.Raster` around it would be a different algorithm. The published mechanism — variations, four-channel accumulation, log-density, vibrancy — is independently meaningful and the performance story (fixed 8 orbits, atomic uint64 bins, samples-per-pixel, bilinear splat at output resolution) belongs there. The sketch owns genomes, the colour ramp, auto-framing taste and the void/dusk/paper ground. Quality is samples per pixel so preview and print share a camera; `--aa` multiplies that budget rather than allocating an `aa²` histogram, which at print would be several gigabytes. Worker count is a constant, not `GOMAXPROCS`, because a machine-dependent partition would make the Monte Carlo realisation non-deterministic. |
 | 57 | Flame colour is an RGB ramp, and the first-look palette is sampled from the Zander render | ColorLisa 5-swatches interpolated in HSL cannot make a cyan nest against a gold mass. The short path from Klee's violet to its fire-orange is magenta; the short path from cyan to gold is green. Flam3 palettes are 256-entry RGB LUTs. `zander-spindle` is five stops sampled from `docs/reference/apophysis-flame.jpg` (cyan, pale cyan, gold, amber, burnt orange), listed cool→warm, with the same non-ColorLisa provenance as `staticart-seven`. White-hot cores are gleam on log-density: putting white in the ramp paints the filaments silver. Split still works on ColorLisa palettes (sort by warmth, RGB-lerp). Heart as the primary spindle map was the matching mistake on the structure side — it fills a teardrop of fuzzy hair; JulianN plus contractive linear copies is what reprints a branching nest at smaller scales. |
 | 58 | Flame xaos is a per-row CDF, and density estimation is a log-then-Gaussian scatter | Independent weighted picks cannot nest "this map only after that one". flam3's xaos is P(j\|i) ∝ weight[j]·chaos[i][j]; a 16384-wide LUT is overkill for a handful of xforms, so each predecessor gets a short CDF and the first pick (no predecessor) uses the raw weights. Spindle punches julian→julian to 0.05 so copies reprint the nest; symmetry rows stay 1. Density estimation is the other half of Apophysis quality: radius = estimator / n^curve after log-density, before gamma (Suykens & Willems; flam3 defaults 9 / 0 / 0.4). Blurring the linear histogram then logging is a different picture. The scatter is a sequential float64 post-pass so GOMAXPROCS cannot change it; `--estimator 0` keeps the old per-pixel develop path. |
+| 59 | Flame spatial AA is histogram oversample + Gaussian downsample, not `--aa` | Thin filaments alias when the chaos game splats into an output-resolution histogram. flam3 accumulates at `spatial_oversample` and reduces with a separable Gaussian (`spatial_filter_radius`, support 1.5). `--oversample` (default 2, cap 3) raises hist resolution; `--filter` (default 0.5) is the radius in output pixels; estimator radii scale by ss so DE stays consistent across oversample levels. `--aa` remains a sample-budget multiplier only — sizing the hist by aa at print is the gigabyte trap already refused in decision 56. Downsample averages in linear light and is sequential for determinism. |
 
 ## 9. Roadmap
 

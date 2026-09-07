@@ -124,6 +124,11 @@ Gaussian scatter after log-density and before gamma (`--estimator`,
 default 9). Details and the flam3 formula:
 [flame-xaos-de.md](flame-xaos-de.md).
 
+Spatial anti-aliasing is a separate tool: accumulate at
+`--oversample` (default 2) times the output resolution, then reduce
+with flam3's separable Gaussian (`--filter`, default 0.5). `--aa` only
+multiplies the sample budget; it does not grow the histogram.
+
 Xaos (relative weights) is the other sequential structure: P(j|i) is
 proportional to `weight[j] * xaos[i][j]`. Independent picks cannot make
 "this filament only appears after that map". Spindle punches

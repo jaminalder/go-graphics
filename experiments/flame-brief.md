@@ -31,13 +31,14 @@ non-ColorLisa ramp (`zander-spindle`), zero third-party dependencies.
 
 ## Scope
 
-Engine, sketch, spec, architecture decisions 56–58, preview path.
-Xaos (relative weights) and flam3 density estimation are in.
+Engine, sketch, spec, architecture decisions 56–59, preview path.
+Xaos, flam3 density estimation, and oversample+Gaussian downsample
+are in.
 
 ## Out of scope
 
 Motion blur, XML genome import, GPU, flam3's 16384-wide xaos LUT and
-supersampled DE neighbourhood.
+full spatial-filter menagerie (Gaussian only).
 
 ## Baseline
 

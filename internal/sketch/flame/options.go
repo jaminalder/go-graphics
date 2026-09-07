@@ -21,9 +21,11 @@ func (s *Sketch) declare() {
 	o.Float("brightness", "mid-density lift before the log", "br", 0.2, 8, &s.Brightness)
 	o.Float("gleam", "how far the densest cores move toward white", "gl", 0, 1, &s.Gleam)
 	o.Float("scale", "multiplies the auto-framed camera", "sc", 0.3, 4, &s.Scale)
-	o.Float("estimator", "density-estimation radius in pixels; 0 disables", "de", 0, 40, &s.Estimator)
+	o.Float("estimator", "density-estimation radius in output pixels; 0 disables", "de", 0, 40, &s.Estimator)
 	o.Float("de-min", "minimum DE radius (cores)", "", 0, 20, &s.DeMin)
 	o.Float("de-curve", "DE radius ~ 1/n^curve", "", 0.05, 2, &s.DeCurve)
+	o.Int("oversample", "histogram resolution multiplier; 1 disables spatial AA", "os", 1, 3, &s.Oversample)
+	o.Float("filter", "Gaussian spatial-filter radius in output pixels", "sf", 0.05, 2, &s.Filter)
 	s.knobs = o
 	s.traits = trait.NewOptions(schema)
 }
@@ -64,6 +66,8 @@ func (s *Sketch) pin(set settings) settings {
 		"estimator":  func() { set.estimator = s.Estimator },
 		"de-min":     func() { set.deMin = s.DeMin },
 		"de-curve":   func() { set.deCurve = s.DeCurve },
+		"oversample": func() { set.oversample = s.Oversample },
+		"filter":     func() { set.filter = s.Filter },
 	} {
 		if s.knobs.WasSet(name) {
 			apply()

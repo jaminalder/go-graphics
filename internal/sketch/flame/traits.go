@@ -116,6 +116,8 @@ type settings struct {
 	scale             float64
 	estimator         float64
 	deMin, deCurve    float64
+	oversample        int
+	filter            float64
 }
 
 func draw(set trait.Set, rng *rand.Rand) settings {
@@ -129,6 +131,8 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		estimator:  9,
 		deMin:      0,
 		deCurve:    0.4,
+		oversample: 2,
+		filter:     0.5,
 	}
 
 	switch set.Get(dimStructure) {

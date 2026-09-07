@@ -54,14 +54,16 @@ hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatch
 
 `flame` is a chaos-game histogram, not a point sampler: it iterates a
 small IFS and tone-maps the log-density of the orbit. `--quality` is
-samples per pixel (preview and print share a camera); `--aa` multiplies
-that budget; `--estimator` (default 9) is flam3 density estimation
-after the log. **Never judge a flame at 600px.** First-look review
-renders are 1000×1000 at `--quality 80` (`make preview-flame`). Filaments
-and grain do not read smaller than that. Use `--profile web` / `print`
-only when checking a candidate at display or paper size. The first look
-is a spindle of luminous filaments on a void, after the Apophysis render
-at `docs/reference/apophysis-flame.jpg`, with `--palette zander-spindle`
+samples per output pixel (preview and print share a camera); `--aa`
+multiplies that budget; `--oversample` (default 2) is the histogram
+resolution used for spatial AA; `--estimator` (default 9) is flam3
+density estimation after the log. **Never judge a flame at 600px.**
+First-look review renders are 1000×1000 at `--quality 80`
+(`make preview-flame`). Filaments and grain do not read smaller than
+that. Use `--profile web` / `print` only when checking a candidate at
+display or paper size. The first look is a spindle of luminous
+filaments on a void, after the Apophysis render at
+`docs/reference/apophysis-flame.jpg`, with `--palette zander-spindle`
 (cyan nest, gold mass — not a ColorLisa extract). See
 `docs/sketches/016-flame.md`.
 
@@ -210,7 +212,7 @@ internal/cells/         weighted partition of the canvas into addressable,
 internal/hatch/         filling a region with repeated marks: structures,
                         parameters and coverage functions (mathx + noise)
 internal/flame/         fractal-flame IFS: variations, xaos, chaos game,
-                        log-density, density estimation
+                        log-density, density estimation, oversample
 internal/scheme/        colour arrangement over a set of regions: 15 strategies,
                         each answering hue *and* value (leaf)
 internal/trait/         weighted output-space dimensions, seed → traits, CLI overrides (leaf)

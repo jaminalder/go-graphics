@@ -51,27 +51,30 @@ traits + overrides
   -> xaos: per-predecessor relative weights (nil = independent picks)
   -> optional final transform (non-linear camera, not in the loop)
   -> Frame: short walk, percentile bbox -> Camera in math units
-  -> Accumulate: 8 parallel orbits, bilinear splat into a shared
-     uint64 histogram (r, g, b, α)
-  -> Develop: log-density, optional density estimation, gamma,
-     vibrancy, gleam, composite on ground
+  -> Accumulate at oversample× resolution: 8 parallel orbits,
+     bilinear splat into a shared uint64 histogram (r, g, b, α)
+  -> Develop: log-density, optional density estimation (radius × ss),
+     gamma, vibrancy, gleam, composite on ground
+  -> Downsample: flam3 Gaussian spatial filter → output pixels
   -> render.ImageFromColors / ImageFromColorsDeep
 ```
 
-Quality is samples per output pixel, scaled by `max(1, ctx.AA)`. Preview
-and print of the same seed show the same attractor; the print is the
-same measure with less Monte Carlo grain. The camera is computed in the
-mathematical plane, never in pixels, so invariant 2 holds even though
-the hot path is not `At`.
+Quality is samples per *output* pixel, scaled by `max(1, ctx.AA)`.
+`--oversample` (default 2) only raises histogram resolution; it does
+not multiply the sample budget. Preview and print of the same seed show
+the same attractor; the print is the same measure with less Monte Carlo
+grain. The camera is computed in the mathematical plane, never in
+pixels, so invariant 2 holds even though the hot path is not `At`.
 
 The worker count is a fixed 8, not `GOMAXPROCS`. A partition that
 followed the machine would make the Monte Carlo realisation
 machine-dependent and break invariant 1. Addition into `uint64` bins is
 commutative, so merge order is free; atomics make the shared buffer
-safe. Histogram memory is one 32-byte-per-pixel buffer, which at print
-(6000²) is about 1.15 GB — acceptable on the documented 32 GB machine,
-and the reason we splat at output resolution rather than supersampling
-the histogram.
+safe. Histogram memory is one 32-byte-per-pixel buffer at
+`oversample²` the output area — at print (6000²) with oversample 2
+that is about 4.6 GB, plus a matching float scratch for DE. Cap is 3;
+use `--oversample 1` if the machine cannot hold it. Do not size the
+histogram by `--aa` (a 3× print buffer is ~10 GB).
 
 ## The output space
 
@@ -125,11 +128,14 @@ then a drawing, not a nebula.
 enough to see filaments). `--vibrancy` (default 0.88). `--brightness`
 lifts mid-densities before the log. `--gleam` how far the densest cores
 move toward white. `--scale` multiplies the auto-framed camera.
-`--estimator` is the flam3 density-estimation radius in pixels
+`--estimator` is the flam3 density-estimation radius in *output* pixels
 (default 9; `0` disables). `--de-min` and `--de-curve` are the clamp
 and the `1/n^curve` exponent (defaults 0 and 0.4). DE is a Gaussian
 scatter *after* log-density and *before* gamma; see
 [reference/flame-xaos-de.md](../reference/flame-xaos-de.md).
+`--oversample` (default 2) is the histogram resolution multiplier;
+`--filter` (default 0.5) is the Gaussian spatial-filter radius used
+when downsampling to the output. `--aa` still only multiplies samples.
 
 ## Acceptance
 
@@ -190,15 +196,15 @@ These are the remaining gaps between this engine and the reference's
 |---|---|---|
 | **Xaos** (relative weights) | Nested "this filament only appears after that map". Independent picks cannot make sequential structure. | built: `System.Xaos`; spindle punches julian→julian to 0.05 |
 | **Density estimation** | Variable-width kernel, inversely proportional to local density. Hairlines go smooth without `--quality` in the hundreds. | built: `--estimator` default 9, after log, before gamma |
-| **Supersample then downsample** | Thin lines at 1000px still alias with bilinear splat at output resolution. | not built; `--aa` only multiplies samples |
+| **Supersample then downsample** | Thin lines at 1000px still alias with bilinear splat at output resolution. | built: `--oversample` default 2, flam3 Gaussian spatial filter |
 | **256-entry LUTs** | Flam3 palettes wiggle hue along the ramp. A 5-stop RGB ramp is the right *shape* and a coarser grain. | 5-stop `zander-spindle` |
 | **Final nonlinear** | A spherical or Julian final is a second camera, not a stretch. | linear vertical stretch only |
 | **More maps** | Typical Apophysis genomes run 6–12 creative xforms. We run 3–5 plus symmetry. | weave axis |
 | **More variations** | blob, pdj, ngon, bipolar, perspective, … each a recognisable family. | add as a code change in `internal/flame` |
 
-`--quality 80` at 1000² plus estimator 9 is the first-look recipe.
-Grain on the faintest hairlines is still a sample-budget question, not
-a genome one.
+`--quality 80` at 1000² with oversample 2 and estimator 9 is the
+first-look recipe. Grain on the faintest hairlines is still a
+sample-budget question, not a genome one.
 
 ## What not to do
 
@@ -207,6 +213,7 @@ a genome one.
 - Do not let symmetry maps blend the colour coordinate.
 - Do not scale iteration count as a fixed N; quality is per pixel.
 - Do not size the histogram by `--aa` at print (a 3× buffer is ~10 GB).
+  Use `--oversample` (cap 3; print usually 2).
 - Do not blur the linear histogram and then take the log; DE is after
   log-density, before gamma.
 - JulianN uses the plugin `θ = atan2(y, x)`, not the paper's

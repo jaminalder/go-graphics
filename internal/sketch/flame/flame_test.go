@@ -44,12 +44,12 @@ func TestSchemaIsValid(t *testing.T) {
 }
 
 func TestDeterminism(t *testing.T) {
-	s := configured(t, "--quality", "8", "--estimator", "3", "--structure", "spindle")
+	s := configured(t, "--quality", "8", "--estimator", "3", "--oversample", "2", "--structure", "spindle")
 	sketchtest.AssertDeterministic(t, s, testCtx(t, 12), testCtx(t, 13))
 }
 
 func TestGolden(t *testing.T) {
-	got := sketchtest.RenderNRGBA(t, configured(t, "--quality", "8", "--estimator", "0", "--structure", "spindle", "--tint", "split", "--ground", "void"), testCtx(t, 12))
+	got := sketchtest.RenderNRGBA(t, configured(t, "--quality", "8", "--estimator", "0", "--oversample", "1", "--structure", "spindle", "--tint", "split", "--ground", "void"), testCtx(t, 12))
 	sketchtest.Golden(t, got, "testdata/flame_seed12_64.png", *update)
 }
 
@@ -142,6 +142,18 @@ func TestSpindleXaosForbidsJulianAfterJulian(t *testing.T) {
 				t.Fatalf("julian %d→%d xaos %g; want near-zero so copies reprint the nest", i, j, sys.Xaos[i][j])
 			}
 		}
+	}
+}
+
+func TestOversampleTwoWritesOutputSize(t *testing.T) {
+	s := configured(t, "--quality", "4", "--estimator", "0", "--oversample", "2", "--structure", "spindle")
+	ctx := testCtx(t, 7)
+	img, err := s.Render(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Bounds().Dx() != ctx.Width || img.Bounds().Dy() != ctx.Height {
+		t.Fatalf("got %dx%d, want %dx%d", img.Bounds().Dx(), img.Bounds().Dy(), ctx.Width, ctx.Height)
 	}
 }
 

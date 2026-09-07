@@ -660,7 +660,13 @@ kernels per integer radius (already cached in `developEstimated`).
 
 ## 3.4 Suggested defaults for this sketch
 
-DE off until a sweep shows filaments looking dotted at the chosen
-quality. When on: `Radius = 7…9`, `Min = 0`, `Curve = 0.4` (flam3
-defaults). Judge on a `sweep`, not one seed. Xaos stays `nil` unless
-a trait actually needs a forbidden transition (a spindle does not).
+`--estimator 9`, `--de-min 0`, `--de-curve 0.4`, `--oversample 2`,
+`--filter 0.5`. Spindle punches julian→julian xaos to 0.05. Judge on a
+`sweep`, not one seed.
+
+## 3.5 Supersample (built)
+
+Accumulate at `ss ×` output resolution, scale DE radii by `ss`, develop,
+then `Downsample` with flam3's separable Gaussian
+(`spatial_filter_radius` default 0.5, support 1.5, same parity as ss).
+`--aa` multiplies samples only. Cap `ss` at 3; print usually stays at 2.

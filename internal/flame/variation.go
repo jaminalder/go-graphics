@@ -1,7 +1,8 @@
 // Package flame is the fractal-flame mechanism: a weighted IFS of affine
 // transforms composed with named nonlinear variations, iterated as a chaos
 // game into a density histogram, then shown with log-density tone mapping.
-// Optional xaos (relative weights) and density estimation follow flam3.
+// Optional xaos (relative weights), density estimation, and oversample
+// with a Gaussian spatial downsample follow flam3.
 //
 // The sketch owns genomes, palette mapping and camera taste. This package
 // owns the published algorithm and its performance constraints. See

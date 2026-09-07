@@ -32,6 +32,8 @@ type Sketch struct {
 	Quality, Gamma, Vibrancy  float64
 	Brightness, Gleam, Scale  float64
 	Estimator, DeMin, DeCurve float64
+	Oversample                int
+	Filter                    float64
 	knobs                     *opt.Set
 	traits                    *trait.Options
 }
@@ -48,6 +50,8 @@ func New() *Sketch {
 		Estimator:  9,
 		DeMin:      0,
 		DeCurve:    0.4,
+		Oversample: 2,
+		Filter:     fl.DefaultFilter,
 	}
 	s.declare()
 	return s
@@ -90,12 +94,22 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	if aa < 1 {
 		aa = 1
 	}
+	ss := rec.oversample
+	if ss < 1 {
+		ss = 1
+	}
+	// Samples are per *output* pixel. Oversample only raises histogram
+	// resolution; --aa still multiplies the sample budget.
 	samples := int(rec.quality * float64(ctx.Width) * float64(ctx.Height) * float64(aa))
 	if samples < 1024 {
 		samples = 1024
 	}
 
-	hist := fl.Accumulate(sys, color, ctx.Width, ctx.Height, samples, ctx.Seed^streamOrbit)
+	hw, hh := ctx.Width*ss, ctx.Height*ss
+	hist := fl.Accumulate(sys, color, hw, hh, samples, ctx.Seed^streamOrbit)
+	// Estimator is specified in output pixels; hist bins are ss× finer,
+	// matching flam3's estimator_radius * ss.
+	ssF := float64(ss)
 	tone := fl.Tone{
 		Gamma:      rec.gamma,
 		Vibrancy:   rec.vibrancy,
@@ -103,12 +117,15 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		Gleam:      rec.gleam,
 		Background: groundColour(ctx.Palette, rec.ground),
 		Estimate: fl.Estimate{
-			Radius: rec.estimator,
-			Min:    rec.deMin,
+			Radius: rec.estimator * ssF,
+			Min:    rec.deMin * ssF,
 			Curve:  rec.deCurve,
 		},
 	}
 	pix := hist.Develop(tone)
+	if ss > 1 {
+		pix = fl.Downsample(pix, hw, hh, ctx.Width, ctx.Height, ss, rec.filter)
+	}
 	if ctx.Deep {
 		return render.ImageFromColorsDeep(ctx.Width, ctx.Height, pix), nil
 	}
