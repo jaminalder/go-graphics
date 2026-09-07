@@ -162,6 +162,71 @@ func (tg Terraced) Locate(t float64) (idx int, frac float64) {
 	return idx, frac
 }
 
+// PiecewiseHSL walks a sequence of colours, interpolating in HSL so
+// neighbouring stops stay vivid. t=0 is the first colour, t=1 the last.
+type PiecewiseHSL struct {
+	stops []palette.Color
+}
+
+// ThroughHSL builds a piecewise HSL gradient. A single colour is a constant;
+// an empty list is black.
+func ThroughHSL(colors []palette.Color) PiecewiseHSL {
+	if len(colors) == 0 {
+		return PiecewiseHSL{stops: []palette.Color{{}}}
+	}
+	stops := make([]palette.Color, len(colors))
+	copy(stops, colors)
+	return PiecewiseHSL{stops: stops}
+}
+
+// At implements Gradient.
+func (g PiecewiseHSL) At(t float64) palette.Color {
+	t = mathx.Clamp01(t)
+	n := len(g.stops)
+	if n == 1 {
+		return g.stops[0]
+	}
+	f := t * float64(n-1)
+	i := int(f)
+	if i >= n-1 {
+		return g.stops[n-1]
+	}
+	return palette.LerpHSL(g.stops[i], g.stops[i+1], f-float64(i))
+}
+
+// PiecewiseRGB walks a sequence of colours, interpolating in RGB.
+// Additive-light ramps (fractal flames) want this: HSL between cyan and
+// gold takes the green trench, RGB through a pale stop does not.
+type PiecewiseRGB struct {
+	stops []palette.Color
+}
+
+// ThroughRGB builds a piecewise RGB gradient. A single colour is a constant;
+// an empty list is black.
+func ThroughRGB(colors []palette.Color) PiecewiseRGB {
+	if len(colors) == 0 {
+		return PiecewiseRGB{stops: []palette.Color{{}}}
+	}
+	stops := make([]palette.Color, len(colors))
+	copy(stops, colors)
+	return PiecewiseRGB{stops: stops}
+}
+
+// At implements Gradient.
+func (g PiecewiseRGB) At(t float64) palette.Color {
+	t = mathx.Clamp01(t)
+	n := len(g.stops)
+	if n == 1 {
+		return g.stops[0]
+	}
+	f := t * float64(n-1)
+	i := int(f)
+	if i >= n-1 {
+		return g.stops[n-1]
+	}
+	return palette.Lerp(g.stops[i], g.stops[i+1], f-float64(i))
+}
+
 // Band returns the i-th terrace color.
 func (tg Terraced) Band(i int) palette.Color { return tg.colors[i] }
 

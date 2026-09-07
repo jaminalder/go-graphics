@@ -235,6 +235,28 @@ func ImageFromColors(w, h int, pix []palette.Color) *image.NRGBA {
 	return img
 }
 
+// ImageFromColorsDeep is ImageFromColors with 16-bit output and no dither.
+func ImageFromColorsDeep(w, h int, pix []palette.Color) *image.NRGBA64 {
+	img := image.NewNRGBA64(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			c := pix[y*w+x]
+			i := img.PixOffset(x, y)
+			putU16 := func(off int, v float64) {
+				q := uint16(math.Round(math.Min(1, math.Max(0, v)) * 65535))
+				img.Pix[off] = uint8(q >> 8)
+				img.Pix[off+1] = uint8(q)
+			}
+			putU16(i, c.R)
+			putU16(i+2, c.G)
+			putU16(i+4, c.B)
+			img.Pix[i+6] = 255
+			img.Pix[i+7] = 255
+		}
+	}
+	return img
+}
+
 // ign is interleaved gradient noise in [0,1) — a cheap, deterministic,
 // well-distributed dither pattern.
 func ign(x, y int) float64 {
