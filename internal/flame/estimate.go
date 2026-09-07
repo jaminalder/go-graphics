@@ -12,8 +12,7 @@ type tap struct {
 	w      float64
 }
 
-func (h *Hist) developEstimated(tone Tone, out []palette.Color, logMax, invG, vib, bright, gleam float64, bg palette.Color) []palette.Color {
-	est := tone.Estimate
+func (h *Hist) developEstimated(out []palette.Color, logMax, invG, vib, bright, gleam float64, bg palette.Color, est Estimate) []palette.Color {
 	curve := est.Curve
 	if curve <= 0 {
 		curve = 0.4
@@ -84,27 +83,7 @@ func (h *Hist) developEstimated(tone Tone, out []palette.Color, logMax, invG, vi
 			out[i] = bg
 			continue
 		}
-		meanR := accR[i] / a
-		meanG := accG[i] / a
-		meanB := accB[i] / a
-		scale := mathx.Clamp01(a)
-		alpha := math.Pow(scale, invG)
-		if gleam > 0 {
-			gw := mathx.Smoothstep(0.62, 1, scale) * gleam
-			meanR += (1 - meanR) * gw
-			meanG += (1 - meanG) * gw
-			meanB += (1 - meanB) * gw
-		}
-		ch := func(m float64) float64 {
-			ind := math.Pow(mathx.Clamp01(m*scale), invG)
-			return vib*(m*alpha) + (1-vib)*ind
-		}
-		r, g, b := ch(meanR), ch(meanG), ch(meanB)
-		out[i] = palette.Color{
-			R: bg.R*(1-alpha) + r,
-			G: bg.G*(1-alpha) + g,
-			B: bg.B*(1-alpha) + b,
-		}.Clamp()
+		out[i] = tonePixel(accR[i]/a, accG[i]/a, accB[i]/a, mathx.Clamp01(a), invG, vib, gleam, bg)
 	}
 	return out
 }

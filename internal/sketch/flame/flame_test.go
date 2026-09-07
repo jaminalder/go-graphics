@@ -219,6 +219,41 @@ func TestOversampleTwoWritesOutputSize(t *testing.T) {
 	}
 }
 
+// Oversample must change the picture, not only allocate a larger hist that
+// is then thrown away — otherwise --oversample is a no-op wire.
+func TestOversampleChangesThePicture(t *testing.T) {
+	ctx := testCtx(t, 9)
+	os1 := sketchtest.RenderNRGBA(t, configured(t, "--quality", "6", "--estimator", "0", "--oversample", "1", "--structure", "spindle"), ctx)
+	os2 := sketchtest.RenderNRGBA(t, configured(t, "--quality", "6", "--estimator", "0", "--oversample", "2", "--structure", "spindle"), ctx)
+	if os1.Bounds() != os2.Bounds() {
+		t.Fatalf("bounds %v vs %v", os1.Bounds(), os2.Bounds())
+	}
+	same := true
+	for i := range os1.Pix {
+		if os1.Pix[i] != os2.Pix[i] {
+			same = false
+			break
+		}
+	}
+	if same {
+		t.Fatal("oversample 1 and 2 produced identical pixels")
+	}
+}
+
+// Pinning one display knob must not reshuffle the rest of the recipe draw.
+func TestPinningOneFlagLeavesTheRestOfTheDrawAlone(t *testing.T) {
+	ctx := testCtx(t, 11)
+	base := New().pin(draw(New().Traits(ctx), ctx.RNG(streamRecipe)))
+	pinned := configured(t, "--gamma", "2.75").pin(draw(New().Traits(ctx), ctx.RNG(streamRecipe)))
+	if pinned.gamma != 2.75 {
+		t.Fatalf("gamma %v, want the pinned 2.75", pinned.gamma)
+	}
+	base.gamma = pinned.gamma
+	if pinned != base {
+		t.Errorf("pinning gamma also changed the recipe:\n got %+v\nwant %+v", pinned, base)
+	}
+}
+
 func TestEveryStructureBuildsASystem(t *testing.T) {
 	ctx := testCtx(t, 5)
 	for _, name := range []string{"spindle", "filament", "bloom", "spiral", "fold", "julia"} {

@@ -1,6 +1,7 @@
 package flame
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/jaminalder/go-graphics/internal/palette"
@@ -22,7 +23,7 @@ const (
 //
 // The filter is applied sequentially in row-major order so the result
 // cannot depend on GOMAXPROCS.
-func Downsample(src []palette.Color, srcW, srcH, outW, outH, ss int, radius float64) []palette.Color {
+func Downsample(src []palette.Color, srcW, srcH, outW, outH, ss int, radius float64) ([]palette.Color, error) {
 	if ss < 1 {
 		ss = 1
 	}
@@ -42,25 +43,14 @@ func Downsample(src []palette.Color, srcW, srcH, outW, outH, ss int, radius floa
 		for i := n; i < len(out); i++ {
 			out[i] = palette.Color{}
 		}
-		return out
+		return out, nil
 	}
 	if srcW != outW*ss || srcH != outH*ss {
-		// Wrong shape: fall back to centred box so a caller bug cannot
-		// panic. Prefer fixing the caller.
-		out := make([]palette.Color, outW*outH)
-		for y := 0; y < outH; y++ {
-			for x := 0; x < outW; x++ {
-				sx, sy := x*ss+ss/2, y*ss+ss/2
-				if sx >= srcW {
-					sx = srcW - 1
-				}
-				if sy >= srcH {
-					sy = srcH - 1
-				}
-				out[y*outW+x] = src[sy*srcW+sx]
-			}
-		}
-		return out
+		return nil, fmt.Errorf("flame: downsample shape %dx%d with ss=%d, want %dx%d",
+			srcW, srcH, ss, outW*ss, outH*ss)
+	}
+	if len(src) < srcW*srcH {
+		return nil, fmt.Errorf("flame: downsample src len %d < %d", len(src), srcW*srcH)
 	}
 	if radius <= 0 {
 		radius = DefaultFilter
@@ -102,7 +92,7 @@ func Downsample(src []palette.Color, srcW, srcH, outW, outH, ss int, radius floa
 			}.Clamp()
 		}
 	}
-	return out
+	return out, nil
 }
 
 // spatialKernel builds flam3's normalised separable Gaussian of width

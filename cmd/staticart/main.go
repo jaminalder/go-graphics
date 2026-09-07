@@ -108,7 +108,7 @@ common render flags:
   --profile preview|web|print   size profile (or --width N --height N)
   --seed N                      composition seed
   --palette slug                see: staticart palettes
-  --aa N                        anti-aliasing (default 2; use 3 for print)
+  --aa N                        anti-aliasing samples (default 2; use 3 for print)
   --deep                        16-bit PNG master (png only)
   --format png|jpg  --out dir
 
@@ -157,7 +157,7 @@ func renderOne(args []string) (rendered, error) {
 	width := fs.Int("width", 0, "override width in px (requires --height)")
 	height := fs.Int("height", 0, "override height in px (requires --width)")
 	seed := fs.Uint64("seed", 42, "random seed (same seed → same image)")
-	aa := fs.Int("aa", 2, "anti-aliasing: supersamples per axis (1 = off; use 3 for print)")
+	aa := fs.Int("aa", 2, "anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget")
 	deep := fs.Bool("deep", false, "render a 16-bit PNG master (archival/print; png only)")
 	paletteName := fs.String("palette", "kandinsky-soft-pressure", "palette slug (see: staticart palettes)")
 	format := fs.String("format", "png", "output format: png|jpg")

@@ -14,7 +14,10 @@ func TestDownsampleSS1IsIdentity(t *testing.T) {
 		{R: 0.0, G: 1.0, B: 0.5},
 		{R: 0.5, G: 0.5, B: 0.5},
 	}
-	got := Downsample(src, 2, 2, 2, 2, 1, 0.5)
+	got, err := Downsample(src, 2, 2, 2, 2, 1, 0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := range src {
 		if got[i] != src[i] {
 			t.Fatalf("pixel %d: %v vs %v", i, got[i], src[i])
@@ -36,7 +39,10 @@ func TestDownsampleAveragesCheckerboardToMidGrey(t *testing.T) {
 			}
 		}
 	}
-	got := Downsample(src, srcW, srcH, outW, outH, ss, 0.5)
+	got, err := Downsample(src, srcW, srcH, outW, outH, ss, 0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, c := range got {
 		if c.R < 0.35 || c.R > 0.75 {
 			t.Fatalf("pixel %d R=%g; want mid-grey from checkerboard", i, c.R)
@@ -52,12 +58,25 @@ func TestDownsampleIsDeterministic(t *testing.T) {
 	for i := range src {
 		src[i] = palette.Color{R: float64(i) / 15, G: 0.2, B: 0.7}
 	}
-	a := Downsample(src, 4, 4, 2, 2, 2, 0.5)
-	b := Downsample(src, 4, 4, 2, 2, 2, 0.5)
+	a, err := Downsample(src, 4, 4, 2, 2, 2, 0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Downsample(src, 4, 4, 2, 2, 2, 0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := range a {
 		if a[i] != b[i] {
 			t.Fatalf("pixel %d moved", i)
 		}
+	}
+}
+
+func TestDownsampleRejectsShapeMismatch(t *testing.T) {
+	src := make([]palette.Color, 4)
+	if _, err := Downsample(src, 2, 2, 2, 2, 2, 0.5); err == nil {
+		t.Fatal("accepted src 2×2 for ss=2 output 2×2 (want 4×4)")
 	}
 }
 

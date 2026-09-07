@@ -31,7 +31,8 @@ type Estimate struct {
 }
 
 // DefaultTone is an Apophysis-like display: high gamma so hairline
-// filaments read, high vibrancy so they stay coloured.
+// filaments read, high vibrancy so they stay coloured. Sketch New()
+// and draw() defaults stay aligned with these numbers.
 func DefaultTone() Tone {
 	return Tone{Gamma: 3.0, Vibrancy: 0.88, Brightness: 1.05, Gleam: 0.4}
 }
@@ -183,7 +184,7 @@ func (h *Hist) Develop(tone Tone) []palette.Color {
 	}
 	logMax := math.Log(1 + nMax*bright)
 	if tone.Estimate.Radius > 0 {
-		return h.developEstimated(tone, out, logMax, invG, vib, bright, gleam, bg)
+		return h.developEstimated(out, logMax, invG, vib, bright, gleam, bg, tone.Estimate)
 	}
 
 	for i := range h.a {
@@ -197,23 +198,30 @@ func (h *Hist) Develop(tone Tone) []palette.Color {
 		meanG := float64(h.g[i]) / float64(a)
 		meanB := float64(h.b[i]) / float64(a)
 		scale := math.Log(1+n*bright) / logMax
-		alpha := math.Pow(scale, invG)
-		if gleam > 0 {
-			w := mathx.Smoothstep(0.62, 1, scale) * gleam
-			meanR += (1 - meanR) * w
-			meanG += (1 - meanG) * w
-			meanB += (1 - meanB) * w
-		}
-		ch := func(m float64) float64 {
-			ind := math.Pow(mathx.Clamp01(m*scale), invG)
-			return vib*(m*alpha) + (1-vib)*ind
-		}
-		r, g, b := ch(meanR), ch(meanG), ch(meanB)
-		out[i] = palette.Color{
-			R: bg.R*(1-alpha) + r,
-			G: bg.G*(1-alpha) + g,
-			B: bg.B*(1-alpha) + b,
-		}.Clamp()
+		out[i] = tonePixel(meanR, meanG, meanB, scale, invG, vib, gleam, bg)
 	}
 	return out
+}
+
+// tonePixel applies gamma, vibrancy, gleam and ground composite to one
+// log-scaled bin. Shared by the direct and density-estimated develop paths
+// so a display fix cannot land in only one of them.
+func tonePixel(meanR, meanG, meanB, scale, invG, vib, gleam float64, bg palette.Color) palette.Color {
+	alpha := math.Pow(mathx.Clamp01(scale), invG)
+	if gleam > 0 {
+		w := mathx.Smoothstep(0.62, 1, mathx.Clamp01(scale)) * gleam
+		meanR += (1 - meanR) * w
+		meanG += (1 - meanG) * w
+		meanB += (1 - meanB) * w
+	}
+	ch := func(m float64) float64 {
+		ind := math.Pow(mathx.Clamp01(m*scale), invG)
+		return vib*(m*alpha) + (1-vib)*ind
+	}
+	r, g, b := ch(meanR), ch(meanG), ch(meanB)
+	return palette.Color{
+		R: bg.R*(1-alpha) + r,
+		G: bg.G*(1-alpha) + g,
+		B: bg.B*(1-alpha) + b,
+	}.Clamp()
 }

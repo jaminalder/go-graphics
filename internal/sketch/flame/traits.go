@@ -3,6 +3,7 @@ package flame
 import (
 	"math/rand/v2"
 
+	fl "github.com/jaminalder/go-graphics/internal/flame"
 	"github.com/jaminalder/go-graphics/internal/rnd"
 	"github.com/jaminalder/go-graphics/internal/trait"
 )
@@ -132,7 +133,7 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		deMin:      0,
 		deCurve:    0.4,
 		oversample: 2,
-		filter:     0.5,
+		filter:     fl.DefaultFilter,
 	}
 
 	switch set.Get(dimStructure) {

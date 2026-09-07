@@ -40,12 +40,13 @@ type Sketch struct {
 
 // New returns a flame with Apophysis-like display defaults.
 func New() *Sketch {
+	tone := fl.DefaultTone()
 	s := &Sketch{
 		Quality:    40,
-		Gamma:      3.0,
-		Vibrancy:   0.88,
-		Brightness: 1.05,
-		Gleam:      0.4,
+		Gamma:      tone.Gamma,
+		Vibrancy:   tone.Vibrancy,
+		Brightness: tone.Brightness,
+		Gleam:      tone.Gleam,
 		Scale:      1,
 		Estimator:  9,
 		DeMin:      0,
@@ -124,7 +125,11 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	pix := hist.Develop(tone)
 	if ss > 1 {
-		pix = fl.Downsample(pix, hw, hh, ctx.Width, ctx.Height, ss, rec.filter)
+		var err error
+		pix, err = fl.Downsample(pix, hw, hh, ctx.Width, ctx.Height, ss, rec.filter)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if ctx.Deep {
 		return render.ImageFromColorsDeep(ctx.Width, ctx.Height, pix), nil
@@ -162,11 +167,9 @@ func flameRamp(cols []palette.Color) gradient.Gradient {
 
 func sortWarm(cols []palette.Color) {
 	// Warmth is R−B; coolest first.
-	for i := 1; i < len(cols); i++ {
-		for j := i; j > 0 && warmth(cols[j]) < warmth(cols[j-1]); j-- {
-			cols[j], cols[j-1] = cols[j-1], cols[j]
-		}
-	}
+	sort.SliceStable(cols, func(i, j int) bool {
+		return warmth(cols[i]) < warmth(cols[j])
+	})
 }
 
 func warmth(c palette.Color) float64 { return c.R - c.B }

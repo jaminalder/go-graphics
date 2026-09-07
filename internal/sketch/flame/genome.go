@@ -135,7 +135,7 @@ func spindleXaos(sys *fl.System) {
 	// the recursion; nest→body is allowed so filaments leave the crossing.
 	for _, i := range nest {
 		for _, j := range nest {
-			sys.SetXaos(i, j, 0.04)
+			sys.SetXaos(i, j, 0.05)
 		}
 		for _, j := range body {
 			sys.SetXaos(i, j, 1.2)
