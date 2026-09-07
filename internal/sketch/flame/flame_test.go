@@ -145,6 +145,68 @@ func TestSpindleXaosForbidsJulianAfterJulian(t *testing.T) {
 	}
 }
 
+func TestSpindleSplitPinsNestCoolAndBodyWarm(t *testing.T) {
+	s := configured(t, "--structure", "spindle", "--tint", "split")
+	ctx := testCtx(t, 12)
+	rec := s.pin(draw(s.Traits(ctx), ctx.RNG(streamRecipe)))
+	sys := compose(rec, ctx.RNG(streamGenome))
+	var cool, warm int
+	for _, x := range sys.X {
+		if x.Symmetry {
+			continue
+		}
+		if hasJulianN(x) {
+			if x.Color > 0.15 {
+				t.Fatalf("julian nest colour %g; want cool end", x.Color)
+			}
+			cool++
+			continue
+		}
+		if x.Color < 0.6 {
+			t.Fatalf("body colour %g; want warm end", x.Color)
+		}
+		warm++
+	}
+	if cool == 0 || warm == 0 {
+		t.Fatalf("need both nest and body; cool=%d warm=%d", cool, warm)
+	}
+}
+
+func TestSpindleFinalHasVerticalPost(t *testing.T) {
+	s := configured(t, "--structure", "spindle")
+	ctx := testCtx(t, 21)
+	rec := s.pin(draw(s.Traits(ctx), ctx.RNG(streamRecipe)))
+	sys := compose(rec, ctx.RNG(streamGenome))
+	if sys.Final == nil {
+		t.Fatal("spindle missing final")
+	}
+	if !sys.Final.HasPost {
+		t.Fatal("spindle final needs a vertical post to point the tips")
+	}
+	// Spherical finals punched a black-hole eye; keep the camera linear.
+	for _, v := range sys.Final.Vars {
+		if v.Kind == fl.Spherical && v.Weight > 0 {
+			t.Fatal("spindle final uses spherical; that opens a central eye")
+		}
+	}
+}
+
+func TestSpindleHasAtLeastThreeCreativeMaps(t *testing.T) {
+	s := configured(t, "--structure", "spindle", "--weave", "sparse")
+	ctx := testCtx(t, 3)
+	rec := s.pin(draw(s.Traits(ctx), ctx.RNG(streamRecipe)))
+	sys := compose(rec, ctx.RNG(streamGenome))
+	var n int
+	for _, x := range sys.X {
+		if !x.Symmetry {
+			n++
+		}
+	}
+	if n < 3 {
+		t.Fatalf("sparse spindle has %d creative maps; want ≥3 (nest + two copies)", n)
+	}
+}
+
 func TestOversampleTwoWritesOutputSize(t *testing.T) {
 	s := configured(t, "--quality", "4", "--estimator", "0", "--oversample", "2", "--structure", "spindle")
 	ctx := testCtx(t, 7)

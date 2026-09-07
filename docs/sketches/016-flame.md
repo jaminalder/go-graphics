@@ -91,22 +91,26 @@ stretch; those are not three flags.
 | `tint`      | how colour is assigned     | split (4), walk (3), stain (1.5)                      |
 | `ground`    | what it sits on            | void (6), dusk (1.5), paper (0.8)                     |
 
-`spindle` is the Zander-like default mass: 180° symmetry, a JulianN nest,
-contractive linear copies for the filigree, a vertical final stretch,
-colour split cool/warm. Xaos punches julian-after-julian down to 0.05 so
-the copies reprint the nest instead of the nest filling itself. Spherical
-inversion is left off this genome — it filled a dusty halo rather than
-the reference's hairline equatorial arcs. `filament` drops the required
-symmetry and lets the nest run more asymmetric. `bloom` leans on
-bubble/eyefish (rounder, more filled). `spiral` / `fold` / `julia` are
-the recognisable variation families.
+`spindle` is the Zander-like default mass: 180° symmetry, a JulianN nest
+(cyan), two contractive linear copies for the filigree (gold), a vertical
+final post, and xaos that forbids nest-after-nest so the copies reprint
+the crossing. At `weave=chorus` a faint spherical adds equatorial arcs;
+at `dense` a second Julian branch and a low-weight heart needle join.
+Heart is never the primary map — it filled a teardrop of fuzzy hair. A
+spherical *final* was tried and rejected: even mild weight opened a
+black-hole eye on every seed. `filament` drops the required symmetry
+and lets the nest run more asymmetric. `bloom` leans on bubble/eyefish
+(rounder, more filled). `spiral` / `fold` / `julia` are the recognisable
+variation families.
 
-`split` assigns the coolest swatch to the first creative map and the
-warmest to a later one. The ramp itself is **RGB**, not HSL between the
-two extremes: HSL from a cool swatch to a warm one takes the magenta or
-green trench, which is why `klee-fire-evening` rendered magenta. `walk`
-spreads colour indices along the palette order. `stain` keeps them
-close, so the piece is almost monochrome with density doing the work.
+`split` on spindle pins Julian maps to the cool end and body maps to the
+warm end. Other structures still use order-based split (coolest on the
+first creative map, warmest on a later one). The ramp itself is **RGB**,
+not HSL between the two extremes: HSL from a cool swatch to a warm one
+takes the magenta or green trench, which is why `klee-fire-evening`
+rendered magenta. `walk` spreads colour indices along the palette order.
+`stain` keeps them close, so the piece is almost monochrome with density
+doing the work.
 
 The first-look palette is `zander-spindle`, a five-stop ramp sampled
 from the Zander render (cyan, pale cyan, gold, amber, burnt orange).
@@ -182,10 +186,13 @@ first `klee-fire-evening` spindles missed it in two independent ways:
    Post-transform stretch makes the needle; it cannot be faked by
    stretching a blob after the fact.
 
-`spindle` now starts from JulianN + contractive linears, with xaos
-forbidding julian-after-julian so the copies reprint the nest. Heart is
-a low-weight extra at `weave=dense`, with a vertical post. This is still
-a sketch of that vocabulary, not Zander's unknown `.flame` file.
+`spindle` now starts from JulianN + two contractive linears, with xaos
+forbidding nest-after-nest and favouring body↔nest recursion. Colour
+roles are pinned under `--tint split`: nest cyan, body gold. A spherical
+final was tried and rejected (central eye on every seed); the final stays
+a vertical post on a linear camera. Heart is a low-weight extra at
+`weave=dense`. This is still a sketch of that vocabulary, not Zander's
+unknown `.flame` file.
 
 ## What is still missing for Apophysis-level quality
 
@@ -198,8 +205,8 @@ These are the remaining gaps between this engine and the reference's
 | **Density estimation** | Variable-width kernel, inversely proportional to local density. Hairlines go smooth without `--quality` in the hundreds. | built: `--estimator` default 9, after log, before gamma |
 | **Supersample then downsample** | Thin lines at 1000px still alias with bilinear splat at output resolution. | built: `--oversample` default 2, flam3 Gaussian spatial filter |
 | **256-entry LUTs** | Flam3 palettes wiggle hue along the ramp. A 5-stop RGB ramp is the right *shape* and a coarser grain. | 5-stop `zander-spindle` |
-| **Final nonlinear** | A spherical or Julian final is a second camera, not a stretch. | linear vertical stretch only |
-| **More maps** | Typical Apophysis genomes run 6–12 creative xforms. We run 3–5 plus symmetry. | weave axis |
+| **Final nonlinear** | A spherical or Julian final is a second camera, not a stretch. | tried spherical; rejected (black-hole eye). Linear + vertical post |
+| **More maps** | Typical Apophysis genomes run 6–12 creative xforms. We run 3–5 plus symmetry. | spindle: 3–6 creative (nest + copies + arcs) |
 | **More variations** | blob, pdj, ngon, bipolar, perspective, … each a recognisable family. | add as a code change in `internal/flame` |
 
 `--quality 80` at 1000² with oversample 2 and estimator 9 is the
