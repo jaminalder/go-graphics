@@ -44,12 +44,12 @@ func TestSchemaIsValid(t *testing.T) {
 }
 
 func TestDeterminism(t *testing.T) {
-	s := configured(t, "--quality", "8", "--estimator", "3", "--oversample", "2", "--structure", "spindle")
+	s := configured(t, "--quality", "8", "--estimator", "3", "--oversample", "2", "--structure", "spindle", "--cast", "zander-spindle")
 	sketchtest.AssertDeterministic(t, s, testCtx(t, 12), testCtx(t, 13))
 }
 
 func TestGolden(t *testing.T) {
-	got := sketchtest.RenderNRGBA(t, configured(t, "--quality", "8", "--estimator", "0", "--oversample", "1", "--structure", "spindle", "--tint", "split", "--ground", "void"), testCtx(t, 12))
+	got := sketchtest.RenderNRGBA(t, configured(t, "--quality", "8", "--estimator", "0", "--oversample", "1", "--structure", "spindle", "--tint", "split", "--ground", "void", "--cast", "zander-spindle"), testCtx(t, 12))
 	sketchtest.Golden(t, got, "testdata/flame_seed12_64.png", *update)
 }
 
@@ -208,7 +208,7 @@ func TestSpindleHasAtLeastThreeCreativeMaps(t *testing.T) {
 }
 
 func TestOversampleTwoWritesOutputSize(t *testing.T) {
-	s := configured(t, "--quality", "4", "--estimator", "0", "--oversample", "2", "--structure", "spindle")
+	s := configured(t, "--quality", "4", "--estimator", "0", "--oversample", "2", "--structure", "spindle", "--cast", "zander-spindle")
 	ctx := testCtx(t, 7)
 	img, err := s.Render(ctx)
 	if err != nil {
@@ -223,8 +223,8 @@ func TestOversampleTwoWritesOutputSize(t *testing.T) {
 // is then thrown away — otherwise --oversample is a no-op wire.
 func TestOversampleChangesThePicture(t *testing.T) {
 	ctx := testCtx(t, 9)
-	os1 := sketchtest.RenderNRGBA(t, configured(t, "--quality", "6", "--estimator", "0", "--oversample", "1", "--structure", "spindle"), ctx)
-	os2 := sketchtest.RenderNRGBA(t, configured(t, "--quality", "6", "--estimator", "0", "--oversample", "2", "--structure", "spindle"), ctx)
+	os1 := sketchtest.RenderNRGBA(t, configured(t, "--quality", "6", "--estimator", "0", "--oversample", "1", "--structure", "spindle", "--cast", "zander-spindle"), ctx)
+	os2 := sketchtest.RenderNRGBA(t, configured(t, "--quality", "6", "--estimator", "0", "--oversample", "2", "--structure", "spindle", "--cast", "zander-spindle"), ctx)
 	if os1.Bounds() != os2.Bounds() {
 		t.Fatalf("bounds %v vs %v", os1.Bounds(), os2.Bounds())
 	}
@@ -257,9 +257,25 @@ func TestPinningOneFlagLeavesTheRestOfTheDrawAlone(t *testing.T) {
 func TestEveryStructureBuildsASystem(t *testing.T) {
 	ctx := testCtx(t, 5)
 	for _, name := range []string{"spindle", "filament", "bloom", "spiral", "fold", "julia"} {
-		cfg := configured(t, "--structure", name, "--quality", "4")
+		cfg := configured(t, "--structure", name, "--quality", "4", "--cast", "zander-spindle")
 		if _, err := cfg.Render(ctx); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestSeedsChooseTheirCast(t *testing.T) {
+	seen := map[string]bool{}
+	for seed := uint64(1); seed <= 40; seed++ {
+		seen[New().Traits(testCtx(t, seed)).Get(dimCast)] = true
+	}
+	if len(seen) < 3 {
+		t.Errorf("forty seeds drew only %d casts — colour is not in the output space", len(seen))
+	}
+	if seen[fromFlag] {
+		t.Error("a seed landed on from-flag cast")
+	}
+	if got := configured(t, "--cast", fromFlag).Traits(testCtx(t, 1)).Get(dimCast); got != fromFlag {
+		t.Errorf("--cast %s resolved to %q", fromFlag, got)
 	}
 }

@@ -46,6 +46,7 @@ go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --pa
 go run ./cmd/staticart list
 go run ./cmd/staticart traits <sketch> --seed N  # the output-space point a seed lands on
 go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + contact sheet
+go run ./cmd/staticart flock <sketch> --count 48 [--from dir --likes a,b]  # Traited sample / breed
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
@@ -57,13 +58,15 @@ small IFS and tone-maps the log-density of the orbit. `--quality` is
 samples per output pixel (preview and print share a camera); `--aa`
 multiplies that budget; `--oversample` (default 2) is the histogram
 resolution used for spatial AA; `--estimator` (default 9) is flam3
-density estimation after the log. **Never judge a flame at 600px.**
-First-look review renders are 1000×1000 at `--quality 80`
-(`make preview-flame`). Filaments and grain do not read smaller than
-that. Use `--profile web` / `print` only when checking a candidate at
-display or paper size. The first look is a spindle of luminous
-filaments on a void, after the Apophysis render at
-`docs/reference/apophysis-flame.jpg`, with `--palette zander-spindle`
+density estimation after the log. Colour is a `cast` trait inside the
+output space. Curate with `staticart flock` (like→boost traits +
+neighbor seeds), not genome crossover — decision 60. **Never judge a
+flame at 600px.** First-look review renders are 1000×1000 at
+`--quality 80` (`make preview-flame`). Filaments and grain do not read
+smaller than that. Use `--profile web` / `print` only when checking a
+candidate at display or paper size. The first look is a spindle of
+luminous filaments on a void, after the Apophysis render at
+`docs/reference/apophysis-flame.jpg`, with cast/palette `zander-spindle`
 (cyan nest, gold mass — not a ColorLisa extract). See
 `docs/sketches/016-flame.md`.
 

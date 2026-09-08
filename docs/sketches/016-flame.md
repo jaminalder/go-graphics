@@ -90,6 +90,26 @@ stretch; those are not three flags.
 | `aperture`  | how tightly the camera sits| tight (2), frame (4), wide (2)                        |
 | `tint`      | how colour is assigned     | split (4), walk (3), stain (1.5)                      |
 | `ground`    | what it sits on            | void (6), dusk (1.5), paper (0.8)                     |
+| `cast`      | which palette casts it     | zander-spindle (6), diebenkorn-seawall (2), hopper-night-windows (1.5), cezanne-bathers (1.5), davis-anthracite-minuet (1), bruegel-icarus (1), from-flag (0) |
+
+## Long-form curation (flock)
+
+Flame’s long-form model is QQL’s output space plus Electric Sheep’s
+like→breed loop — not flam3 genome crossover. Sample a flock, pick the
+seeds that hold the motif, then breed: liked trait values are boosted in
+the schema and half the next flock explores *neighbors* of liked seeds
+(same trait pins, new continuous recipe). Colour lives in `cast` so a
+like can pull toward cyan-gold without a cartesian palette sweep.
+
+```sh
+staticart flock flame --count 48 --seed-base 1 --out out/flame-flock-1 \
+  --width 400 --height 400 --quality 24 --estimator 3 --aa 1
+staticart flock flame --from out/flame-flock-1 --likes 7,11,19 --count 36 \
+  --out out/flame-flock-2 --width 400 --height 400 --quality 24 --estimator 3 --aa 1
+```
+
+Promote survivors to 1000² / `--quality 80` before calling them good.
+Never judge the contact sheet alone as first-look quality.
 
 `spindle` is the Zander-like default mass: 180° symmetry, a low-opacity
 JulianN nest (cyan), three anisotropic linear copies that draw strands

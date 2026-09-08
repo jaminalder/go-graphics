@@ -477,6 +477,7 @@ correlation is deliberate and documented.
 | 57 | Flame colour is an RGB ramp, and the first-look palette is sampled from the Zander render | ColorLisa 5-swatches interpolated in HSL cannot make a cyan nest against a gold mass. The short path from Klee's violet to its fire-orange is magenta; the short path from cyan to gold is green. Flam3 palettes are 256-entry RGB LUTs. `zander-spindle` is five stops sampled from `docs/reference/apophysis-flame.jpg` (cyan, pale cyan, gold, amber, burnt orange), listed cool→warm, with the same non-ColorLisa provenance as `staticart-seven`. White-hot cores are gleam on log-density: putting white in the ramp paints the filaments silver. Split still works on ColorLisa palettes (sort by warmth, RGB-lerp). Heart as the primary spindle map was the matching mistake on the structure side — it fills a teardrop of fuzzy hair; JulianN plus contractive linear copies is what reprints a branching nest at smaller scales. |
 | 58 | Flame xaos is a per-row CDF, and density estimation is a log-then-Gaussian scatter | Independent weighted picks cannot nest "this map only after that one". flam3's xaos is P(j\|i) ∝ weight[j]·chaos[i][j]; a 16384-wide LUT is overkill for a handful of xforms, so each predecessor gets a short CDF and the first pick (no predecessor) uses the raw weights. Spindle punches julian→julian to 0.05 so copies reprint the nest; symmetry rows stay 1. Density estimation is the other half of Apophysis quality: radius = estimator / n^curve after log-density, before gamma (Suykens & Willems; flam3 defaults 9 / 0 / 0.4). Blurring the linear histogram then logging is a different picture. The scatter is a sequential float64 post-pass so GOMAXPROCS cannot change it; `--estimator 0` keeps the old per-pixel develop path. |
 | 59 | Flame spatial AA is histogram oversample + Gaussian downsample, not `--aa` | Thin filaments alias when the chaos game splats into an output-resolution histogram. flam3 accumulates at `spatial_oversample` and reduces with a separable Gaussian (`spatial_filter_radius`, support 1.5). `--oversample` (default 2, cap 3) raises hist resolution; `--filter` (default 0.5) is the radius in output pixels; estimator radii scale by ss so DE stays consistent across oversample levels. `--aa` remains a sample-budget multiplier only — sizing the hist by aa at print is the gigabyte trap already refused in decision 56. Downsample averages in linear light and is sequential for determinism. |
+| 60 | Flame long-form curation is trait-space flock breeding, not genome GA | QQL’s lesson is an orthogonal weighted output space plus a curator; Electric Sheep’s is like→reproduce with local exploration. Combining them here means `staticart flock`: sample Traited seeds into a sheet + `flock.jsonl`, then `--likes` boosts schema weights (`trait.Schema.Boost`) and half the next generation keeps a parent’s trait pins on a neighboring seed. Continuous flam3 crossover would fight decisions 56–58 (policy stays in genomes; no XML DNA). Colour is a `cast` trait (pools’ colourway pattern) so likes can steer the ramp without a cartesian `--vary palette`. |
 
 ## 9. Roadmap
 
@@ -492,9 +493,8 @@ correlation is deliberate and documented.
    *designed* for it (a "terrace character" axis, say) rather than
    transcribed from the knobs it already has. Do it when a tapestry sweep
    is wanted, not before.
-6. **Exploration tooling for curation.** Done: `staticart sweep`. What it
-   still lacks is a way to record a verdict — a sweep produces twenty
-   images and the judgement about them lives only in the conversation.
+6. **Exploration tooling for curation.** Done: `staticart sweep` for grids;
+   `staticart flock` for Traited like→breed (decision 60).
 7. Possible later: more IFS looks on the same `internal/flame` mechanism,
    tilings, SVG export, gallery index generator. Sketch 016 is the first
    fractal flame.

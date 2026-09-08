@@ -171,6 +171,49 @@ func (s Schema) Derive(rng *rand.Rand) Set {
 	return set
 }
 
+// Boost returns a copy of s whose drawable weights are raised by the
+// frequencies in liked. Each liked set adds strength to the weight of the
+// value it resolved for each dimension. Weight-0 (override-only) values
+// stay unreachable. Previously drawable values keep at least their base
+// weight so the space does not collapse to one camp — QQL unity under
+// Electric Sheep–style curation.
+//
+// strength ≤ 0 returns a deep copy of s unchanged. Unknown dimensions or
+// values in liked are ignored.
+func (s Schema) Boost(liked []Set, strength float64) Schema {
+	out := make(Schema, len(s))
+	for i, d := range s {
+		vals := make([]Value, len(d.Values))
+		copy(vals, d.Values)
+		out[i] = Dim{
+			Name: d.Name, Key: d.Key, Doc: d.Doc, InName: d.InName,
+			Values: vals,
+		}
+	}
+	if strength <= 0 || len(liked) == 0 {
+		return out
+	}
+	for i, d := range out {
+		counts := make(map[string]int, len(d.Values))
+		for _, set := range liked {
+			v := set.Get(d.Name)
+			if v == "" || d.Weight(v) <= 0 {
+				continue
+			}
+			counts[v]++
+		}
+		for j, v := range d.Values {
+			if v.Weight <= 0 {
+				continue
+			}
+			if n := counts[v.Name]; n > 0 {
+				out[i].Values[j].Weight = v.Weight + strength*float64(n)
+			}
+		}
+	}
+	return out
+}
+
 // NameSuffix builds the output-filename fragment for a resolved set: one
 // "-<key>-<value>" part per dimension that was overridden or is marked
 // InName, in schema order.

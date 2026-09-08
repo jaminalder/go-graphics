@@ -75,6 +75,11 @@ var schema = trait.Schema{
 			{Name: "paper", Weight: 0.8},
 		},
 	},
+	{
+		Name: dimCast, Key: "c", InName: true,
+		Doc: "which palette casts the flame",
+		Values: casts,
+	},
 }
 
 type structure uint8

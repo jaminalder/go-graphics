@@ -86,6 +86,8 @@ func run(args []string) error {
 		return runRender(args[1:])
 	case "sweep":
 		return runSweep(args[1:])
+	case "flock":
+		return runFlock(args[1:])
 	case "traits":
 		return runTraits(args[1:])
 	case "-h", "--help", "help":
@@ -102,6 +104,7 @@ func usage() {
   staticart palettes                  list palette slugs
   staticart render <sketch> [flags]   render a sketch
   staticart sweep  <sketch> [flags]   render a batch and a contact sheet
+  staticart flock  <sketch> [flags]   sample or breed a Traited flock
   staticart traits <sketch> [flags]   show the traits a seed resolves to
 
 common render flags:
@@ -119,6 +122,20 @@ sweep flags (everything else is passed through to render):
   --cols N  --cell PX  --jobs N sheet layout and parallelism
 
   staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+
+flock flags (QQL output space + Electric Sheep likes→breed):
+  --count N                     how many sheep
+  --seed-base N                 first seed (explore) or breed draw base
+  --from dir|flock.jsonl        parent flock for breed
+  --likes 3,11,17               liked seeds from the parent flock
+  --boost N                     weight added per like (default 3)
+  --out dir                     default out/flock
+  --cols N  --cell PX  --jobs N sheet layout and parallelism
+
+  staticart flock flame --count 48 --seed-base 1 --out out/flame-flock-1 \\
+    --quality 24 --estimator 3 --palette zander-spindle
+  staticart flock flame --from out/flame-flock-1 --likes 7,11,19 --count 36 \\
+    --out out/flame-flock-2 --quality 24 --estimator 3
 
 sketch-specific flags (e.g. tapestry's --relief, --crackle, --terrace-seed)
 are listed by: staticart render <sketch> --help`)

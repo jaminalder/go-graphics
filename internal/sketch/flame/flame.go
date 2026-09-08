@@ -72,13 +72,20 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		return nil, fmt.Errorf("flame: palette %q has no colors", ctx.Palette.Slug)
 	}
 	set := s.Traits(ctx)
+	pal, err := castPalette(set.Get(dimCast), ctx.Palette)
+	if err != nil {
+		return nil, err
+	}
+	if len(pal.Colors) == 0 {
+		return nil, fmt.Errorf("flame: cast %q has no colors", set.Get(dimCast))
+	}
 	rec := s.pin(draw(set, ctx.RNG(streamRecipe)))
 	sys := compose(rec, ctx.RNG(streamGenome))
 	cam := fl.Frame(sys, ctx.RNG(streamFrame), frameSamples)
 	cam.Scale *= rec.aperture * rec.scale
 	sys.Cam = cam
 
-	grad := colourMap(ctx.Palette, rec.tint)
+	grad := colourMap(pal, rec.tint)
 	lut := make([]palette.Color, 256)
 	for i := range lut {
 		lut[i] = grad.At(float64(i) / 255)
@@ -116,7 +123,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 		Vibrancy:   rec.vibrancy,
 		Brightness: rec.brightness,
 		Gleam:      rec.gleam,
-		Background: groundColour(ctx.Palette, rec.ground),
+		Background: groundColour(pal, rec.ground),
 		Estimate: fl.Estimate{
 			Radius: rec.estimator * ssF,
 			Min:    rec.deMin * ssF,
@@ -125,7 +132,6 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	pix := hist.Develop(tone)
 	if ss > 1 {
-		var err error
 		pix, err = fl.Downsample(pix, hw, hh, ctx.Width, ctx.Height, ss, rec.filter)
 		if err != nil {
 			return nil, err
