@@ -77,7 +77,7 @@ var schema = trait.Schema{
 	},
 	{
 		Name: dimCast, Key: "c", InName: true,
-		Doc: "which palette casts the flame",
+		Doc:    "which palette casts the flame",
 		Values: casts,
 	},
 }
