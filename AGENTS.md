@@ -40,16 +40,35 @@ make preview-scree # render sketch "scree" (a river bed of faceted, lit stones)
 make preview-riffle # render sketch "riffle" (a small river seen from above)
 make preview-iris # render sketch "iris" (an abstract iris)
 make preview-glaze # render sketch "glaze" (a stone bed under a painted warped veil)
+make preview-flame # first-look flame: 1000² at quality 80 (600 is too small)
 make hatchbook  # render the internal/hatch specimen sheets + manifest
 go run ./cmd/staticart render <sketch> --profile preview|web|print --seed N --palette <name> --out out
 go run ./cmd/staticart list
 go run ./cmd/staticart traits <sketch> --seed N  # the output-space point a seed lands on
 go run ./cmd/staticart sweep <sketch> --seeds 1-12 [--vary flag=a,b]  # batch + contact sheet
+go run ./cmd/staticart flock <sketch> --count 48 [--from dir --likes a,b]  # Traited sample / breed
 ```
 
 Sketches: contour, tapestry, circles, drift, rounds, shoal, qql, pools, foam,
-scree, riffle, shallows, warp, iris, glaze,
+scree, riffle, shallows, warp, iris, glaze, flame,
 hatchbook (a specimen sheet for `internal/hatch`, not an artwork — `make hatchbook`).
+
+`flame` is a chaos-game histogram, not a point sampler: it iterates a
+small IFS and tone-maps the log-density of the orbit. `--quality` is
+samples per output pixel (preview and print share a camera); `--aa`
+multiplies that budget; `--oversample` (default 2) is the histogram
+resolution used for spatial AA; `--estimator` (default 9) is flam3
+density estimation after the log. Colour is a `cast` trait inside the
+output space. Curate with `staticart flock` (like→boost traits +
+neighbor seeds), not genome crossover — decision 60. **Never judge a
+flame at 600px.** First-look review renders are 1000×1000 at
+`--quality 80` (`make preview-flame`). Filaments and grain do not read
+smaller than that. Use `--profile web` / `print` only when checking a
+candidate at display or paper size. The first look is a spindle of
+luminous filaments on a void, after the Apophysis render at
+`docs/reference/apophysis-flame.jpg`, with cast/palette `zander-spindle`
+(cyan nest, gold mass — not a ColorLisa extract). See
+`docs/sketches/016-flame.md`.
 
 `foam` has a watercolour layer: `--fills watercolour` paints every cell,
 `--water` says what the paint did (blooms, bleeding, glazing, …) and
@@ -195,6 +214,8 @@ internal/cells/         weighted partition of the canvas into addressable,
                         fillable cells: a foam (leaf)
 internal/hatch/         filling a region with repeated marks: structures,
                         parameters and coverage functions (mathx + noise)
+internal/flame/         fractal-flame IFS: variations, xaos, chaos game,
+                        log-density, density estimation, oversample
 internal/scheme/        colour arrangement over a set of regions: 15 strategies,
                         each answering hue *and* value (leaf)
 internal/trait/         weighted output-space dimensions, seed → traits, CLI overrides (leaf)
@@ -250,6 +271,9 @@ painted artwork
 
 composed material
   typed planned components -> combine samples before rasterisation -> Raster
+
+chaos-game histogram
+  traits/overrides -> IFS + camera -> iterate into a density histogram -> Image
 ```
 
 `contour` is the simple reference: its private plan builds gradients and noise
@@ -258,7 +282,8 @@ fully specified dots, interpreted later through a paint stream. `foam` is the
 structural reference: plan the partition and appearance once, then sample in
 the documented fill/mosaic/hatch/relief/ink order. `shallows` is the composed
 reference: it combines `scree.Bed` and `riffle.Surface` before pixels are
-written, with no intermediate image.
+written, with no intermediate image. `flame` is the chaos-game reference: the
+attractor is a measure, not a function of a pixel.
 
 Not every sketch needs a plan. Keep one private unless another real consumer
 needs its pre-raster result. Do not add universal `Plan`, `Scene`, `Stage`,

@@ -250,3 +250,49 @@ func TestWeightReporting(t *testing.T) {
 		t.Errorf("weight of an unknown value = %v, want 0", got)
 	}
 }
+
+// Boosting from likes must raise the chosen values without erasing the rest
+// of the space or unlocking override-only options.
+func TestBoostRaisesLikedValuesAndKeepsFloor(t *testing.T) {
+	base := schema()
+	liked := []trait.Set{
+		{"structure": "orbital", "ring-size": "large", "palette": "berlin"},
+		{"structure": "orbital", "ring-size": "large", "palette": "external"},
+	}
+	got := base.Boost(liked, 3)
+	if err := got.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	str, _ := got.Dim("structure")
+	if str.Weight("orbital") != 1+3*2 {
+		t.Fatalf("orbital weight %g, want 7", str.Weight("orbital"))
+	}
+	if str.Weight("formation") != 1 {
+		t.Fatalf("formation floor lost: %g", str.Weight("formation"))
+	}
+	rs, _ := got.Dim("ring-size")
+	if rs.Weight("large") != 1+3*2 {
+		t.Fatalf("large weight %g, want 7", rs.Weight("large"))
+	}
+	pal, _ := got.Dim("palette")
+	if pal.Weight("berlin") != 1+3 {
+		t.Fatalf("berlin weight %g, want 4", pal.Weight("berlin"))
+	}
+	if pal.Weight("external") != 0 {
+		t.Fatal("override-only palette became drawable")
+	}
+	// Original schema must not mutate.
+	orig, _ := base.Dim("structure")
+	if orig.Weight("orbital") != 1 {
+		t.Fatalf("Boost mutated the original schema: orbital=%g", orig.Weight("orbital"))
+	}
+}
+
+func TestBoostZeroStrengthIsCopy(t *testing.T) {
+	base := schema()
+	got := base.Boost([]trait.Set{{"structure": "orbital"}}, 0)
+	str, _ := got.Dim("structure")
+	if str.Weight("orbital") != 1 {
+		t.Fatalf("got %g", str.Weight("orbital"))
+	}
+}

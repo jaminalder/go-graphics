@@ -5,6 +5,8 @@ package palette
 var palettes = []Palette{
 	{Slug: "staticart-seven", Artist: "staticart sketch_7", Work: "",
 		Colors: []Color{MustHex("#ED6A5A"), MustHex("#F4F1BB"), MustHex("#9BC1BC"), MustHex("#5CA4A9"), MustHex("#E6EBE0")}},
+	{Slug: "zander-spindle", Artist: "Jonathan Zander", Work: "Fractal Flame (Apophysis, 2007)",
+		Colors: []Color{MustHex("#5EB0D0"), MustHex("#9ED4E6"), MustHex("#F0D070"), MustHex("#E09438"), MustHex("#C06018")}},
 	{Slug: "albers-luminous-day", Artist: "Josef Albers", Work: "Adobe (Variant): Luminous Day",
 		Colors: []Color{MustHex("#D77186"), MustHex("#61A2DA"), MustHex("#6CB7DA"), MustHex("#B5B5B3"), MustHex("#D75725")}},
 	{Slug: "albers-tehuana", Artist: "Josef Albers", Work: "Homage to the Square (La Tehuana)",

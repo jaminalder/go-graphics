@@ -42,6 +42,7 @@ The first sketch reproduces
 | Sample / evaluation | A pure coordinate query over an immutable model. The hot path has no RNG draws, option resolution, geometry construction or ordinary allocations. | sketch or domain component |
 | `Swatch` | A colour with room to move: an HSB base plus a per-channel spread and a clamp box it may never leave. Drawing from one repeatedly gives a family; stepping from the previous draw walks that family. | `internal/palette` |
 | Hatch | A region filled with repeated marks: a coverage function of a point *and* the region containing it. The arranging rule (parallel, contour, radial, flow, …) is a parameter, not a type; colour is the caller's. | `internal/hatch` |
+| Flame IFS | A weighted set of affine+variation maps iterated as a chaos game into a four-channel histogram, then shown with log-density and optional density estimation. Xaos (relative weights) can make the next map depend on the last. The attractor is a measure, not a function of a pixel. | `internal/flame` |
 | Partition / foam | The canvas divided into curved-walled cells, each addressable: which cell a point is in, its distance to the nearest wall, how crowded it is with further cells. Per cell: area, centroid, inscribed radius. A distance *field* (Worley) cannot be filled; a partition can. | `internal/cells` |
 | Colour scheme | An arrangement of colour over many discrete regions: which region gets which colour, and how dark. Fifteen strategies, each answering hue *and* value. | `internal/scheme` |
 | Trait / output space | A sketch's space of outcomes as orthogonal, weighted, discrete dimensions derived from the seed and overridable per render. The idea behind QQL; the machinery is sketch-agnostic. | `internal/trait` |
@@ -68,6 +69,8 @@ internal/
                           15 strategies, hue and value       → palette, mathx, noise, rnd
   hatch/                  filling a region with repeated
                           marks: coverage functions          → mathx, noise
+  flame/                  fractal-flame IFS: variations, xaos,
+                          chaos game, log-density, DE        → palette, mathx
   noise/                  Perlin, fBm, Worley, Hash01        → (stdlib only)
   trait/                  weighted output-space dimensions,
                           seed derivation, CLI overrides     → (stdlib only)
@@ -81,7 +84,8 @@ internal/
     sketchtest/           shared test helpers (goldens etc.) → sketch
     contour/, tapestry/, circles/, drift/, rounds/,
     shoal/, qql/, pools/, foam/, scree/,
-    riffle/, shallows/, warp/, iris/, glaze/ the sketches    → all of the above
+    riffle/, shallows/, warp/, iris/, glaze/,
+    flame/                the sketches                       → all of the above
     hatchbook/            specimen sheet for hatch (a
                           catalogue, not an artwork)         → hatch, palette
 docs/                     this file, sketch specs, idea backlog, reference data
@@ -239,6 +243,25 @@ There is no intermediate image. `riffle.SurfaceSample` keeps water-specific
 direction, slope, ripple and dapple rather than reducing the component to a
 weak generic vector field. `scree.Bed.At` exposes the complete generated bed
 because that exact model has a real second consumer.
+
+### Chaos-game histogram
+
+`flame` is the first of these. The interesting object is a measure on the
+plane, not a colour at a coordinate and not a sequence of stamps:
+
+```text
+traits + overrides
+  -> IFS (weighted xforms + variations + optional symmetry)
+  -> camera in the mathematical plane
+  -> chaos game into a four-channel histogram
+  -> log-density, gamma, vibrancy
+  -> render.ImageFromColors
+```
+
+`--aa` multiplies samples per pixel rather than evaluating a function on a
+subpixel grid. Spatial anti-aliasing is histogram oversample plus a
+Gaussian downsample (`--oversample`). See decisions 56 and 59 and
+[sketches/016-flame.md](sketches/016-flame.md).
 
 ### Output rendering
 
@@ -450,6 +473,11 @@ correlation is deliberate and documented.
 | 54 | 015's marbling reads its displacement from a *finer* field than the one that shapes its load | The obvious economy is to reuse the warp vectors already computed for the veil — they are right there and they are a displacement. They are also broad by construction, and a displacement that varies only over the whole canvas translates the bed rather than stretching it: at four times the drift the picture was the same picture, moved a little. Smearing a stone needs the offset to change appreciably *across one stone*, so the drift has its own frequency multiplier (`--drift-scale`, 8× for marble against 3× elsewhere). The same lesson in reverse is why the veil's own structure had to be made much broader than 013's defaults: at 013's scale and warp strengths nearly all the field's energy sits at a fraction of a stone and the water comes out as an even tint with a swirl inside every pebble. |
 | 52 | The repository has a shared lifecycle, not a universal pipeline interface | The actual cross-section has simple field samplers, structural models, sequential painters and composed materials. Their useful intermediates have different operations. `Sketch.Render` remains the common outer boundary; private concrete plans name build-once work, and only models with real pre-raster consumers are exposed as typed domain components. This keeps hot paths allocation-free and preserves explicit Go composition without `[]Stage`, generic field hierarchies or `Process(any) any`. Review and alternatives: `architecture-review.md` and `pipeline-design.md`. |
 | 55 | Coordinator and worktrees share one container; skills stay on `master` | A bare clone adds fetch/push machinery without a benefit: the coordinator is a privileged `master` checkout, so the container is `go-graphics/master` (ordinary clone) plus `go-graphics/worktrees/<name>`. Project skills are edited only on `master` and applied by opening Cursor there; workers change cwd, they do not get a second skills tree. |
+| 56 | Fractal flames are a chaos-game histogram in `internal/flame`, not a point sampler | A flame is a measure estimated by iterating maps. There is no closed form to put behind `At(u,v)`, and stretching `sketch.Raster` around it would be a different algorithm. The published mechanism — variations, four-channel accumulation, log-density, vibrancy — is independently meaningful and the performance story (fixed 8 orbits, atomic uint64 bins, samples-per-pixel, bilinear splat into the histogram) belongs there. Spatial AA is histogram oversample plus Gaussian downsample (decision 59), not a larger output buffer. The sketch owns genomes, the colour ramp, auto-framing taste and the void/dusk/paper ground. Quality is samples per pixel so preview and print share a camera; `--aa` multiplies that budget rather than allocating an `aa²` histogram, which at print would be several gigabytes. Worker count is a constant, not `GOMAXPROCS`, because a machine-dependent partition would make the Monte Carlo realisation non-deterministic. |
+| 57 | Flame colour is an RGB ramp, and the first-look palette is sampled from the Zander render | ColorLisa 5-swatches interpolated in HSL cannot make a cyan nest against a gold mass. The short path from Klee's violet to its fire-orange is magenta; the short path from cyan to gold is green. Flam3 palettes are 256-entry RGB LUTs. `zander-spindle` is five stops sampled from `docs/reference/apophysis-flame.jpg` (cyan, pale cyan, gold, amber, burnt orange), listed cool→warm, with the same non-ColorLisa provenance as `staticart-seven`. White-hot cores are gleam on log-density: putting white in the ramp paints the filaments silver. Split still works on ColorLisa palettes (sort by warmth, RGB-lerp). Heart as the primary spindle map was the matching mistake on the structure side — it fills a teardrop of fuzzy hair; JulianN plus contractive linear copies is what reprints a branching nest at smaller scales. |
+| 58 | Flame xaos is a per-row CDF, and density estimation is a log-then-Gaussian scatter | Independent weighted picks cannot nest "this map only after that one". flam3's xaos is P(j\|i) ∝ weight[j]·chaos[i][j]; a 16384-wide LUT is overkill for a handful of xforms, so each predecessor gets a short CDF and the first pick (no predecessor) uses the raw weights. Spindle punches julian→julian to 0.05 so copies reprint the nest; symmetry rows stay 1. Density estimation is the other half of Apophysis quality: radius = estimator / n^curve after log-density, before gamma (Suykens & Willems; flam3 defaults 9 / 0 / 0.4). Blurring the linear histogram then logging is a different picture. The scatter is a sequential float64 post-pass so GOMAXPROCS cannot change it; `--estimator 0` keeps the old per-pixel develop path. |
+| 59 | Flame spatial AA is histogram oversample + Gaussian downsample, not `--aa` | Thin filaments alias when the chaos game splats into an output-resolution histogram. flam3 accumulates at `spatial_oversample` and reduces with a separable Gaussian (`spatial_filter_radius`, support 1.5). `--oversample` (default 2, cap 3) raises hist resolution; `--filter` (default 0.5) is the radius in output pixels; estimator radii scale by ss so DE stays consistent across oversample levels. `--aa` remains a sample-budget multiplier only — sizing the hist by aa at print is the gigabyte trap already refused in decision 56. Downsample averages in linear light and is sequential for determinism. |
+| 60 | Flame long-form curation is trait-space flock breeding, not genome GA | QQL’s lesson is an orthogonal weighted output space plus a curator; Electric Sheep’s is like→reproduce with local exploration. Combining them here means `staticart flock`: sample Traited seeds into a sheet + `flock.jsonl`, then `--likes` boosts schema weights (`trait.Schema.Boost`) and half the next generation keeps a parent’s trait pins on a neighboring seed. Continuous flam3 crossover would fight decisions 56–58 (policy stays in genomes; no XML DNA). Colour is a `cast` trait (pools’ colourway pattern) so likes can steer the ramp without a cartesian `--vary palette`. |
 
 ## 9. Roadmap
 
@@ -465,7 +493,8 @@ correlation is deliberate and documented.
    *designed* for it (a "terrace character" axis, say) rather than
    transcribed from the knobs it already has. Do it when a tapestry sweep
    is wanted, not before.
-6. **Exploration tooling for curation.** Done: `staticart sweep`. What it
-   still lacks is a way to record a verdict — a sweep produces twenty
-   images and the judgement about them lives only in the conversation.
-7. Possible later: fractals, tilings, SVG export, gallery index generator.
+6. **Exploration tooling for curation.** Done: `staticart sweep` for grids;
+   `staticart flock` for Traited like→breed (decision 60).
+7. Possible later: more IFS looks on the same `internal/flame` mechanism,
+   tilings, SVG export, gallery index generator. Sketch 016 is the first
+   fractal flame.

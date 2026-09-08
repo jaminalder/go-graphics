@@ -20,6 +20,7 @@ import (
 	"github.com/jaminalder/go-graphics/internal/sketch/circles"
 	"github.com/jaminalder/go-graphics/internal/sketch/contour"
 	"github.com/jaminalder/go-graphics/internal/sketch/drift"
+	"github.com/jaminalder/go-graphics/internal/sketch/flame"
 	"github.com/jaminalder/go-graphics/internal/sketch/foam"
 	"github.com/jaminalder/go-graphics/internal/sketch/glaze"
 	"github.com/jaminalder/go-graphics/internal/sketch/hatchbook"
@@ -40,6 +41,7 @@ func registry() *sketch.Registry {
 		circles.New(),
 		contour.New(),
 		drift.New(),
+		flame.New(),
 		foam.New(),
 		glaze.New(),
 		hatchbook.New(),
@@ -84,6 +86,8 @@ func run(args []string) error {
 		return runRender(args[1:])
 	case "sweep":
 		return runSweep(args[1:])
+	case "flock":
+		return runFlock(args[1:])
 	case "traits":
 		return runTraits(args[1:])
 	case "-h", "--help", "help":
@@ -100,13 +104,14 @@ func usage() {
   staticart palettes                  list palette slugs
   staticart render <sketch> [flags]   render a sketch
   staticart sweep  <sketch> [flags]   render a batch and a contact sheet
+  staticart flock  <sketch> [flags]   sample or breed a Traited flock
   staticart traits <sketch> [flags]   show the traits a seed resolves to
 
 common render flags:
   --profile preview|web|print   size profile (or --width N --height N)
   --seed N                      composition seed
   --palette slug                see: staticart palettes
-  --aa N                        anti-aliasing (default 2; use 3 for print)
+  --aa N                        anti-aliasing samples (default 2; use 3 for print)
   --deep                        16-bit PNG master (png only)
   --format png|jpg  --out dir
 
@@ -117,6 +122,20 @@ sweep flags (everything else is passed through to render):
   --cols N  --cell PX  --jobs N sheet layout and parallelism
 
   staticart sweep pools --seeds 1-12 --vary fill=busy,packed --profile web
+
+flock flags (QQL output space + Electric Sheep likes→breed):
+  --count N                     how many sheep
+  --seed-base N                 first seed (explore) or breed draw base
+  --from dir|flock.jsonl        parent flock for breed
+  --likes 3,11,17               liked seeds from the parent flock
+  --boost N                     weight added per like (default 3)
+  --out dir                     default out/flock
+  --cols N  --cell PX  --jobs N sheet layout and parallelism
+
+  staticart flock flame --count 48 --seed-base 1 --out out/flame-flock-1 \\
+    --quality 24 --estimator 3 --palette zander-spindle
+  staticart flock flame --from out/flame-flock-1 --likes 7,11,19 --count 36 \\
+    --out out/flame-flock-2 --quality 24 --estimator 3
 
 sketch-specific flags (e.g. tapestry's --relief, --crackle, --terrace-seed)
 are listed by: staticart render <sketch> --help`)
@@ -155,7 +174,7 @@ func renderOne(args []string) (rendered, error) {
 	width := fs.Int("width", 0, "override width in px (requires --height)")
 	height := fs.Int("height", 0, "override height in px (requires --width)")
 	seed := fs.Uint64("seed", 42, "random seed (same seed → same image)")
-	aa := fs.Int("aa", 2, "anti-aliasing: supersamples per axis (1 = off; use 3 for print)")
+	aa := fs.Int("aa", 2, "anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget")
 	deep := fs.Bool("deep", false, "render a 16-bit PNG master (archival/print; png only)")
 	paletteName := fs.String("palette", "kandinsky-soft-pressure", "palette slug (see: staticart palettes)")
 	format := fs.String("format", "png", "output format: png|jpg")

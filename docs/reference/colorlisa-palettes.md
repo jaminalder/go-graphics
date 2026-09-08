@@ -7,11 +7,18 @@ file; do not re-scrape the site. 5 colors per palette, listed in site order.
 Slug convention: `<artist-lastname>-<short-artwork-key>`, kebab-case, unique.
 The slugs below are the canonical CLI/palette IDs.
 
-Also keep (not from ColorLisa) the original staticart sketch_7 palette:
+Also keep (not from ColorLisa) the original staticart sketch_7 palette,
+and a flame ramp sampled from Jonathan Zander's 2007 Apophysis render
+(`docs/reference/apophysis-flame.jpg`). The five stops are a designed
+cool→gold path, not a painting extract: ColorLisa swatches interpolated
+in HSL cannot make that look (they take the magenta or green trench).
+White-hot cores come from gleam, so the ramp itself has no white stop.
+Order is load-bearing.
 
 | slug | source | colors |
 |---|---|---|
 | `staticart-seven` | staticart sketch_7 | `#ED6A5A` `#F4F1BB` `#9BC1BC` `#5CA4A9` `#E6EBE0` |
+| `zander-spindle` | Jonathan Zander — Fractal Flame (Apophysis, 2007) | `#5EB0D0` `#9ED4E6` `#F0D070` `#E09438` `#C06018` |
 
 ## Dataset
 

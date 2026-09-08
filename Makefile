@@ -2,7 +2,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools preview-foam preview-scree preview-riffle preview-iris preview-glaze hatchbook sweep
+.PHONY: help build test lint fmt vet check tidy golden clean preview preview-qql preview-pools preview-foam preview-scree preview-riffle preview-iris preview-glaze preview-flame hatchbook sweep
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -57,6 +57,9 @@ preview-iris: ## Render the iris sketch (an abstract iris) at preview size into 
 
 preview-glaze: ## Render the glaze sketch (a stone bed under a warped veil) at preview size into out/
 	go run ./cmd/staticart render glaze --profile preview --palette hokusai-great-wave --out out
+
+preview-flame: ## Render the flame sketch for first review (1000², quality 80)
+	go run ./cmd/staticart render flame --width 1000 --height 1000 --quality 80 --palette zander-spindle --structure spindle --tint split --ground void --out out
 
 HATCHBOOK_OUT ?= out/agent-hatch
 HATCHBOOK_ARGS = --aa 3 --palette hopper-night-windows --out $(HATCHBOOK_OUT)

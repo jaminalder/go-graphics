@@ -30,6 +30,13 @@ func TestByName(t *testing.T) {
 	if got := p.Colors[0].Hex(); got != "#ED6A5A" {
 		t.Errorf("staticart-seven[0] = %s, want #ED6A5A", got)
 	}
+	z, ok := ByName("zander-spindle")
+	if !ok {
+		t.Fatal("zander-spindle palette missing")
+	}
+	if got := z.Colors[0].Hex(); got != "#5EB0D0" {
+		t.Errorf("zander-spindle[0] = %s, want #5EB0D0", got)
+	}
 	if _, ok := ByName("does-not-exist"); ok {
 		t.Error("ByName returned ok for unknown slug")
 	}
