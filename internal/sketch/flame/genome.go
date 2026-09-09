@@ -1,7 +1,6 @@
 package flame
 
 import (
-	"math"
 	"math/rand/v2"
 
 	fl "github.com/jaminalder/go-graphics/internal/flame"
@@ -11,6 +10,8 @@ import (
 func compose(set settings, rng *rand.Rand) fl.System {
 	var sys fl.System
 	switch set.structure {
+	case structureChaos:
+		sys = chaosGenome(set, rng)
 	case structureFilament:
 		sys = filamentGenome(set, rng)
 	case structureBloom:
@@ -159,157 +160,6 @@ func hasJulianN(x fl.Xform) bool {
 		}
 	}
 	return false
-}
-
-func filamentGenome(set settings, rng *rand.Rand) fl.System {
-	r := set.reach
-	sys := fl.System{
-		X: []fl.Xform{
-			xf([]fl.Var{{Kind: fl.Spherical, Weight: 1}},
-				rnd.Uniform(rng, 0.55, 0.9), rnd.Uniform(rng, 0.55, 0.9),
-				rnd.Uniform(rng, -math.Pi, math.Pi), rnd.Uniform(rng, -0.35, 0.35), rnd.Uniform(rng, -0.35, 0.35),
-				0, 1),
-			xf([]fl.Var{{Kind: fl.Swirl, Weight: 0.7}, {Kind: fl.Sinusoidal, Weight: 0.3 * r}},
-				rnd.Uniform(rng, 0.4, 0.75)*r, rnd.Uniform(rng, 0.4, 0.75)*r,
-				rnd.Uniform(rng, -1, 1), rnd.Uniform(rng, -0.4, 0.4), rnd.Uniform(rng, -0.4, 0.4),
-				1, rnd.Uniform(rng, 0.6, 1.2)),
-			xf([]fl.Var{{Kind: fl.Horseshoe, Weight: 0.5}, {Kind: fl.Linear, Weight: 0.5}},
-				rnd.Uniform(rng, 0.5, 0.9), rnd.Uniform(rng, 0.5, 0.9),
-				rnd.Uniform(rng, -0.8, 0.8), rnd.Uniform(rng, -0.25, 0.25), rnd.Uniform(rng, -0.25, 0.25),
-				0.45, rnd.Uniform(rng, 0.5, 1)),
-		},
-	}
-	if set.weave >= 4 {
-		sys.X = append(sys.X, xf(
-			[]fl.Var{{Kind: fl.Eyefish, Weight: 0.4 * r}, {Kind: fl.Spherical, Weight: 0.6}},
-			rnd.Uniform(rng, 0.45, 0.8), rnd.Uniform(rng, 0.45, 0.8),
-			rnd.Uniform(rng, -1, 1), rnd.Uniform(rng, -0.3, 0.3), rnd.Uniform(rng, -0.3, 0.3),
-			0.75, rnd.Uniform(rng, 0.4, 0.8),
-		))
-	}
-	if set.weave >= 5 {
-		sys.X = append(sys.X, xf(
-			[]fl.Var{{Kind: fl.Disc, Weight: 1}},
-			rnd.Uniform(rng, 0.4, 0.7), rnd.Uniform(rng, 0.4, 0.7),
-			rnd.Uniform(rng, -0.5, 0.5), 0, 0,
-			0.2, rnd.Uniform(rng, 0.2, 0.5),
-		))
-	}
-	if rnd.Odds(rng, 0.3) {
-		sys.AddDihedral()
-	}
-	return sys
-}
-
-func bloomGenome(set settings, rng *rand.Rand) fl.System {
-	r := set.reach
-	sys := fl.System{
-		X: []fl.Xform{
-			xf([]fl.Var{{Kind: fl.Bubble, Weight: 1}},
-				rnd.Uniform(rng, 0.7, 1.05), rnd.Uniform(rng, 0.7, 1.05),
-				rnd.Uniform(rng, -0.4, 0.4), 0, 0, 0, 1),
-			xf([]fl.Var{{Kind: fl.Eyefish, Weight: 0.6}, {Kind: fl.Spherical, Weight: 0.4}},
-				rnd.Uniform(rng, 0.5, 0.85)*r, rnd.Uniform(rng, 0.5, 0.85)*r,
-				rnd.Uniform(rng, -0.8, 0.8), rnd.Uniform(rng, -0.2, 0.2), rnd.Uniform(rng, -0.2, 0.2),
-				1, 0.9),
-			xf([]fl.Var{{Kind: fl.Sinusoidal, Weight: 1}},
-				rnd.Uniform(rng, 0.55, 0.9), rnd.Uniform(rng, 0.55, 0.9),
-				rnd.Uniform(rng, -0.5, 0.5), rnd.Uniform(rng, -0.25, 0.25), rnd.Uniform(rng, -0.25, 0.25),
-				0.4, 0.7),
-		},
-	}
-	if set.weave >= 4 {
-		sys.X = append(sys.X, xf(
-			[]fl.Var{{Kind: fl.Cylinder, Weight: 0.5}, {Kind: fl.Linear, Weight: 0.5}},
-			rnd.Uniform(rng, 0.5, 0.8), rnd.Uniform(rng, 0.6, 1),
-			rnd.Uniform(rng, -0.3, 0.3), 0, 0, 0.7, 0.5,
-		))
-	}
-	if rnd.Odds(rng, 0.45) {
-		sys.AddRotation(3)
-	}
-	return sys
-}
-
-func spiralGenome(set settings, rng *rand.Rand) fl.System {
-	r := set.reach
-	sys := fl.System{
-		X: []fl.Xform{
-			xf([]fl.Var{{Kind: fl.Spiral, Weight: 1}},
-				rnd.Uniform(rng, 0.55, 0.9)*r, rnd.Uniform(rng, 0.55, 0.9)*r,
-				rnd.Uniform(rng, -1, 1), 0, 0, 0, 1),
-			xf([]fl.Var{{Kind: fl.Polar, Weight: 0.6}, {Kind: fl.Heart, Weight: 0.4}},
-				rnd.Uniform(rng, 0.5, 0.85), rnd.Uniform(rng, 0.5, 0.85),
-				rnd.Uniform(rng, -0.6, 0.6), rnd.Uniform(rng, -0.15, 0.15), 0,
-				1, 0.85),
-			xf([]fl.Var{{Kind: fl.Spherical, Weight: 1}},
-				rnd.Uniform(rng, 0.6, 0.95), rnd.Uniform(rng, 0.6, 0.95),
-				rnd.Uniform(rng, -0.4, 0.4), rnd.Uniform(rng, -0.2, 0.2), rnd.Uniform(rng, -0.2, 0.2),
-				0.4, 0.7),
-		},
-	}
-	if set.weave >= 4 {
-		sys.X = append(sys.X, xf(
-			[]fl.Var{{Kind: fl.Hyperbolic, Weight: 0.5 * r}, {Kind: fl.Linear, Weight: 0.5}},
-			rnd.Uniform(rng, 0.45, 0.75), rnd.Uniform(rng, 0.45, 0.75),
-			rnd.Uniform(rng, -0.5, 0.5), 0, 0, 0.65, 0.4,
-		))
-	}
-	return sys
-}
-
-func foldGenome(set settings, rng *rand.Rand) fl.System {
-	r := set.reach
-	sys := fl.System{
-		X: []fl.Xform{
-			xf([]fl.Var{{Kind: fl.Horseshoe, Weight: 1}},
-				rnd.Uniform(rng, 0.55, 0.9), rnd.Uniform(rng, 0.55, 0.9),
-				rnd.Uniform(rng, -1, 1), rnd.Uniform(rng, -0.2, 0.2), rnd.Uniform(rng, -0.2, 0.2),
-				0, 1),
-			xf([]fl.Var{{Kind: fl.Disc, Weight: 0.7}, {Kind: fl.Spherical, Weight: 0.3}},
-				rnd.Uniform(rng, 0.45, 0.8)*r, rnd.Uniform(rng, 0.45, 0.8)*r,
-				rnd.Uniform(rng, -0.7, 0.7), 0, 0, 1, 0.8),
-			xf([]fl.Var{{Kind: fl.Diamond, Weight: 0.5}, {Kind: fl.Linear, Weight: 0.5}},
-				rnd.Uniform(rng, 0.5, 0.85), rnd.Uniform(rng, 0.5, 0.85),
-				rnd.Uniform(rng, -0.4, 0.4), rnd.Uniform(rng, -0.15, 0.15), rnd.Uniform(rng, -0.15, 0.15),
-				0.4, 0.65),
-		},
-	}
-	if set.weave >= 4 {
-		sys.X = append(sys.X, xf(
-			[]fl.Var{{Kind: fl.Ex, Weight: 1}},
-			rnd.Uniform(rng, 0.4, 0.7), rnd.Uniform(rng, 0.4, 0.7),
-			rnd.Uniform(rng, -0.5, 0.5), 0, 0, 0.75, 0.35,
-		))
-	}
-	return sys
-}
-
-func juliaGenome(set settings, rng *rand.Rand) fl.System {
-	r := set.reach
-	sys := fl.System{
-		X: []fl.Xform{
-			xf([]fl.Var{{Kind: fl.Julia, Weight: 1}},
-				rnd.Uniform(rng, 0.7, 1.1)*r, rnd.Uniform(rng, 0.7, 1.1)*r,
-				rnd.Uniform(rng, -0.4, 0.4), rnd.Uniform(rng, -0.15, 0.15), rnd.Uniform(rng, -0.15, 0.15),
-				0, 1.2),
-			xf([]fl.Var{{Kind: fl.Linear, Weight: 1}},
-				rnd.Uniform(rng, 0.45, 0.75), rnd.Uniform(rng, 0.45, 0.75),
-				rnd.Uniform(rng, -math.Pi, math.Pi), rnd.Uniform(rng, -0.4, 0.4), rnd.Uniform(rng, -0.4, 0.4),
-				1, 0.8),
-			xf([]fl.Var{{Kind: fl.Spherical, Weight: 0.5}, {Kind: fl.Sinusoidal, Weight: 0.5}},
-				rnd.Uniform(rng, 0.5, 0.85), rnd.Uniform(rng, 0.5, 0.85),
-				rnd.Uniform(rng, -0.6, 0.6), 0, 0, 0.4, 0.6),
-		},
-	}
-	if set.weave >= 4 {
-		sys.X = append(sys.X, xf(
-			[]fl.Var{{Kind: fl.Exponential, Weight: 0.4 * r}, {Kind: fl.Linear, Weight: 0.6}},
-			rnd.Uniform(rng, 0.4, 0.7), rnd.Uniform(rng, 0.4, 0.7),
-			rnd.Uniform(rng, -0.3, 0.3), 0, 0, 0.7, 0.35,
-		))
-	}
-	return sys
 }
 
 func colorize(sys *fl.System, set settings, rng *rand.Rand) {

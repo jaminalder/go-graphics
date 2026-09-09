@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"image"
+	"io"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -67,6 +69,11 @@ func runFlock(args []string) error {
 	if opts.count > flockLimit {
 		return fmt.Errorf("that is %d renders; %d is the cap", opts.count, flockLimit)
 	}
+	// Apply sketch CLI overrides before planning so flock.jsonl records the
+	// same trait pins the renders use (--medium wash, --tint split, …).
+	if err := configureFlockSketch(s, rest); err != nil {
+		return err
+	}
 
 	members, err := planFlock(t, opts)
 	if err != nil {
@@ -96,9 +103,12 @@ func runFlock(args []string) error {
 			defer wg.Done()
 			for i := range queue {
 				m := members[i]
-				full := append([]string{name}, rest...)
-				full = append(full, "--seed", strconv.FormatUint(m.seed, 10))
+				// Pins first, then CLI rest, so explore/breed overrides
+				// (--medium wash) win over derived pins (ember).
+				full := []string{name}
 				full = append(full, m.pins...)
+				full = append(full, rest...)
+				full = append(full, "--seed", strconv.FormatUint(m.seed, 10))
 				full = append(full, "--out", opts.out)
 				out, err := renderOne(full)
 				if err != nil {
@@ -116,7 +126,7 @@ func runFlock(args []string) error {
 					path: out.path,
 					ent: flockEntry{
 						Seed:   m.seed,
-						Traits: map[string]string(m.traits),
+						Traits: overlayCLITraits(map[string]string(m.traits), rest, t.Schema()),
 						File:   base,
 						Mode:   m.mode,
 						Parent: m.parent,
@@ -252,6 +262,75 @@ func isFlockFlag(k string) bool {
 		return true
 	}
 	return false
+}
+
+// configureFlockSketch applies sketch-owned flags from rest so Traits()
+// reflects CLI overrides when planning explore/breed rows.
+func configureFlockSketch(s sketch.Sketch, rest []string) error {
+	c, ok := s.(sketch.Configurable)
+	if !ok {
+		return nil
+	}
+	fs := flag.NewFlagSet("flock-plan", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	c.Flags(fs)
+	known := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) { known[f.Name] = true })
+	var filtered []string
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		key := strings.TrimLeft(a, "-")
+		if k, v, ok := strings.Cut(key, "="); ok {
+			if known[k] {
+				filtered = append(filtered, "--"+k, v)
+			}
+			continue
+		}
+		if !known[key] {
+			continue
+		}
+		filtered = append(filtered, a)
+		if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "-") {
+			i++
+			filtered = append(filtered, rest[i])
+		}
+	}
+	if err := fs.Parse(filtered); err != nil {
+		return err
+	}
+	_, err := c.Configure()
+	return err
+}
+
+// overlayCLITraits copies traits and applies --dim value pairs from rest so
+// flock.jsonl matches what was actually rendered (e.g. medium=wash).
+func overlayCLITraits(traits map[string]string, rest []string, schema trait.Schema) map[string]string {
+	out := make(map[string]string, len(traits)+len(schema))
+	for k, v := range traits {
+		out[k] = v
+	}
+	known := map[string]bool{}
+	for _, d := range schema {
+		known[d.Name] = true
+	}
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		key := strings.TrimLeft(a, "-")
+		if k, v, ok := strings.Cut(key, "="); ok {
+			if known[k] {
+				out[k] = v
+			}
+			continue
+		}
+		if !known[key] {
+			continue
+		}
+		if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "-") {
+			i++
+			out[key] = rest[i]
+		}
+	}
+	return out
 }
 
 func planFlock(t sketch.Traited, o flockOpts) ([]flockMember, error) {

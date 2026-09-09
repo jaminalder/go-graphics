@@ -153,6 +153,57 @@ func (h *Hist) add(x, y int, w, cr, cg, cb float64) {
 	atomic.AddUint64(&h.b[i], uint64(cb*float64(aw)+0.5))
 }
 
+// Density is the attractor measure ready for display: log-normalized load
+// and mean colour per bin, after optional density estimation. Ember and wash
+// Develop share this so only the tone map changes.
+type Density struct {
+	W, H    int
+	Load    []float64
+	R, G, B []float64
+}
+
+// Measure returns per-bin log-density load and mean colour. Brightness lifts
+// mid-densities before the log; Estimate is flam3 DE after the log.
+func (h *Hist) Measure(bright float64, est Estimate) Density {
+	if bright <= 0 {
+		bright = 1
+	}
+	d := Density{
+		W: h.w, H: h.h,
+		Load: make([]float64, len(h.a)),
+		R:    make([]float64, len(h.a)),
+		G:    make([]float64, len(h.a)),
+		B:    make([]float64, len(h.a)),
+	}
+	var nMax float64
+	for i := range h.a {
+		n := float64(h.a[i]) / colorScale
+		if n > nMax {
+			nMax = n
+		}
+	}
+	if nMax <= 0 {
+		return d
+	}
+	logMax := math.Log(1 + nMax*bright)
+	if est.Radius > 0 {
+		return h.measureEstimated(d, logMax, bright, est)
+	}
+	for i := range h.a {
+		a := h.a[i]
+		if a == 0 {
+			continue
+		}
+		n := float64(a) / colorScale
+		d.Load[i] = math.Log(1+n*bright) / logMax
+		fa := float64(a)
+		d.R[i] = float64(h.r[i]) / fa
+		d.G[i] = float64(h.g[i]) / fa
+		d.B[i] = float64(h.b[i]) / fa
+	}
+	return d
+}
+
 // Develop tone-maps the histogram into a row-major sRGB buffer.
 func (h *Hist) Develop(tone Tone) []palette.Color {
 	out := make([]palette.Color, h.w*h.h)
@@ -162,43 +213,28 @@ func (h *Hist) Develop(tone Tone) []palette.Color {
 	}
 	invG := 1 / gamma
 	vib := mathx.Clamp01(tone.Vibrancy)
-	bright := tone.Brightness
-	if bright <= 0 {
-		bright = 1
-	}
 	gleam := mathx.Clamp01(tone.Gleam)
 	bg := tone.Background
-
-	var nMax float64
-	for i := range h.a {
-		n := float64(h.a[i]) / colorScale
-		if n > nMax {
-			nMax = n
+	d := h.Measure(tone.Brightness, tone.Estimate)
+	any := false
+	for _, load := range d.Load {
+		if load > 0 {
+			any = true
+			break
 		}
 	}
-	if nMax <= 0 {
+	if !any {
 		for i := range out {
 			out[i] = bg
 		}
 		return out
 	}
-	logMax := math.Log(1 + nMax*bright)
-	if tone.Estimate.Radius > 0 {
-		return h.developEstimated(out, logMax, invG, vib, bright, gleam, bg, tone.Estimate)
-	}
-
-	for i := range h.a {
-		a := h.a[i]
-		if a == 0 {
+	for i := range out {
+		if d.Load[i] <= 0 {
 			out[i] = bg
 			continue
 		}
-		n := float64(a) / colorScale
-		meanR := float64(h.r[i]) / float64(a)
-		meanG := float64(h.g[i]) / float64(a)
-		meanB := float64(h.b[i]) / float64(a)
-		scale := math.Log(1+n*bright) / logMax
-		out[i] = tonePixel(meanR, meanG, meanB, scale, invG, vib, gleam, bg)
+		out[i] = tonePixel(d.R[i], d.G[i], d.B[i], d.Load[i], invG, vib, gleam, bg)
 	}
 	return out
 }

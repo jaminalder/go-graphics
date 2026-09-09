@@ -256,11 +256,39 @@ func TestPinningOneFlagLeavesTheRestOfTheDrawAlone(t *testing.T) {
 
 func TestEveryStructureBuildsASystem(t *testing.T) {
 	ctx := testCtx(t, 5)
-	for _, name := range []string{"spindle", "filament", "bloom", "spiral", "fold", "julia"} {
+	for _, name := range []string{"chaos", "spindle", "filament", "bloom", "spiral", "fold", "julia"} {
 		cfg := configured(t, "--structure", name, "--quality", "4", "--cast", "zander-spindle")
 		if _, err := cfg.Render(ctx); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+	}
+}
+
+// Chaos must actually open the variation catalog — a renamed spindle would
+// leave flocks looking like Electric Sheep never happened.
+func TestChaosDrawsFromManyVariationKinds(t *testing.T) {
+	s := configured(t, "--structure", "chaos")
+	kinds := map[uint8]int{}
+	for seed := uint64(1); seed <= 40; seed++ {
+		ctx := testCtx(t, seed)
+		rec := s.pin(draw(s.Traits(ctx), ctx.RNG(streamRecipe)))
+		sys := compose(rec, ctx.RNG(streamGenome))
+		for _, x := range sys.X {
+			if x.Symmetry {
+				continue
+			}
+			for _, v := range x.Vars {
+				kinds[v.Kind]++
+			}
+		}
+		if sys.Final != nil {
+			for _, v := range sys.Final.Vars {
+				kinds[v.Kind]++
+			}
+		}
+	}
+	if len(kinds) < 8 {
+		t.Fatalf("chaos only used %d variation kinds across 40 seeds; want a wide catalog", len(kinds))
 	}
 }
 

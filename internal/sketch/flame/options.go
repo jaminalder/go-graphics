@@ -26,6 +26,9 @@ func (s *Sketch) declare() {
 	o.Float("de-curve", "DE radius ~ 1/n^curve", "", 0.05, 2, &s.DeCurve)
 	o.Int("oversample", "histogram resolution multiplier; 1 disables spatial AA", "os", 1, 3, &s.Oversample)
 	o.Float("filter", "Gaussian spatial-filter radius in output pixels", "sf", 0.05, 2, &s.Filter)
+	o.Float("wash-sat", "pigment saturation multiplier for wash medium (1 = raw mean colour)", "ws", 0.5, 4, &s.WashSat)
+	o.Float("wash-body", "FlatWash body for wash medium; higher is inkier, lower is a glaze (default from wash-sat)", "wb", 0, 1, &s.WashBody)
+	o.Float("wash-pow", "wash load curve; higher prints only dense cores, lower lets filaments land (default 0.55)", "wp", 0.15, 2.5, &s.WashPow)
 	s.knobs = o
 	s.traits = trait.NewOptions(schema)
 }
@@ -68,6 +71,9 @@ func (s *Sketch) pin(set settings) settings {
 		"de-curve":   func() { set.deCurve = s.DeCurve },
 		"oversample": func() { set.oversample = s.Oversample },
 		"filter":     func() { set.filter = s.Filter },
+		"wash-sat":   func() { set.washSat = s.WashSat },
+		"wash-body":  func() { set.washBody = s.WashBody },
+		"wash-pow":   func() { set.washPow = s.WashPow },
 	} {
 		if s.knobs.WasSet(name) {
 			apply()
