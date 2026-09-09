@@ -20,18 +20,21 @@ var paperGround = palette.Color{R: 0.93, G: 0.9, B: 0.84}
 // developWash interprets the attractor measure as pigment load on paper.
 // Same Measure as ember; FlatWash supplies pooling and tooth. No gleam.
 // Only manner stain exists today; when rimmed/pooled land they branch here.
-func developWash(hist *fl.Hist, bright float64, est fl.Estimate, seed uint64, washSat float64) []palette.Color {
+func developWash(hist *fl.Hist, bright float64, est fl.Estimate, seed uint64, washSat, washBody, washPow float64) []palette.Color {
 	if washSat <= 0 {
 		washSat = 1
 	}
 	d := hist.Measure(bright, est)
-	wash := stainWash(seed, washSat)
+	wash := stainWash(seed, washSat, washBody)
 
 	out := make([]palette.Color, d.W*d.H)
 	scale := 1 / float64(d.H)
 	// Filament recipes sit at low log-density; a steep pow leaves them as
 	// ghosts on paper. Softer gamma + sat-linked gain puts pigment down.
 	pow := 0.55
+	if washPow > 0 {
+		pow = washPow
+	}
 	loadGain := 1.05 + 0.28*math.Max(washSat-1, 0)
 	for y := 0; y < d.H; y++ {
 		v := (float64(y) + 0.5) * scale
@@ -51,7 +54,7 @@ func developWash(hist *fl.Hist, bright float64, est fl.Estimate, seed uint64, wa
 	return out
 }
 
-func stainWash(seed uint64, washSat float64) paint.FlatWash {
+func stainWash(seed uint64, washSat, washBody float64) paint.FlatWash {
 	w := paint.NewFlatWash(seed ^ saltWash)
 	w.Blotch = 0.2
 	w.Mottle = 0.55
@@ -59,7 +62,11 @@ func stainWash(seed uint64, washSat float64) paint.FlatWash {
 	w.Tooth = 0.003
 	w.Scatter = 0.18
 	// Body is what keeps enriched chroma from dying into cream paper.
-	w.Body = mathx.Clamp01(0.22 + 0.45*math.Max(washSat-1, 0))
+	if washBody >= 0 {
+		w.Body = mathx.Clamp01(washBody)
+	} else {
+		w.Body = mathx.Clamp01(0.22 + 0.45*math.Max(washSat-1, 0))
+	}
 	return w
 }
 

@@ -170,6 +170,8 @@ type settings struct {
 	oversample        int
 	filter            float64
 	washSat           float64
+	washBody          float64 // <0 → derive from washSat in stainWash
+	washPow           float64 // ≤0 → default 0.55 in developWash
 }
 
 func draw(set trait.Set, rng *rand.Rand) settings {
@@ -186,6 +188,8 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		oversample: 2,
 		filter:     fl.DefaultFilter,
 		washSat:    2.5,
+		washBody:   -1,
+		washPow:    0,
 	}
 
 	switch set.Get(dimStructure) {

@@ -35,6 +35,8 @@ type Sketch struct {
 	Oversample                int
 	Filter                    float64
 	WashSat                   float64
+	WashBody                  float64 // pin ≥0; else stainWash derives from wash-sat
+	WashPow                   float64 // pin >0; else developWash uses 0.55
 	knobs                     *opt.Set
 	traits                    *trait.Options
 }
@@ -55,6 +57,8 @@ func New() *Sketch {
 		Oversample: 2,
 		Filter:     fl.DefaultFilter,
 		WashSat:    2.5,
+		WashBody:   -1,
+		WashPow:    0,
 	}
 	s.declare()
 	return s
@@ -127,7 +131,7 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	}
 	var pix []palette.Color
 	if rec.medium == mediumWashTone {
-		pix = developWash(hist, rec.brightness, est, ctx.Seed, rec.washSat)
+		pix = developWash(hist, rec.brightness, est, ctx.Seed, rec.washSat, rec.washBody, rec.washPow)
 	} else {
 		tone := fl.Tone{
 			Gamma:      rec.gamma,
