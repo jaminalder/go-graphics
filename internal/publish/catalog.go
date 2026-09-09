@@ -131,6 +131,14 @@ func Pins(id, style, colour string) (trait.Set, string, error) {
 
 // Complete turns permitted traits into an edition recipe with no public numeric overrides.
 func Complete(id string, seed uint64, pal string, set trait.Set) (artwork.Recipe, error) {
+	r, err := complete(id, seed, pal, set)
+	if err != nil {
+		return r, err
+	}
+	return Validate(r.Bytes())
+}
+
+func complete(id string, seed uint64, pal string, set trait.Set) (artwork.Recipe, error) {
 	if pal == "" {
 		pal = "diebenkorn-seawall"
 	}
@@ -176,7 +184,7 @@ func Validate(raw []byte) (artwork.Recipe, error) {
 		return r, errors.New("colour unavailable")
 	}
 	seed, _ := strconv.ParseUint(r.Seed(), 10, 64)
-	clean, err := Complete(r.ID(), seed, r.Palette(), set)
+	clean, err := complete(r.ID(), seed, r.Palette(), set)
 	if err != nil {
 		return r, err
 	}

@@ -51,3 +51,29 @@ unfamiliar-user review remain launch gates. Phase 0 is not owner approval.
 Validation: `make check GOLANGCI_LINT_CACHE=/private/tmp/public-art-worker-lint`
 passed after the typed recipe, public choice matrix and exploration tests.
 The existing local CLI and all sketch golden/determinism tests pass unchanged.
+
+## Studio and isolated runtime slice
+
+The complete SSR studio is implemented with optional htmx 2.0.10 enhancement:
+gallery, illustrated styles/colours, four-image batches, favourites, refinement,
+result, preview/download rendition, recovery/export and file-share fallback.
+The HTTP app validates Host/Origin/CSRF and exact form keys; separate bounded
+request/generation token buckets protect lazy transient workspaces.
+
+`artrender` supervises one fixed child executable over a private Unix socket.
+`renderjob` owns the sole bounded queue, resource admission, cancellation and
+atomic PNG cache publication. Downloads hold leases while the cache is read.
+Execution budgets are 15 seconds preview / 30 seconds download; encoded images
+are capped at 16 MiB and named tiers at 600 / 1200 square pixels. Startup image
+cache reconciliation removes partial temporary artifacts. HTTP never renders.
+
+Generated 24 catalogue examples with full recipes and content hashes. Hero
+images were visually inspected at 600px; matched-seed style sweeps and actual
+browser tests remain the next verification step. Assets are provisional review
+content; copying them into an embedded release is not publication approval.
+
+Validation: complete `make check` passed, including painted/raster CLI pixel
+parity, explicit override round-trips, concurrent recipe isolation, identity,
+workspace ownership/revisions, atomic admission/cancellation and real hung,
+panicking and oversized child process rejection. Browser/load/recovery tests,
+operational artifacts and launch gates remain outstanding at this checkpoint.

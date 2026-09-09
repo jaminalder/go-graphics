@@ -62,7 +62,7 @@ func Public(s trait.Schema, pins trait.Set, parents []Candidate, seed uint64, ro
 	}
 	sets := make([]trait.Set, len(parents))
 	for i, p := range parents {
-		if !valid(p.Traits) {
+		if !valid(p.Traits) || len(p.Traits) != len(s) {
 			return nil, errors.New("invalid parent")
 		}
 		sets[i] = p.Traits
@@ -84,8 +84,13 @@ func Public(s trait.Schema, pins trait.Set, parents []Candidate, seed uint64, ro
 		c := Candidate{Seed: n, Traits: s.Derive(rng), Mode: "explore"}
 		i := len(out)
 		if len(parents) > 0 && i < 2 {
-			p := parents[(round*2+i)%len(parents)]
-			c.Traits = clone(p.Traits)
+			p := parents[((round%len(parents))*2+i)%len(parents)]
+			for k, v := range p.Traits {
+				d, _ := s.Dim(k)
+				if d.Weight(v) > 0 || pins[k] == v {
+					c.Traits[k] = v
+				}
+			}
 			c.Mode = "neighbor"
 			c.Parent = p.Seed
 		} else if len(parents) > 0 && i == 2 {
