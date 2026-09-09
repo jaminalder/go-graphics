@@ -14,49 +14,13 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/jaminalder/go-graphics/internal/artwork"
 	"github.com/jaminalder/go-graphics/internal/palette"
 	"github.com/jaminalder/go-graphics/internal/render"
 	"github.com/jaminalder/go-graphics/internal/sketch"
-	"github.com/jaminalder/go-graphics/internal/sketch/circles"
-	"github.com/jaminalder/go-graphics/internal/sketch/contour"
-	"github.com/jaminalder/go-graphics/internal/sketch/drift"
-	"github.com/jaminalder/go-graphics/internal/sketch/flame"
-	"github.com/jaminalder/go-graphics/internal/sketch/foam"
-	"github.com/jaminalder/go-graphics/internal/sketch/glaze"
-	"github.com/jaminalder/go-graphics/internal/sketch/hatchbook"
-	"github.com/jaminalder/go-graphics/internal/sketch/iris"
-	"github.com/jaminalder/go-graphics/internal/sketch/pools"
-	"github.com/jaminalder/go-graphics/internal/sketch/qql"
-	"github.com/jaminalder/go-graphics/internal/sketch/riffle"
-	"github.com/jaminalder/go-graphics/internal/sketch/rounds"
-	"github.com/jaminalder/go-graphics/internal/sketch/scree"
-	"github.com/jaminalder/go-graphics/internal/sketch/shallows"
-	"github.com/jaminalder/go-graphics/internal/sketch/shoal"
-	"github.com/jaminalder/go-graphics/internal/sketch/tapestry"
-	"github.com/jaminalder/go-graphics/internal/sketch/warp"
 )
 
-func registry() *sketch.Registry {
-	return sketch.NewRegistry(
-		circles.New(),
-		contour.New(),
-		drift.New(),
-		flame.New(),
-		foam.New(),
-		glaze.New(),
-		hatchbook.New(),
-		iris.New(),
-		pools.New(),
-		qql.New(),
-		riffle.New(),
-		rounds.New(),
-		scree.New(),
-		shallows.New(),
-		shoal.New(),
-		tapestry.New(),
-		warp.New(),
-	)
-}
+func registry() *sketch.Registry { return artwork.Registry() }
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {

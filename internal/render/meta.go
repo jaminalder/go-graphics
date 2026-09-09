@@ -3,11 +3,13 @@ package render
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 )
 
@@ -23,35 +25,51 @@ type Meta struct {
 // WritePNGMeta encodes img as PNG with sRGB/gAMA tags and Meta embedded
 // as pHYs + tEXt chunks.
 func WritePNGMeta(path string, img image.Image, m Meta) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	err = EncodePNGMeta(f, img, m)
+	return errors.Join(err, f.Close())
+}
+
+// EncodePNGMeta writes PNG metadata to a caller-owned writer. Encoding buffers
+// remain proportional to the image and must be included in renderer memory limits.
+func EncodePNGMeta(w io.Writer, img image.Image, m Meta) error {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
-		return fmt.Errorf("render: encoding %s: %w", path, err)
+		return err
 	}
 	out, err := splicePNGChunks(buf.Bytes(), m)
 	if err != nil {
-		return fmt.Errorf("render: %s: %w", path, err)
+		return err
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil {
-		return fmt.Errorf("render: %w", err)
-	}
-	return nil
+	_, err = w.Write(out)
+	return err
 }
 
-// WriteJPEGMeta encodes img as JPEG at JPEGQuality with a JFIF density
-// header (DPI) and the recipe as a COM segment.
+// WriteJPEGMeta writes a metadata-bearing JPEG to path.
 func WriteJPEGMeta(path string, img image.Image, m Meta) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	err = EncodeJPEGMeta(f, img, m)
+	return errors.Join(err, f.Close())
+}
+
+// EncodeJPEGMeta writes a metadata-bearing JPEG to a caller-owned writer.
+func EncodeJPEGMeta(w io.Writer, img image.Image, m Meta) error {
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: JPEGQuality}); err != nil {
-		return fmt.Errorf("render: encoding %s: %w", path, err)
+		return err
 	}
 	out, err := spliceJPEGSegments(buf.Bytes(), m)
 	if err != nil {
-		return fmt.Errorf("render: %s: %w", path, err)
+		return err
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil {
-		return fmt.Errorf("render: %w", err)
-	}
-	return nil
+	_, err = w.Write(out)
+	return err
 }
 
 // pngChunk assembles one chunk: length, type, data, CRC.

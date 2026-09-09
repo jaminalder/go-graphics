@@ -101,7 +101,8 @@ type Traited interface {
 
 // Registry is an explicit, immutable-after-construction set of sketches.
 type Registry struct {
-	byName map[string]Sketch
+	byName    map[string]Sketch
+	factories map[string]func() Sketch
 }
 
 // NewRegistry builds a registry; duplicate names are a programming error.
@@ -118,16 +119,35 @@ func NewRegistry(sketches ...Sketch) *Registry {
 
 // Get looks a sketch up by name.
 func (r *Registry) Get(name string) (Sketch, bool) {
+	if f, ok := r.factories[name]; ok {
+		return f(), true
+	}
 	s, ok := r.byName[name]
 	return s, ok
 }
 
 // All returns the sketches sorted by name.
 func (r *Registry) All() []Sketch {
-	out := make([]Sketch, 0, len(r.byName))
+	out := make([]Sketch, 0, len(r.byName)+len(r.factories))
+	for _, f := range r.factories {
+		out = append(out, f())
+	}
 	for _, s := range r.byName {
 		out = append(out, s)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	return out
+}
+
+// NewFactories builds definitions that create independent sketches on every lookup.
+func NewFactories(factories ...func() Sketch) *Registry {
+	r := &Registry{factories: make(map[string]func() Sketch, len(factories))}
+	for _, f := range factories {
+		name := f().Name()
+		if _, ok := r.factories[name]; ok {
+			panic("duplicate sketch " + name)
+		}
+		r.factories[name] = f
+	}
+	return r
 }

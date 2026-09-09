@@ -518,3 +518,17 @@ renumbering earlier duplicate entries.
 7. Possible later: more IFS looks on the same `internal/flame` mechanism,
    tilings, SVG export, gallery index generator. Sketch 016 is the first
    fractal flame.
+
+### 61. Published recipes and bounded exploration (2026-09-09)
+
+The public application uses explicit factory definitions in `internal/artwork`,
+immutable canonical edition recipes, and concrete pointer-valued configuration
+owned by pools, foam and iris. CLI and typed adapters share the existing opt
+and trait validators; omitted overrides retain their meaning. Numeric defaults
+and named artistic streams are fixed by an edition's retained renderer release.
+The serialized recipe records resolved traits, effective palette and override
+presence; no public preset name is needed to execute it. `internal/publish`
+restricts public recipes further, forbidding numeric overrides and experimental
+materials. `internal/explore` owns pure local/public candidate planning.
+No third-party Go dependency is introduced. Published edition 1 is provisional
+until Linux compatibility, provenance and owner review pass.
