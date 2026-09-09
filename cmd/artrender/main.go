@@ -60,7 +60,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	srv := &http.Server{BaseContext: func(net.Listener) context.Context { return ctx }, Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 4096}
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -68,6 +70,7 @@ func run() error {
 	}()
 	err = srv.Serve(l)
 	if errors.Is(err, http.ErrServerClosed) {
+		<-shutdownDone
 		return nil
 	}
 	return err

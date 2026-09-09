@@ -42,6 +42,8 @@ type (
 		secure       bool
 		templates    *template.Template
 		assets       http.Handler
+		hashes       map[string]string
+		active       chan struct{}
 		limits       limiter
 	}
 	page struct {
@@ -54,6 +56,8 @@ type (
 		Token                              string
 		Active                             bool
 		Ready                              int
+		Previous                           []studio.Sample
+		BatchID                            string
 	}
 )
 
@@ -69,7 +73,11 @@ func New(c Config) (http.Handler, error) {
 	if e := publish.Check(); e != nil {
 		return nil, e
 	}
-	t, e := template.ParseFS(files, "templates/*.html")
+	hashes, e := catalogueAssets()
+	if e != nil {
+		return nil, e
+	}
+	t, e := template.New("page").Funcs(template.FuncMap{"asset": func(name string) string { return "/assets/" + hashes[name] + "/" + name }}).ParseFS(files, "templates/*.html")
 	if e != nil {
 		return nil, e
 	}
@@ -77,7 +85,7 @@ func New(c Config) (http.Handler, error) {
 	if e != nil {
 		return nil, e
 	}
-	a := &app{cfg: c, host: u.Host, secure: u.Scheme == "https", cookie: "art-studio", templates: t, assets: http.StripPrefix("/assets/", http.FileServer(http.FS(assets))), limits: limiter{keys: map[string]bucket{}}}
+	a := &app{active: make(chan struct{}, 128), hashes: hashes, cfg: c, host: u.Host, secure: u.Scheme == "https", cookie: "art-studio", templates: t, assets: http.StripPrefix("/assets/", http.FileServer(http.FS(assets))), limits: limiter{keys: map[string]bucket{}}}
 	if a.secure {
 		a.cookie = "__Host-art-studio"
 	}
@@ -95,11 +103,22 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown host", 421)
 		return
 	}
+	select {
+	case a.active <- struct{}{}:
+		defer func() { <-a.active }()
+	default:
+		a.fail(w, r, 503, "The studio is busy. Try again in a moment.")
+		return
+	}
 	if len(r.RequestURI) > 4096 {
 		http.Error(w, "request target too long", http.StatusRequestURITooLong)
 		return
 	}
-	if !a.limits.allow("read:"+a.client(r), 240, 30) {
+	bucketName, rate, burst := "read:", 240.0, 30.0
+	if strings.HasPrefix(r.URL.Path, "/assets/") {
+		bucketName, rate, burst = "asset:", 1200, 60
+	}
+	if !a.limits.allow(bucketName+a.client(r), rate, burst) {
 		a.fail(w, r, 429, "Too many requests. Give this page a moment.")
 		return
 	}
@@ -182,8 +201,17 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(path, "/assets/") {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		a.assets.ServeHTTP(w, r)
+		parts := strings.Split(strings.TrimPrefix(path, "/assets/"), "/")
+		if len(parts) != 2 || a.hashes[parts[1]] != parts[0] {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		copy := r.Clone(r.Context())
+		u := *r.URL
+		u.Path = "/assets/" + parts[1]
+		copy.URL = &u
+		a.assets.ServeHTTP(w, copy)
 		return
 	}
 	if strings.HasPrefix(path, "/images/") || strings.HasPrefix(path, "/downloads/") {
@@ -273,6 +301,16 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 	p := page{Title: entry.Name + " studio", Kind: "studio", Exploration: x, Entry: entry, CSRF: session.CSRF, Action: studio.Token(), Active: x.Active}
 	if len(x.Batches) > 0 {
 		latest := x.Batches[len(x.Batches)-1]
+		p.BatchID = latest.ID
+		if x.Active && len(x.Batches) > 1 {
+			for _, sid := range x.Batches[len(x.Batches)-2].Samples {
+				for _, sample := range x.Samples {
+					if sample.ID == sid && sample.Status.State == "ready" {
+						p.Previous = append(p.Previous, sample)
+					}
+				}
+			}
+		}
 		for _, id := range latest.Samples {
 			for _, sample := range x.Samples {
 				if sample.ID == id {
@@ -417,7 +455,11 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, operation := parts[1], parts[2]
-	revision, _ := strconv.Atoi(r.PostForm.Get("revision"))
+	revision, revisionErr := strconv.Atoi(r.PostForm.Get("revision"))
+	if operation != "download" && (revisionErr != nil || revision < 0) {
+		a.fail(w, r, 400, "Invalid exploration revision.")
+		return
+	}
 	allowed := false
 	switch operation {
 	case "choices":
@@ -429,7 +471,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	case "download":
 		allowed = a.allowed(r, "sample")
 	case "cancel":
-		allowed = a.allowed(r)
+		allowed = a.allowed(r, "revision", "batch")
 	}
 	if !allowed {
 		a.fail(w, r, 400, "Unknown action field.")
@@ -450,7 +492,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	case "favourites":
 		e = a.cfg.Studio.Favourite(session.Token, id, r.PostForm.Get("sample"), revision, r.PostForm.Get("on") == "yes")
 	case "cancel":
-		e = a.cfg.Studio.Cancel(session.Token, id)
+		e = a.cfg.Studio.Cancel(session.Token, id, revision, r.PostForm.Get("batch"))
 	case "download":
 		e = a.cfg.Studio.Download(session.Token, id, r.PostForm.Get("sample"))
 		target += "/samples/" + r.PostForm.Get("sample")
@@ -486,6 +528,10 @@ func (a *app) image(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f, digest, e := a.cfg.Jobs.Open(id)
+	if errors.Is(e, renderjob.ErrBusy) {
+		a.fail(w, r, 503, "Downloads are busy. Try again in a moment.")
+		return
+	}
 	if e != nil {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(410)

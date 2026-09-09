@@ -5,10 +5,10 @@ Read this before changing package structure or adding cross-cutting features.
 For day-to-day agent workflow (commands, conventions, how to add things), see
 [../CLAUDE.md](../CLAUDE.md).
 
-The proposed public application extension is documented in
+The public application extension is documented in
 [web/README.md](web/README.md) (2026-09-09). It preserves the local laboratory
 and the artwork internals described here. Its product/runtime architecture is
-planned, not implemented; shared domain terms are in [../CONTEXT.md](../CONTEXT.md).
+implemented locally with pending public launch gates; shared domain terms are in [../CONTEXT.md](../CONTEXT.md).
 
 ## 1. Vision & scope
 
@@ -532,3 +532,13 @@ restricts public recipes further, forbidding numeric overrides and experimental
 materials. `internal/explore` owns pure local/public candidate planning.
 No third-party Go dependency is introduced. Published edition 1 is provisional
 until Linux compatibility, provenance and owner review pass.
+
+### 62. Patch the published runtime toolchain (2026-09-09)
+
+The HTTP/template path makes six existing Go 1.26.5 standard-library advisories
+reachable according to govulncheck. Pin Go 1.26.8, the current supported patch
+in the existing minor line, for the module and release CI. Do not suppress
+vulnerability results to preserve the workstation's older toolchain. Keep
+artistic edition compatibility guarded by fixed-pixel and existing golden tests.
+Source: https://go.dev/dl/ and the Go vulnerability database, including
+https://pkg.go.dev/vuln/GO-2026-6091 .

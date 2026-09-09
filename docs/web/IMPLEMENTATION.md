@@ -21,13 +21,13 @@ dedicated sibling worktree. Do not integrate or publish without approval.
 ## Progress
 
 - [x] Dedicated implementation branch and worktree.
-- [ ] Visual direction and reviewed example assets.
+- [x] Provisional visual direction and inspected example assets (owner approval pending).
 - [x] Typed recipes and promoted-sketch configuration.
 - [x] Shared exploration and publication catalogue.
-- [ ] Complete SSR/htmx studio and browser recovery/share.
-- [ ] Isolated renderer, queue, artifact cache and abuse controls.
-- [ ] Deployment tooling, Terraform, CI and operational runbooks.
-- [ ] Browser, race, security, visual and recovery verification.
+- [x] Complete SSR/htmx studio and browser recovery/share.
+- [x] Isolated renderer, queue, artifact cache and abuse controls.
+- [x] Deployment tooling, Terraform, CI and operational runbooks.
+- [x] Local browser, race, security, visual and recovery verification.
 
 Human-dependent launch gates remain separate from local implementation:
 source/output licences, domain/operator details, target-host benchmarks,
@@ -68,12 +68,106 @@ are capped at 16 MiB and named tiers at 600 / 1200 square pixels. Startup image
 cache reconciliation removes partial temporary artifacts. HTTP never renders.
 
 Generated 24 catalogue examples with full recipes and content hashes. Hero
-images were visually inspected at 600px; matched-seed style sweeps and actual
-browser tests remain the next verification step. Assets are provisional review
+images were visually inspected at 600px. At this checkpoint, matched-seed style
+sweeps and browser tests were the next step; their completed results follow below. Assets are provisional review
 content; copying them into an embedded release is not publication approval.
 
 Validation: complete `make check` passed, including painted/raster CLI pixel
 parity, explicit override round-trips, concurrent recipe isolation, identity,
 workspace ownership/revisions, atomic admission/cancellation and real hung,
-panicking and oversized child process rejection. Browser/load/recovery tests,
-operational artifacts and launch gates remain outstanding at this checkpoint.
+panicking and oversized child process rejection. Browser/recovery tests and operational artifacts were outstanding at this
+checkpoint; the final local verification is recorded below.
+
+## Reliability, browser and operational slice
+
+Fixed review findings around atomic admission of mixed cached/new batches,
+subscription limits and release, finite queue storage, open-download leases,
+late-result rejection and graceful process shutdown. Cancellation now validates
+both exploration revision and batch identity, preserving a visible cancelled
+state. Polling preserves open choice panels, unsent radio/checkbox selections
+and focus. Previous completed samples stay visible during the next batch.
+Restored favourites display completed download renditions when previews expire.
+Browser backups are updated only by explicit favourite/restore actions; starting
+a new exploration cannot replace an old backup with an empty set. Sharing
+prepares the file first, then uses a separate user click for native sharing.
+
+Browser checks: four Chromium tests passed, covering the complete enhanced
+journey, live polling choice preservation, favourites/recipe recovery, PNG
+file downloads, prepared-share fallback, desktop/mobile layouts, ordinary
+no-JavaScript forms, blocked storage and backup preservation when starting over.
+Independent coordinator browsing also exercised the no-JavaScript 1200px
+result. Root review screenshots and browser-run screenshots remain under out/.
+Embedded catalogue examples are checked against manifest hashes, dimensions,
+recipe allowlists and provenance at startup; all static assets use content-
+hashed immutable URLs. Static asset rate accounting is separate from navigation.
+
+Visual review: 36 matched renders at 600px, seeds 1,2,3,42, across all nine
+styles. Inspected all three contact sheets. Pools shows sparse, flowing and
+crowded families; the flowing seed3 has few large dominant circles, so examples
+must not promise a strand in every result. Foam painted cells consistently
+replace mark patterns with pigment; airy can still be substantially filled.
+Iris preserves the disc/fibre identity while winding and layered structures
+remain distinguishable. The owner must make the final artistic judgement.
+
+Operational artifacts include independently bootstrapped locked/versioned
+remote-state configuration, pinned Terraform/provider checksums for Linux and
+Darwin, separate systemd renderer/web cgroups, bounded Caddy proxy configuration,
+immutable tracked-source releases/checksums, private candidate smoke and
+activation/rollback scripts, CI and a recovery/monitoring runbook. Local
+Terraform init/validate and Caddy validation pass; shell syntax is checked.
+No cloud apply, DNS change, domain publication or external message occurred.
+
+Go security: adding HTTP/templates made six Go1.26.5 standard-library advisories
+reachable. The module/release pin is now Go1.26.8 (same supported minor line).
+All existing art goldens and fixed-pixel CLI parity tests pass on the patch.
+The runtime also bounds HTTP concurrency to128 and open cache leases to64;
+job metadata is capped at5000 with terminal expiry, independently of eight
+queued jobs and one running renderer. No third-party Go dependency was added.
+
+The initial local benchmark smoke rendered72 preview recipes (eight seeds per
+style) with zero failures on Apple M1 Pro, Darwin arm64, Go1.26.5 renderer.
+Observed style p95 wall time was89–607ms, maximum RSS31.3MiB, maximum image
+711463bytes. These small-sample workstation figures do not prove VPS capacity.
+The benchmark tool defaults to100 seeds per style and records CPU/wall/RSS/bytes,
+renderer/tool Go versions and cache conditions. Full workstation preview and
+sample download measurements completed with zero failures: 900 previews
+(100 per style, Go1.26.5) had style p95 wall times153–753ms, maximum RSS31.7MiB
+and maximum image742865bytes; 72 downloads (eight per style, Go1.26.8) had
+style p95 wall times541–2388ms, maximum RSS77.8MiB and maximum image2217822bytes.
+Raw JSONL remains under out/artbench-local-100-preview.jsonl and
+out/artbench-local-download-smoke.jsonl; these runs predate separate renderer/tool
+version fields and identify the actual build versions above. These are cold
+isolated children, without artifact-cache hits, on the same workstation.
+
+Remaining launch work is explicitly listed in `launch-gates.md`: owner name,
+contact/licence/provenance decisions, final visual/visitor/assistive-tech review,
+actual target100-seed/class/saturation measurements, staged deploy/rollback,
+OOM/reboot isolation, remote-state two-client lock proof, TLS/second-machine
+recovery and final publication approval. These need an owner or target host;
+the local implementation does not fabricate evidence for them.
+
+## Final local verification
+
+- Go1.26.8: `make check` passed (format, vet, lint with zero issues, all tests).
+  Existing artwork goldens remain unchanged.
+- Race tests passed for artwork, explore, publish, renderjob, studio, web and CLI.
+- `govulncheck ./...`: no vulnerabilities found.
+- Four Chromium journeys passed, including a six-second delayed image preparation
+  followed by a fresh-click native-share stub with active user activation, actual
+  cross-tab storage notice, backup preservation, and the ordinary no-JS path.
+  Browser tests honour the real IP admission limit and Retry-After response.
+- Caddy2.11.4 validation, Terraform1.14.9 format/init/validate and deployment shell
+  syntax passed without provisioning infrastructure.
+- Four isolated activation control-flow tests passed: success enables boot startup;
+  candidate smoke failure leaves old admission untouched; first-deploy failure stops
+  and disables candidate services without a self-link; failed upgrade restores the
+  previous release. These temporary-filesystem tests fake host commands and do not
+  replace target systemd/TLS/rollback exercises.
+- The final standards/spec review found and resolved those three deployment defects.
+  Earlier recipe, HTTP, browser and runtime findings are covered by regression tests.
+- Idle cache retention now runs periodically even when generation is disabled;
+  its regression first failed with an expired artifact still occupying the cache,
+  then passed with periodic maintenance. Open-download leases still protect files.
+
+The complete implementation is committed on the dedicated branch for owner review.
+Master remains unchanged; no integration or public deployment has occurred.

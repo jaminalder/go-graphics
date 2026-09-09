@@ -1,7 +1,10 @@
 # Implementation plan and future-session handoff
 
-Status: proposed, based on `63c622a`, 2026-09-09. All tasks below are future
-implementation work. The documentation task did not start these changes.
+Status: implemented locally on `exp/public-art-app`, with external launch gates
+pending. The original plan below remains the acceptance specification. See
+[the implementation evidence](IMPLEMENTATION.md), [launch gates](launch-gates.md)
+and [operations runbook](../../deploy/README.md) for actual results and remaining
+owner/target-host work. The original planning baseline was `63c622a`.
 
 ## Order and working rules
 

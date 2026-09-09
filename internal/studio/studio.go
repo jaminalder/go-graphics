@@ -35,6 +35,7 @@ type (
 		Recipe         artwork.Recipe
 		Job, Download  string
 		Favourite      bool
+		Cancelled      bool
 		Status         renderjob.Status
 		DownloadStatus renderjob.Status
 	}
@@ -197,6 +198,13 @@ func (s *Store) snapshot(token string, x *exploration) Exploration {
 				a.DownloadStatus = s.jobs.Status(token, a.Download)
 			}
 		}
+		if a.Status.State != "ready" && a.DownloadStatus.State == "ready" {
+			a.Status = a.DownloadStatus
+			a.Job = a.Download
+		}
+		if a.Cancelled && a.Status.State != "ready" {
+			a.Status.State = "cancelled"
+		}
 		if a.Status.State == "queued" || a.Status.State == "running" || a.DownloadStatus.State == "queued" || a.DownloadStatus.State == "running" {
 			v.Active = true
 		}
@@ -229,6 +237,13 @@ func (s *Store) Choices(token, id string, revision int, style, colour string) er
 
 // Generate performs idempotent four-sample admission without holding an HTTP request open.
 func (s *Store) Generate(token, id string, revision int, actionID string, selected []string, different bool) (string, error) {
+	seenSelected := map[string]bool{}
+	for _, id := range selected {
+		if seenSelected[id] {
+			return "", errors.New("duplicate selected favourite")
+		}
+		seenSelected[id] = true
+	}
 	if len(actionID) != 48 || len(selected) > 4 {
 		return "", errors.New("invalid selection")
 	}
@@ -409,19 +424,31 @@ func (s *Store) Favourite(token, id, sample string, revision int, on bool) error
 }
 
 // Cancel releases all unfinished interests while retaining completed samples.
-func (s *Store) Cancel(token, id string) error {
+func (s *Store) Cancel(token, id string, revision int, batchID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	x, e := s.find(token, id)
 	if e != nil {
 		return e
 	}
-	for _, a := range x.view.Samples {
-		if s.jobs != nil {
-			s.jobs.Cancel(token, a.Job)
-			s.jobs.Cancel(token, a.Download)
+	if x.view.Revision != revision || len(x.view.Batches) == 0 || x.view.Batches[len(x.view.Batches)-1].ID != batchID {
+		return ErrConflict
+	}
+	members := map[string]bool{}
+	for _, sid := range x.view.Batches[len(x.view.Batches)-1].Samples {
+		members[sid] = true
+	}
+	for i := range x.view.Samples {
+		a := &x.view.Samples[i]
+		if members[a.ID] && s.jobs != nil {
+			status := s.jobs.Status(token, a.Job)
+			if status.State == "queued" || status.State == "running" {
+				s.jobs.Cancel(token, a.Job)
+				a.Cancelled = true
+			}
 		}
 	}
+	x.view.Revision++
 	return nil
 }
 

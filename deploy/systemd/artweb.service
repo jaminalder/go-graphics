@@ -1,0 +1,40 @@
+[Unit]
+Description=Art Forms web studio
+After=network.target artrender.service
+Wants=artrender.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+[Service]
+User=artweb
+Group=artweb
+SupplementaryGroups=art-render
+ExecStart=/opt/art/current/artweb
+EnvironmentFile=/etc/art/web.env
+Environment=ART_SOCKET=/run/artrender/renderer.sock
+Environment=ART_CACHE=/var/cache/art
+Environment=ART_ADDR=127.0.0.1:8080
+Environment=ART_ADMIN_ADDR=127.0.0.1:8081
+Environment=ART_TRUST_PROXY=yes
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillMode=control-group
+MemoryMax=384M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=64
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/cache/art
+[Install]
+WantedBy=multi-user.target

@@ -26,3 +26,22 @@ func TestPublicRefinementPreservesPinsAndDiversity(t *testing.T) {
 		t.Fatal(a)
 	}
 }
+
+// TestClearingExplicitWashRestoresBaseMaterialsAndRejectsPartialParents defends pin removal.
+func TestClearingExplicitWashRestoresBaseMaterialsAndRejectsPartialParents(t *testing.T) {
+	s := trait.Schema{{Name: "fill", Key: "f", Values: []trait.Value{{Name: "ink", Weight: 1}, {Name: "wash", Weight: 0}}}, {Name: "size", Key: "s", Values: []trait.Value{{Name: "large", Weight: 1}}}}
+	parents := []explore.Candidate{{Seed: 42, Traits: trait.Set{"fill": "wash", "size": "large"}}}
+	batch, e := explore.Public(s, nil, parents, 99, int(^uint(0)>>1), nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, c := range batch {
+		if c.Traits["fill"] != "ink" {
+			t.Fatal("cleared wash pin still inherited")
+		}
+	}
+	parents[0].Traits = trait.Set{"fill": "ink"}
+	if _, e := explore.Public(s, nil, parents, 99, 0, nil); e == nil {
+		t.Fatal("accepted incomplete public parent")
+	}
+}

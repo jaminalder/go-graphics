@@ -29,7 +29,7 @@ func TestCanonicalRecipesRejectAmbiguity(t *testing.T) {
 	if e != nil || !bytes.Equal(b, r2.Bytes()) {
 		t.Fatal(e)
 	}
-	for _, bad := range []string{`{"seed":"1","seed":"2"}`, string(raw) + `{}`, string(bytes.Replace(raw, []byte(`"traits":{}`), []byte(`"unknown":1`), 1))} {
+	for _, bad := range []string{`{"seed":"1","seed":"2"}`, string(raw) + `{}`, string(bytes.Replace(raw, []byte(`"seed"`), []byte(`"Seed"`), 1)), string(bytes.Replace(raw, []byte(`"traits":{}`), []byte(`"unknown":1`), 1))} {
 		if _, e := artwork.Decode([]byte(bad)); e == nil {
 			t.Fatal(bad)
 		}

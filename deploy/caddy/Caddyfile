@@ -1,0 +1,28 @@
+{
+	admin 127.0.0.1:2019
+	servers {
+		max_header_size 16KB
+		timeouts {
+			read_header 5s
+			read_body 10s
+			write 30s
+			idle 60s
+		}
+	}
+}
+{$ART_DOMAIN} {
+	request_body {
+		max_size 64KB
+	}
+	@private path /health/* /metrics /generation/*
+	respond @private 404
+	reverse_proxy 127.0.0.1:8080 {
+		header_up X-Art-Client {remote_host}
+		header_up -X-Forwarded-For
+		header_up -X-Forwarded-Host
+		transport http {
+			dial_timeout 2s
+			response_header_timeout 10s
+		}
+	}
+}

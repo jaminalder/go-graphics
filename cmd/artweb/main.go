@@ -89,7 +89,9 @@ func run() error {
 			stop()
 		}
 	}()
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 		jobs.Enable(false)
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -100,6 +102,7 @@ func run() error {
 	slog.Info("studio listening", "address", addr, "build", build)
 	err = srv.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
+		<-shutdownDone
 		return nil
 	}
 	return fmt.Errorf("serve: %w", err)

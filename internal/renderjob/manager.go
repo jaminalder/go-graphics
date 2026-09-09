@@ -8,6 +8,7 @@ import (
 	"errors"
 	"image/png"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,6 +62,7 @@ type (
 		cancel    context.CancelFunc
 		done      chan struct{}
 		enabled   bool
+		open      int
 		last      string
 	}
 )
@@ -82,7 +84,7 @@ func New(c Config) (*Manager, error) {
 	if c.MaxAge == 0 {
 		c.MaxAge = 24 * time.Hour
 	}
-	if c.Queue < 1 || c.Queue > 8 || c.CacheCount < 1 || c.CacheCount > 5000 || c.CacheBytes < MaxImage {
+	if c.Queue < 1 || c.Queue > 8 || c.CacheCount < 1 || c.CacheCount > 5000 || c.CacheBytes < MaxImage || c.MaxAge < 0 {
 		return nil, errors.New("invalid capacity")
 	}
 	if err := os.MkdirAll(c.Directory, 0o700); err != nil {
@@ -139,11 +141,14 @@ func (m *Manager) Admit(owner string, qs []Request) ([]string, error) {
 		return nil, ErrBusy
 	}
 	fresh := map[string]bool{}
-	active := 0
+	queued := 0
 	owned := 0
+	added := map[string]bool{}
 	for _, j := range m.jobs {
 		if j.state == "running" || j.state == "queued" {
-			active++
+			if j.state == "queued" {
+				queued++
+			}
 			if j.subscribers[owner] {
 				owned++
 			}
@@ -151,7 +156,15 @@ func (m *Manager) Admit(owner string, qs []Request) ([]string, error) {
 	}
 	for _, id := range ids {
 		j := m.jobs[id]
+		if j != nil && j.state == "ready" {
+			if _, cached := m.artifacts[id]; cached && len(j.subscribers) >= 24 && !j.subscribers[owner] {
+				return nil, ErrBusy
+			}
+		}
 		if j != nil && (j.state == "running" || j.state == "queued") {
+			if !j.subscribers[owner] {
+				added[id] = true
+			}
 			if len(j.subscribers) >= 24 && !j.subscribers[owner] {
 				return nil, ErrBusy
 			}
@@ -161,7 +174,7 @@ func (m *Manager) Admit(owner string, qs []Request) ([]string, error) {
 			fresh[id] = true
 		}
 	}
-	if active+len(fresh) > m.cfg.Queue+1 || owned+len(fresh) > 4 || len(m.jobs)+len(ids) > 256 {
+	if queued+len(fresh) > m.cfg.Queue || owned+len(fresh)+len(added) > 4 || len(m.jobs)+len(ids) > 5000 {
 		return nil, ErrBusy
 	}
 	for i, id := range ids {
@@ -220,9 +233,6 @@ func (m *Manager) Cancel(owner, id string) {
 	if j == nil {
 		return
 	}
-	if j.state == "ready" {
-		return
-	}
 	delete(j.subscribers, owner)
 	if len(j.subscribers) == 0 && (j.state == "queued" || j.state == "running") {
 		j.state = "cancelled"
@@ -244,13 +254,21 @@ func (m *Manager) Open(id string) (*Lease, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if a.refs >= 32 {
+	if a.refs >= 32 || m.open >= 64 {
 		f.Close()
 		return nil, "", ErrBusy
 	}
 	a.refs++
+	m.open++
 	m.artifacts[id] = a
-	return &Lease{File: f, release: func() { m.mu.Lock(); defer m.mu.Unlock(); v := m.artifacts[id]; v.refs--; m.artifacts[id] = v }}, a.digest, nil
+	return &Lease{File: f, release: func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		v := m.artifacts[id]
+		v.refs--
+		m.open--
+		m.artifacts[id] = v
+	}}, a.digest, nil
 }
 
 // Counts exposes low-cardinality operational counters.
@@ -270,11 +288,18 @@ func (m *Manager) Counts() (queued, running, files int, size int64) {
 
 func (m *Manager) work() {
 	defer close(m.done)
+	maintenance := time.NewTicker(min(time.Minute, m.cfg.MaxAge))
+	defer maintenance.Stop()
 	for {
 		select {
 		case <-m.ctx.Done():
 			return
 		case <-m.wake:
+		case <-maintenance.C:
+			m.mu.Lock()
+			m.prune()
+			m.mu.Unlock()
+			continue
 		}
 		for {
 			m.mu.Lock()
@@ -308,6 +333,7 @@ func (m *Manager) work() {
 			ctx, cancel := context.WithTimeout(m.ctx, 35*time.Second)
 			j.cancel = cancel
 			m.mu.Unlock()
+			started := time.Now()
 			data, err := m.execute(ctx, j.request)
 			if ctx.Err() != nil {
 				err = ctx.Err()
@@ -324,6 +350,7 @@ func (m *Manager) work() {
 					j.state = "ready"
 				}
 			}
+			slog.Info("render finished", "job", id, "state", j.state, "elapsed_ms", time.Since(started).Milliseconds(), "bytes", len(data))
 			m.mu.Unlock()
 			if m.ctx.Err() != nil {
 				return

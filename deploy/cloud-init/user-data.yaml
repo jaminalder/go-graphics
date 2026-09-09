@@ -1,0 +1,39 @@
+#cloud-config
+package_update: true
+packages: [ca-certificates, curl, ufw, unattended-upgrades]
+ssh_pwauth: false
+disable_root: true
+groups: [art-render]
+users:
+  - name: operator
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+  - name: artweb
+    system: true
+    groups: [art-render]
+    shell: /usr/sbin/nologin
+  - name: artrender
+    system: true
+    groups: [art-render]
+    shell: /usr/sbin/nologin
+write_files:
+  - path: /etc/ssh/sshd_config.d/50-art.conf
+    content: |
+      PasswordAuthentication no
+      PermitRootLogin no
+  - path: /etc/systemd/journald.conf.d/art.conf
+    content: |
+      [Journal]
+      SystemMaxUse=256M
+      MaxRetentionSec=7day
+runcmd:
+  - [install, -d, -m, '0755', /opt/art/releases, /etc/art]
+  - [install, -d, -m, '0700', -o, artweb, -g, artweb, /var/cache/art]
+  - [ufw, default, deny, incoming]
+  - [ufw, allow, '80/tcp']
+  - [ufw, allow, '443/tcp']
+  # SSH UFW allow rules and enable are owner steps after confirming cloud firewall
+  # and console recovery. Do not risk locking the administrator out in bootstrap.

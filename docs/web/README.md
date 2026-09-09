@@ -1,8 +1,10 @@
-# Public art application: analysis and implementation plan
+# Public art application
 
 Planning baseline: **2026-09-09**, repository `63c622a` on `master`.
-Status: **proposed design; no application or infrastructure implemented**.
-The user's request explicitly places this documentation on `master`.
+Status: **implemented locally on `exp/public-art-app`; public launch pending**.
+The planning documents describe the design baseline. See the
+[implementation record](IMPLEMENTATION.md), [local run and deployment guide](../../deploy/README.md),
+and [remaining launch gates](launch-gates.md) for the completed work and its limits.
 
 ## Recommendation
 
@@ -40,7 +42,7 @@ states. Browsing the gallery must remain usable when rendering is busy.
 | [Implementation plan](implementation-plan.md) | Ordered, reviewable slices and handoff instructions for later sessions |
 | [Domain glossary](../../CONTEXT.md) | Shared terminology |
 
-Read this set as the proposed public-app extension to
+Read this set as the design for the public-app extension to
 [the existing architecture](../ARCHITECTURE.md). The older
 [pipeline design](../pipeline-design.md) still governs artwork internals;
 its existing refactor checklist is historical work, not a fresh web backlog.
@@ -56,11 +58,11 @@ its existing refactor checklist is historical work, not a fresh web backlog.
 | Access | Free, open access, no authentication or application database in v1 |
 | Output | Download and share a low-resolution image |
 | Infrastructure | DIY infrastructure as code, Terraform, cost-efficient Hetzner VPS; Caddy recommended |
-| Current task | Analysis and repository documentation only |
-| Launch set | Recommend evaluating `pools`, `foam`, and `iris`; owner chooses final set |
+| Current task | Local implementation complete; deployment and publication remain separate owner decisions |
+| Launch set | Implemented provisional `pools`, `foam`, and `iris`; owner approves final publication |
 | Sharing | Baseline is image-file sharing; reproducible public links are an optional extension pending owner preference |
 | State | Temporary server-side workspace plus bounded browser recovery; no cross-device sync promise |
-| Size | Propose up to 1200 px on the long edge for downloads; validate visually and benchmark before fixing limits |
+| Size | 600 px previews and 1200 px downloads; target-host capacity validation remains a launch gate |
 | Budget | Propose a €15/month operating target for the initial small deployment, excluding tax/domain/optional services; not a user-approved spending limit |
 | Availability | One VPS, recoverable deployment; no high-availability claim |
 
@@ -73,12 +75,12 @@ assigned by this plan.
 These do not prevent the foundational work in the implementation plan:
 
 1. Public name/domain, final launch artworks, and final visual examples.
-2. Image sharing alone or durable artwork links too. Durable links require an
-   explicit edition-retention commitment; a cache cannot provide permanence.
+2. Whether to add durable artwork links in a later edition; v1 implements image-file
+   sharing. Durable links require an explicit edition-retention commitment.
 3. Source/output licences and provenance clearance, especially for the QQL port.
 4. Actual spending ceiling, expected audience, and desired recovery target.
-5. Whether favourites should survive closing the browser; the recommendation
-   is a bounded, local-only recovery copy with an obvious clear action.
+5. Review the implemented bounded, local-only favourites recovery copy and its
+   clear/export actions with unfamiliar users.
 
 Defaults are recommendations, not settled user choices. Implementing this plan
 does not authorise cloud purchases, DNS changes, public launch, or a licence.
