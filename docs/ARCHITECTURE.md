@@ -5,6 +5,11 @@ Read this before changing package structure or adding cross-cutting features.
 For day-to-day agent workflow (commands, conventions, how to add things), see
 [../CLAUDE.md](../CLAUDE.md).
 
+The proposed public application extension is documented in
+[web/README.md](web/README.md) (2026-09-09). It preserves the local laboratory
+and the artwork internals described here. Its product/runtime architecture is
+planned, not implemented; shared domain terms are in [../CONTEXT.md](../CONTEXT.md).
+
 ## 1. Vision & scope
 
 Produce aesthetic, print-quality static 2D images in Go:
@@ -480,6 +485,19 @@ correlation is deliberate and documented.
 | 60 | Flame long-form curation is trait-space flock breeding, not genome GA | QQL’s lesson is an orthogonal weighted output space plus a curator; Electric Sheep’s is like→reproduce with local exploration. Combining them here means `staticart flock`: sample Traited seeds into a sheet + `flock.jsonl`, then `--likes` boosts schema weights (`trait.Schema.Boost`) and half the next generation keeps a parent’s trait pins on a neighboring seed. Continuous flam3 crossover would fight decisions 56–58 (policy stays in genomes; no XML DNA). Colour is a `cast` trait (pools’ colourway pattern) so likes can steer the ramp without a cartesian `--vary palette`. |
 | 61 | Flame wash is a second Develop on the same Measure, not a new IFS | The attractor is already a pigment-load field once log-density is stripped of gleam and void composite. `Hist.Measure` exposes that field; ember `Develop` and wash `developWash` share it so genome, xaos, camera and histogram stay one path. Wash character (`FlatWash` mottling/tooth, forced paper ground) is sketch policy — no `paint.Wash` stamps along orbit points, no blur-of-PNG, no plugin HistogramRenderer. `--medium wash` is weight 0 so ember seeds stay byte-stable. |
 | 62 | Flame structure space needs a chaos genome, not only named recipes | Electric Sheep variety is random IFS DNA — many variations, map counts, finals, symmetries, xaos — not jitter around six fixed templates. Named families (spindle, filament, …) stay as recognisable characters with pooled primaries; `chaos` draws 2–8 maps from the full catalog and carries the highest weight so flocks explore widely. Spindle remains the Zander pin. |
+
+### Proposed public-application decisions (2026-09-09)
+
+These records capture the recommended design for later implementation. They
+are **proposed**, not claims that the code or deployment already follows them.
+Their identifiers continue above the highest historical number without
+renumbering earlier duplicate entries.
+
+| # | Proposal | Rationale |
+|---|---|---|
+| 63 | [Curated publication beside the local laboratory](adr/0001-curated-publication.md) | One Go module with separate CLI/public adapters; publish explicit editions, not every registered sketch. Preserve decision 52's artwork lifecycles. |
+| 64 | [Recipes and edition-scoped reproduction](adr/0002-published-recipe-identity.md) | A seed or cache key alone cannot preserve a visitor's result across algorithm changes; file sharing is the baseline and durable links require a retention policy. |
+| 65 | [Isolated public rendering on one VPS](adr/0003-isolated-public-rendering.md) | Anonymous expensive computation needs hard deadlines and memory isolation; private renderer supervision and bounded ephemeral state avoid a database/queue platform in v1. Public release requires CI, superseding decision 3 when implemented. |
 
 ## 9. Roadmap
 

@@ -10,9 +10,11 @@ vector work will use [tdewolff/canvas](https://github.com/tdewolff/canvas).
 Color palettes are grounded in artist palettes from
 [ColorLisa](https://colorlisa.com/).
 
-**Status:** twelve artwork sketches, from contour fields and packed forms to
-watercolour, faceted river stones, flowing water, and `shallows`, which
-combines its generated stone bed and rippled surface in one material render.
+**Status:** sixteen artwork sketches plus the `hatchbook` specimen generator,
+from contour fields and watercolour to faceted stones, warped materials,
+abstract irises, and fractal flames. The project remains a local art laboratory;
+a curated public Go SSR + htmx application is now
+[planned in docs/web](docs/web/README.md), not yet implemented.
 All 133 ColorLisa palettes are built in (`staticart palettes`; `staticart
 list` shows the complete set).
 
@@ -52,6 +54,8 @@ out/               rendered images (gitignored)
 ```
 
 - **Design & invariants:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Public web application plan:** [docs/web/README.md](docs/web/README.md)
+- **Domain vocabulary:** [CONTEXT.md](CONTEXT.md)
 - **First sketch spec:** [docs/sketches/001-contour-noise.md](docs/sketches/001-contour-noise.md)
 - **Agent/contributor guide:** [AGENTS.md](AGENTS.md)
 - **Branch/worktree workflow:** [docs/WORKTREE-WORKFLOW.md](docs/WORKTREE-WORKFLOW.md)
