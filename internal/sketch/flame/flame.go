@@ -34,6 +34,7 @@ type Sketch struct {
 	Estimator, DeMin, DeCurve float64
 	Oversample                int
 	Filter                    float64
+	WashSat                   float64
 	knobs                     *opt.Set
 	traits                    *trait.Options
 }
@@ -53,6 +54,7 @@ func New() *Sketch {
 		DeCurve:    0.4,
 		Oversample: 2,
 		Filter:     fl.DefaultFilter,
+		WashSat:    2.5,
 	}
 	s.declare()
 	return s
@@ -118,19 +120,25 @@ func (s *Sketch) Render(ctx sketch.Context) (image.Image, error) {
 	// Estimator is specified in output pixels; hist bins are ss× finer,
 	// matching flam3's estimator_radius * ss.
 	ssF := float64(ss)
-	tone := fl.Tone{
-		Gamma:      rec.gamma,
-		Vibrancy:   rec.vibrancy,
-		Brightness: rec.brightness,
-		Gleam:      rec.gleam,
-		Background: groundColour(pal, rec.ground),
-		Estimate: fl.Estimate{
-			Radius: rec.estimator * ssF,
-			Min:    rec.deMin * ssF,
-			Curve:  rec.deCurve,
-		},
+	est := fl.Estimate{
+		Radius: rec.estimator * ssF,
+		Min:    rec.deMin * ssF,
+		Curve:  rec.deCurve,
 	}
-	pix := hist.Develop(tone)
+	var pix []palette.Color
+	if rec.medium == mediumWashTone {
+		pix = developWash(hist, rec.brightness, est, ctx.Seed, rec.washSat)
+	} else {
+		tone := fl.Tone{
+			Gamma:      rec.gamma,
+			Vibrancy:   rec.vibrancy,
+			Brightness: rec.brightness,
+			Gleam:      rec.gleam,
+			Background: groundColour(pal, rec.ground),
+			Estimate:   est,
+		}
+		pix = hist.Develop(tone)
+	}
 	if ss > 1 {
 		pix, err = fl.Downsample(pix, hw, hh, ctx.Width, ctx.Height, ss, rec.filter)
 		if err != nil {
@@ -183,7 +191,7 @@ func warmth(c palette.Color) float64 { return c.R - c.B }
 func groundColour(pal palette.Palette, g ground) palette.Color {
 	switch g {
 	case groundPaper:
-		return palette.Color{R: 0.93, G: 0.9, B: 0.84}
+		return paperGround
 	case groundDusk:
 		d := pal.Colors[0]
 		for _, c := range pal.Colors {

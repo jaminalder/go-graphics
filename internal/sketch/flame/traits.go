@@ -15,19 +15,31 @@ const (
 	dimAperture  = "aperture"
 	dimTint      = "tint"
 	dimGround    = "ground"
+	dimMedium    = "medium"
+	dimManner    = "manner"
 )
+
+// mediumWash develops the histogram as pigment on paper instead of an
+// emissive log-density on a void. Weight 0: opt-in only, so no existing
+// seed moves off ember.
+const mediumWash = "wash"
+
+// mannerStain is FlatWash over density — the first wash character. Later
+// manners (rimmed, pooled, charged) append here if stain already reads painted.
+const mannerStain = "stain"
 
 var schema = trait.Schema{
 	{
 		Name: dimStructure, Key: "s", InName: true,
 		Doc: "the body of the flame",
 		Values: []trait.Value{
-			{Name: "spindle", Weight: 4},
+			{Name: "chaos", Weight: 5},
+			{Name: "spindle", Weight: 2.5},
 			{Name: "filament", Weight: 3},
-			{Name: "bloom", Weight: 2},
-			{Name: "spiral", Weight: 2},
-			{Name: "fold", Weight: 1.5},
-			{Name: "julia", Weight: 1},
+			{Name: "bloom", Weight: 2.5},
+			{Name: "spiral", Weight: 2.5},
+			{Name: "fold", Weight: 2},
+			{Name: "julia", Weight: 2},
 		},
 	},
 	{
@@ -80,12 +92,30 @@ var schema = trait.Schema{
 		Doc:    "which palette casts the flame",
 		Values: casts,
 	},
+	// medium and manner are appended so earlier dimensions keep their
+	// draws; wash at weight 0 means ember stays the seed default.
+	{
+		Name: dimMedium, Key: "md",
+		Doc: "how the attractor is developed",
+		Values: []trait.Value{
+			{Name: "ember", Weight: 1},
+			{Name: mediumWash, Weight: 0},
+		},
+	},
+	{
+		Name: dimManner, Key: "mn",
+		Doc: "wash character when medium is wash",
+		Values: []trait.Value{
+			{Name: mannerStain, Weight: 1},
+		},
+	},
 }
 
 type structure uint8
 
 const (
-	structureSpindle structure = iota
+	structureChaos structure = iota
+	structureSpindle
 	structureFilament
 	structureBloom
 	structureSpiral
@@ -109,6 +139,19 @@ const (
 	groundPaper
 )
 
+type medium uint8
+
+const (
+	mediumEmber medium = iota
+	mediumWashTone
+)
+
+type manner uint8
+
+const (
+	mannerStainLevel manner = iota
+)
+
 type settings struct {
 	structure         structure
 	weave             int
@@ -116,6 +159,8 @@ type settings struct {
 	aperture          float64
 	tint              tint
 	ground            ground
+	medium            medium
+	manner            manner
 	gamma, vibrancy   float64
 	brightness, gleam float64
 	quality           float64
@@ -124,6 +169,7 @@ type settings struct {
 	deMin, deCurve    float64
 	oversample        int
 	filter            float64
+	washSat           float64
 }
 
 func draw(set trait.Set, rng *rand.Rand) settings {
@@ -139,9 +185,12 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 		deCurve:    0.4,
 		oversample: 2,
 		filter:     fl.DefaultFilter,
+		washSat:    2.5,
 	}
 
 	switch set.Get(dimStructure) {
+	case "chaos":
+		s.structure = structureChaos
 	case "filament":
 		s.structure = structureFilament
 	case "bloom":
@@ -200,5 +249,13 @@ func draw(set trait.Set, rng *rand.Rand) settings {
 	default:
 		s.ground = groundVoid
 	}
+
+	if set.Get(dimMedium) == mediumWash {
+		s.medium = mediumWashTone
+		s.ground = groundPaper
+		s.gleam = 0
+	}
+	// Only stain exists today; draw still names it so --manner stays wired.
+	s.manner = mannerStainLevel
 	return s
 }

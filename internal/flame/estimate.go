@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/jaminalder/go-graphics/internal/mathx"
-	"github.com/jaminalder/go-graphics/internal/palette"
 )
 
 type tap struct {
@@ -12,7 +11,7 @@ type tap struct {
 	w      float64
 }
 
-func (h *Hist) developEstimated(out []palette.Color, logMax, invG, vib, bright, gleam float64, bg palette.Color, est Estimate) []palette.Color {
+func (h *Hist) measureEstimated(d Density, logMax, bright float64, est Estimate) Density {
 	curve := est.Curve
 	if curve <= 0 {
 		curve = 0.4
@@ -77,15 +76,17 @@ func (h *Hist) developEstimated(out []palette.Color, logMax, invG, vib, bright, 
 		}
 	}
 
-	for i := range out {
+	for i := range d.Load {
 		a := accA[i]
 		if a <= 0 {
-			out[i] = bg
 			continue
 		}
-		out[i] = tonePixel(accR[i]/a, accG[i]/a, accB[i]/a, mathx.Clamp01(a), invG, vib, gleam, bg)
+		d.Load[i] = mathx.Clamp01(a)
+		d.R[i] = accR[i] / a
+		d.G[i] = accG[i] / a
+		d.B[i] = accB[i] / a
 	}
-	return out
+	return d
 }
 
 func discKernel(radius float64) []tap {

@@ -84,13 +84,15 @@ stretch; those are not three flags.
 
 | Dimension   | What a viewer names        | Levels (weights)                                      |
 |-------------|----------------------------|-------------------------------------------------------|
-| `structure` | the body of the flame      | spindle (4), filament (3), bloom (2), spiral (2), fold (1.5), julia (1) |
+| `structure` | the body of the flame      | chaos (5), spindle (2.5), filament (3), bloom (2.5), spiral (2.5), fold (2), julia (2) |
 | `weave`     | how many maps speak        | sparse (3), chorus (4), dense (2)                     |
 | `reach`     | how wild the nonlinearities| gentle (2), vivid (4), wild (2)                       |
 | `aperture`  | how tightly the camera sits| tight (2), frame (4), wide (2)                        |
 | `tint`      | how colour is assigned     | split (4), walk (3), stain (1.5)                      |
 | `ground`    | what it sits on            | void (6), dusk (1.5), paper (0.8)                     |
 | `cast`      | which palette casts it     | zander-spindle (6), diebenkorn-seawall (2), hopper-night-windows (1.5), cezanne-bathers (1.5), davis-anthracite-minuet (1), bruegel-icarus (1), from-flag (0) |
+| `medium`    | how the attractor develops | ember (1), wash (0)                                   |
+| `manner`    | wash character             | stain (1)                                             |
 
 ## Long-form curation (flock)
 
@@ -120,9 +122,13 @@ faint spherical adds equatorial arcs; at `dense` a second Julian branch
 and a low-weight heart needle join. Heart is never the primary map. A
 spherical *final* was tried and rejected. For open silk on a given
 seed, prefer `--estimator 2–4` and a modest gamma (~2.3); the default
-estimator 9 smooths cores but fills the gaps. `filament` drops the
-required symmetry. `bloom` / `spiral` / `fold` / `julia` are the other
-families.
+estimator 9 smooths cores but fills the gaps. `filament` / `bloom` /
+`spiral` / `fold` / `julia` are character families with **pooled**
+primary variations and variable symmetry — not one fixed recipe each.
+`chaos` is the Electric Sheep-shaped open space: 2–8 creative maps drawn
+from the full variation catalog, optional finals, random symmetry and
+sparse xaos. It carries the highest structure weight so flocks explore
+widely; pin `--structure spindle` when you want the Zander look.
 
 `split` on spindle pins Julian maps to the cool end and body maps to the
 warm end. Other structures still use order-based split (coolest on the
@@ -146,6 +152,17 @@ like the reference, because they do not contain cyan and gold.
 `void` is black and is the Apophysis look. `dusk` is a very dark mix of
 the palette's darkest swatch. `paper` is a light ground; the flame is
 then a drawing, not a nebula.
+
+## Medium: wash
+
+`--medium wash` develops the same histogram as pigment on paper instead of
+an emissive nebula. It is appended at weight 0, so no existing seed moves
+off ember. `--manner stain` (the only manner today) maps log-density to
+`paint.FlatWash` strength and mean colour to pigment: mottled pooling and
+paper tooth, no gleam, forced paper ground. `--wash-sat` (default 2.5)
+pushes pigment chroma so glazing on cream still reads; 1 is the raw
+histogram mean. Later manners (rimmed, pooled, charged) would resolve to
+ranges on the same measure; do not stamp radial pools along orbit points.
 
 ## Overrides
 

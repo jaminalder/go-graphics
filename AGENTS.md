@@ -59,7 +59,9 @@ samples per output pixel (preview and print share a camera); `--aa`
 multiplies that budget; `--oversample` (default 2) is the histogram
 resolution used for spatial AA; `--estimator` (default 9) is flam3
 density estimation after the log. Colour is a `cast` trait inside the
-output space. Curate with `staticart flock` (like→boost traits +
+output space. `--medium wash` develops the same measure as pigment on
+paper (`--manner stain` via FlatWash); weight 0 so ember stays the
+default. Curate with `staticart flock` (like→boost traits +
 neighbor seeds), not genome crossover — decision 60. **Never judge a
 flame at 600px.** First-look review renders are 1000×1000 at
 `--quality 80` (`make preview-flame`). Filaments and grain do not read

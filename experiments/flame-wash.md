@@ -5,7 +5,7 @@
   integration
 - Branch (next): `exp/flame-wash`
 - Worktree (next): `../worktrees/flame-wash`
-- Stage: second Develop path for the existing histogram — not a new IFS
+- Stage: stain Develop implemented — see `experiments/flame-wash-result.md`
 - Profile: `1000×1000` at `--quality 80` (same first-look rule as 016)
 - Fixed seeds: hero set from flock curation — `26`, `100029`, plus
   `1,2,3,5,8,13` for regression against ember
