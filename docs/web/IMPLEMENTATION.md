@@ -298,8 +298,16 @@ CPU/task/rootfs/capability/mount/port settings, rejected private paths and wrong
 Host, and kept browsing alive while renderer was stopped, then recovered after
 recreation. Rehearsal used Docker 29.7.1 / Compose 5.4.0 in Colima Linux arm64.
 Terraform format/validate passed without backend/cloud access. Full `make check` passed with fresh Go/linter caches (the old cache referenced
-a removed worktree). Release archive/smoke results are recorded below when completed.
+a removed worktree). Release archive/smoke results are recorded below.
 
 Target Ubuntu amd64 installation, real OOM/reboot, dual-stack forwarding policy,
 public TLS/renewal, state-lock/restore and measured second-machine recovery
 remain pending. No cloud resources, DNS or public release were changed.
+
+Release evidence: commit `995b48e763c5677d7f0ca6b088cb02ad0ab23619` built a
+Linux amd64 image archive; all SHA256 checksums passed. Its exact recorded image
+IDs passed `smoke-release.sh` (Caddy validation plus private web liveness and
+renderer readiness) in Colima under amd64 emulation. This is packaging/protocol
+evidence, not native VPS performance or TLS evidence. The pinned Go vulnerability
+checker reported no vulnerabilities. The `art-local` Compose project remains
+available at http://localhost:8088 for the first learning exercise.
