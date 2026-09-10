@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jaminalder/go-graphics/internal/logging"
 	"github.com/jaminalder/go-graphics/internal/renderjob"
 	"github.com/jaminalder/go-graphics/internal/studio"
 	"github.com/jaminalder/go-graphics/internal/web"
@@ -22,6 +23,12 @@ import (
 var build = "development"
 
 func main() {
+	logger, err := logging.New("artweb", os.Getenv("ART_LOG_LEVEL"), os.Stderr)
+	if err != nil {
+		slog.Error("logging configuration failed", "error", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(logger)
 	if err := run(); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
@@ -59,7 +66,7 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384, BaseContext: func(net.Listener) context.Context { return ctx }}
+	srv := &http.Server{Addr: addr, Handler: logging.HTTP(slog.Default(), handler), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384, BaseContext: func(net.Listener) context.Context { return ctx }}
 	admin := &http.Server{Addr: env("ART_ADMIN_ADDR", "127.0.0.1:8081"), ReadHeaderTimeout: 3 * time.Second, WriteTimeout: 5 * time.Second}
 	adminHost, _, err := net.SplitHostPort(admin.Addr)
 	if err != nil {
@@ -82,7 +89,7 @@ func run() error {
 		}
 		w.WriteHeader(204)
 	})
-	admin.Handler = mux
+	admin.Handler = logging.HTTP(slog.Default(), mux)
 	go func() {
 		if err := admin.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("admin listener failed", "error", err)

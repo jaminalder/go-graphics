@@ -30,6 +30,44 @@ uses pinned Playwright, and verifies real enhancement and no-JavaScript forms.
 Ordinary image files are the sharing contract; no durable
 links, user accounts, database, image uploads or public API are offered.
 
+## Reading application logs
+
+Both executables write structured text logs to stderr, tagged `service=artweb`
+or `service=artrender`. The default level is `info`. Normal page navigation and
+POST actions produce one incoming HTTP completion with method, route pattern,
+status, elapsed milliseconds and bytes. Paths omit exploration/sample IDs,
+queries and arbitrary URL text; request bodies, cookies and headers are not logged.
+
+Successful health/metrics probes, polling, asset loads and preview image loads
+are debug-only, so the normal output stays readable. Failed requests remain
+visible. To include every HTTP completion locally, start either process with:
+
+```sh
+ART_LOG_LEVEL=debug out/artweb
+ART_LOG_LEVEL=debug out/artrender
+```
+
+The accepted levels are `debug`, `info`, `warn` and `error`; an invalid setting
+fails startup. In production, set the variable in the service environment or a
+systemd override, then restart that service. View both services together with:
+
+```sh
+journalctl -u artweb -u artrender -f -o cat
+```
+
+Render start/completion records carry `job`, `artwork` and `tier`, with queue
+wait, elapsed time and output bytes where relevant. The same job key appears
+in the web process's outgoing renderer-call record and the renderer's child
+execution records. Search one `job=` value to follow a slow or failed image.
+An HTTP status of `0` means no response arrived (or a handler aborted before
+sending headers); it is not a status returned to the visitor. A 200 renderer
+response may still have an error if its body is truncated or release mismatched.
+
+Timeout, cancellation, output-limit and child-exit errors are recorded without
+copying child stderr or protocol bodies into logs. No per-pixel or per-progress
+messages are emitted. Journald retention remains bounded by the deployed host
+configuration; use debug temporarily when investigating noisy request traffic.
+
 ## Pinned deployment and configuration
 
 Target: Ubuntu 24.04, Linux amd64, Go 1.26.8, Caddy 2.11.4, Terraform 1.14.9,
@@ -86,7 +124,7 @@ configuration evidence; remote resource creation remains untested.
 ## Private operation and failure handling
 
 - `GET http://127.0.0.1:8081/metrics`: bounded queue/running/cache file/byte counts.
-  Render completion logs include a correlation key, state, duration and bytes;
+  HTTP and render logs include safe route patterns, status, correlation keys, duration and bytes;
   no cookies, CSRF values, addresses or raw recipes are logged.
 - `GET /ready` on the private listener checks compatible renderer availability
   without making an image. Public gallery liveness stays independent of a

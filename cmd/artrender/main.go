@@ -4,7 +4,7 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -12,14 +12,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jaminalder/go-graphics/internal/logging"
 	"github.com/jaminalder/go-graphics/internal/renderjob"
 )
 
 var build = "development"
 
 func main() {
+	logger, err := logging.New("artrender", os.Getenv("ART_LOG_LEVEL"), os.Stderr)
+	if err != nil {
+		slog.Error("logging configuration failed", "error", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(logger)
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		slog.Error("renderer stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -59,7 +66,7 @@ func run() error {
 	s := &renderjob.Supervisor{Executable: exe, Build: build}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	srv := &http.Server{BaseContext: func(net.Listener) context.Context { return ctx }, Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 4096}
+	srv := &http.Server{BaseContext: func(net.Listener) context.Context { return ctx }, Handler: logging.HTTP(slog.Default(), s.Handler()), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 4096}
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -68,6 +75,7 @@ func run() error {
 		defer cancel()
 		_ = srv.Shutdown(closeCtx)
 	}()
+	slog.Info("renderer listening", "socket", socket, "build", build)
 	err = srv.Serve(l)
 	if errors.Is(err, http.ErrServerClosed) {
 		<-shutdownDone

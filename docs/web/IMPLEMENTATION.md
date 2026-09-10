@@ -18,6 +18,35 @@ dedicated sibling worktree. Do not integrate or publish without approval.
 - Test seams agreed in the approved plan: recipes/configuration, exploration,
   HTTP journeys, admission/artifact lifecycle and renderer protocol.
 
+## Operational logging (2026-09-10)
+
+Both services now use service-tagged stdlib `slog` records on stderr. Incoming
+HTTP completions report route patterns, method, status, elapsed time and bytes;
+successful probes/polling/assets/previews are debug-only. `ART_LOG_LEVEL=debug`
+reveals them when needed. Errors remain visible without recording raw queries,
+request bodies, headers or workspace/sample capabilities.
+
+Renderer calls report operation, returned status, duration and failure, with
+the canonical job key shared by queue lifecycle and child execution logs.
+Render start/completion includes artwork and tier; failures distinguish missing
+services, build mismatch, truncated output, deadlines, cancellation and bounded
+output overflow. Child stderr remains discarded. Logging occurs outside the
+manager mutex, and the child PNG stdout protocol remains unchanged.
+
+Focused tests cover final HTTP status (including implicit 200, 303, 304, 4xx,
+5xx and informational headers), streaming, aborted handlers, redaction/noise
+levels, real Unix-socket client outcomes and healthy/unavailable probes.
+The local/deployment runbook documents log levels and `journalctl` use.
+
+Verification: `make check` passed with zero lint issues; targeted logging and
+renderjob race checks passed, including the real-socket outcome tests. An
+isolated Chromium/services smoke generated four real Iris previews and verified
+600 px PNG delivery and matching job keys in both service logs. Stopping only
+that smoke renderer produced an outgoing health failure and incoming readiness
+503. A hostile URL/query was absent from logs, and healthy probes stayed quiet.
+Example logs and the verified PNG remain under `out/observability/`; smoke
+services were shut down without touching manual preview services.
+
 ## Site identity (2026-09-10)
 
 The owner selected **Singular Seed** and **`singularseed.art`**. The site

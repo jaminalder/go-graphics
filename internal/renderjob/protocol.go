@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os/exec"
@@ -54,7 +55,7 @@ type (
 )
 
 // Render validates input, then kills and reaps a child on deadline or output overflow.
-func (s *Supervisor) Render(ctx context.Context, q Request, w io.Writer) error {
+func (s *Supervisor) Render(ctx context.Context, q Request, w io.Writer) (err error) {
 	if err := q.Validate(s.Build); err != nil {
 		return err
 	}
@@ -62,6 +63,18 @@ func (s *Supervisor) Render(ctx context.Context, q Request, w io.Writer) error {
 		return errors.New("renderer busy")
 	}
 	defer s.active.Store(false)
+	started := time.Now()
+	attrs := requestLogAttrs(q)
+	slog.InfoContext(ctx, "renderer started", attrs...)
+	defer func() {
+		level := slog.LevelInfo
+		attrs = append(attrs, "elapsed_ms", time.Since(started).Milliseconds())
+		if err != nil {
+			level = slog.LevelError
+			attrs = append(attrs, "error", err)
+		}
+		slog.Log(ctx, level, "renderer finished", attrs...)
+	}()
 	timeout := 15 * time.Second
 	if q.Tier == "download" {
 		timeout = 30 * time.Second
@@ -75,19 +88,30 @@ func (s *Supervisor) Render(ctx context.Context, q Request, w io.Writer) error {
 	cmd := exec.CommandContext(ctx, s.Executable, "--child")
 	cmd.Stdin = bytes.NewReader(data)
 	cmd.WaitDelay = time.Second
-	cmd.Stdout = &limitWriter{w: w, left: MaxImage, cancel: cancel}
-	cmd.Stderr = &limitWriter{w: io.Discard, left: 8192, cancel: cancel}
-	return cmd.Run()
+	stdout := &limitWriter{w: w, left: MaxImage, cancel: cancel}
+	stderr := &limitWriter{w: io.Discard, left: 8192, cancel: cancel}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err = cmd.Run()
+	if stdout.exceeded || stderr.exceeded {
+		return errors.New("renderer output exceeded limit")
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 type limitWriter struct {
-	w      io.Writer
-	left   int64
-	cancel context.CancelFunc
+	w        io.Writer
+	left     int64
+	cancel   context.CancelFunc
+	exceeded bool
 }
 
 func (w *limitWriter) Write(p []byte) (int, error) {
 	if int64(len(p)) > w.left {
+		w.exceeded = true
 		w.cancel()
 		return 0, errors.New("renderer output exceeded limit")
 	}
@@ -168,7 +192,19 @@ func NewClient(socket, build string) *Client {
 }
 
 // Render returns only complete successful output from the matching renderer release.
-func (c *Client) Render(ctx context.Context, q Request, w io.Writer) error {
+func (c *Client) Render(ctx context.Context, q Request, w io.Writer) (err error) {
+	started := time.Now()
+	status := 0
+	var size int64
+	defer func() {
+		attrs := append(requestLogAttrs(q), "direction", "outgoing", "operation", "render", "status", status, "elapsed_ms", time.Since(started).Milliseconds(), "bytes", size)
+		level := slog.LevelInfo
+		if err != nil {
+			level = slog.LevelError
+			attrs = append(attrs, "error", err)
+		}
+		slog.Log(ctx, level, "renderer request completed", attrs...)
+	}()
 	if err := q.Validate(c.Build); err != nil {
 		return err
 	}
@@ -186,26 +222,65 @@ func (c *Client) Render(ctx context.Context, q Request, w io.Writer) error {
 		return err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 || res.Header.Get("X-Renderer-Build") != c.Build {
-		return errors.New("renderer unavailable or incompatible")
+	status = res.StatusCode
+	if status != 200 {
+		return errors.New("renderer returned unsuccessful status")
 	}
-	n, err := io.Copy(w, io.LimitReader(res.Body, MaxImage+1))
-	if n > MaxImage {
+	if res.Header.Get("X-Renderer-Build") != c.Build {
+		return errors.New("renderer release mismatch")
+	}
+	size, err = io.Copy(w, io.LimitReader(res.Body, MaxImage+1))
+	if size > MaxImage {
 		return errors.New("oversized renderer output")
 	}
 	return err
 }
 
 // Health checks availability without producing an image.
-func (c *Client) Health(ctx context.Context) bool {
+func (c *Client) Health(ctx context.Context) (healthy bool) {
+	started := time.Now()
+	status := 0
+	var failure error
+	defer func() {
+		level := slog.LevelDebug
+		attrs := []any{"direction", "outgoing", "operation", "health", "status", status, "elapsed_ms", time.Since(started).Milliseconds()}
+		if !healthy {
+			level = slog.LevelWarn
+			attrs = append(attrs, "error", failure)
+		}
+		slog.Log(ctx, level, "renderer request completed", attrs...)
+	}()
 	r, err := http.NewRequestWithContext(ctx, "GET", "http://renderer/health", nil)
 	if err != nil {
+		failure = err
 		return false
 	}
 	res, err := c.http.Do(r)
 	if err != nil {
+		failure = err
 		return false
 	}
 	defer res.Body.Close()
-	return res.StatusCode == 204 && res.Header.Get("X-Renderer-Build") == c.Build
+	status = res.StatusCode
+	if status != 204 {
+		failure = errors.New("renderer health returned unsuccessful status")
+		return false
+	}
+	if res.Header.Get("X-Renderer-Build") != c.Build {
+		failure = errors.New("renderer release mismatch")
+		return false
+	}
+	return true
+}
+
+func requestLogAttrs(q Request) []any {
+	r, err := publish.Validate(q.Recipe)
+	if err != nil {
+		return nil
+	}
+	tier, err := publish.Tier(r.ID(), q.Tier)
+	if err != nil {
+		return nil
+	}
+	return []any{"job", r.Key(tier, q.Build), "artwork", r.ID(), "tier", q.Tier}
 }

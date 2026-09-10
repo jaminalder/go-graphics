@@ -40,6 +40,7 @@ internal/publish/              explicit public catalogue and choice mappings
 internal/studio/               exploration commands and ephemeral workspaces
 internal/renderjob/            admission, queue, lifecycle, artifacts, renderer adapter
 internal/web/                  handlers, view models, templates, embedded assets
+internal/logging/              service-tagged slog setup and safe HTTP completion records
 internal/sketch/<name>/        existing art policy + typed config where promoted
 internal/{render,paint,...}/   existing mechanisms
 web/catalog/                  reviewed example manifest and deliberate public assets

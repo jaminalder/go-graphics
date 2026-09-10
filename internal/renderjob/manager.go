@@ -334,6 +334,8 @@ func (m *Manager) work() {
 			j.cancel = cancel
 			m.mu.Unlock()
 			started := time.Now()
+			attrs := requestLogAttrs(j.request)
+			slog.InfoContext(ctx, "render started", append(attrs, "queue_wait_ms", time.Since(j.created).Milliseconds())...)
 			data, err := m.execute(ctx, j.request)
 			if ctx.Err() != nil {
 				err = ctx.Err()
@@ -350,8 +352,15 @@ func (m *Manager) work() {
 					j.state = "ready"
 				}
 			}
-			slog.Info("render finished", "job", id, "state", j.state, "elapsed_ms", time.Since(started).Milliseconds(), "bytes", len(data))
+			state := j.state
 			m.mu.Unlock()
+			attrs = append(attrs, "state", state, "elapsed_ms", time.Since(started).Milliseconds(), "bytes", len(data))
+			level := slog.LevelInfo
+			if err != nil {
+				level = slog.LevelError
+				attrs = append(attrs, "error", err)
+			}
+			slog.Log(ctx, level, "render finished", attrs...)
 			if m.ctx.Err() != nil {
 				return
 			}
