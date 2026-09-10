@@ -15,10 +15,14 @@ The application still runs on one VPS with one admission queue.
 | Releases | checksummed image archive + smoke/drain/activate/rollback scripts |
 | Visibility | bounded Docker logs, host journald, private metrics, external HTTPS check |
 
+Begin with the [visual atlas](index.html) and its request, build and release
+lessons; use this plan for the longer operational labs.
+
 Do each exercise as: predict, run, inspect, explain. Answer the matching
 [questions](QUESTIONS.md) and write a learning record when an observation changes
-your understanding. Learning can run on `master` in this session. No exercise
-authorizes cloud spending, DNS or publication.
+your understanding. Keep learning artifacts in `docs/learning/infra/` and follow
+the repository’s current worktree workflow for edits. No exercise authorizes cloud spending, DNS
+or publication.
 
 ## Stage 1 — one containerized server you can recover
 

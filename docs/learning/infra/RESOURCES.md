@@ -102,3 +102,22 @@ repository's `deploy/` files.
 - Compose replacement does not preserve the in-memory queue/workspaces.
   Stage 2 must prove admission and state behavior rather than copying a
   stateless rolling-deployment tutorial.
+
+## Sources used by the visual atlas
+
+Reviewed 2026-09-10. The atlas links each lesson to its runtime source as well
+as one primary reading. Repository snapshot: `b3e4a81`; operational status comes
+from `docs/web/IMPLEMENTATION.md` and `docs/web/launch-gates.md`, not a live probe.
+
+- [Docker: multi-stage builds](https://docs.docker.com/build/building/multi-stage/)
+  Lesson 02: copying compiled outputs into the final image without the compiler.
+- [Docker: Compose networking](https://docs.docker.com/compose/how-tos/networking/)
+  Lesson 01: internal service addressing versus published host ports.
+- [Docker: volumes](https://docs.docker.com/engine/storage/volumes/)
+  Lesson 03: storage lifecycle and independent backup/restore.
+- [Terraform: state](https://developer.hashicorp.com/terraform/language/state)
+  Lesson 03: mapping managed cloud objects, distinct from application memory.
+
+The source-to-file map is in [the field guide](reference/field-guide.html#find).
+Keep future lesson resources near the claims they support. The existing community
+list is for operator experience once a specific question survives source reading.

@@ -1,5 +1,15 @@
 # Learning track: operate Singular Seed with Docker Compose
 
+**Start with the [visual learning atlas](index.html).** Open it in a browser for
+interactive SVG system maps, three short lessons, a staged roadmap and a
+searchable [field guide](reference/field-guide.html). No build or server is needed.
+Keep `assets/` next to the HTML; source links rely on this checkout’s layout.
+
+The atlas assumes familiarity with Docker/Linux/CI basics and focuses on how
+this application fits together. Its status is a dated source snapshot, not live
+monitoring. Browser practice notes are optional, exportable self-assessments;
+opening pages never records mastery or clears launch gates.
+
 The owner chose Docker Compose on 2026-09-10. Learn by operating this
 application on one inexpensive Hetzner VPS. The runtime files now live in
 `deploy/` on `master`; older worktree-only references are historical.
