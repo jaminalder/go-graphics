@@ -316,6 +316,49 @@ func (s *Store) Choices(token, id string, revision int, style, colour string) er
 	return nil
 }
 
+// Retry repeats an unavailable batch's direction, including its similarity
+// parent, while retaining the original action's ownership and replay checks.
+func (s *Store) Retry(token, id string, revision int, actionID, batchID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	x, err := s.find(token, id)
+	if err != nil {
+		return "", err
+	}
+	var batch *Batch
+	for i := range x.view.Batches {
+		if x.view.Batches[i].ID == batchID {
+			batch = &x.view.Batches[i]
+			break
+		}
+	}
+	if batch == nil {
+		return "", ErrExpired
+	}
+	var parent []string
+	if batch.Parent != "" {
+		parent = []string{batch.Parent}
+	}
+	// A successful retry is no longer the latest batch. Replay its exact request
+	// before applying checks intended only for a new admission.
+	for _, action := range x.actions {
+		if action.id == actionID {
+			return s.generate(token, id, revision, actionID, parent, false)
+		}
+	}
+	if revision != x.view.Revision || x.view.Batches[len(x.view.Batches)-1].ID != batchID {
+		return "", ErrConflict
+	}
+	for _, sample := range s.snapshot(token, x).Samples {
+		for _, sampleID := range batch.Samples {
+			if sample.ID == sampleID && (sample.Status.State == "ready" || sample.Status.State == "running" || sample.Status.State == "queued") {
+				return "", errors.New("these images are still available or being made")
+			}
+		}
+	}
+	return s.generate(token, id, revision, actionID, parent, false)
+}
+
 // Generate performs idempotent four-sample admission without holding an HTTP request open.
 func (s *Store) Generate(token, id string, revision int, actionID string, selected []string, different bool) (string, error) {
 	s.mu.Lock()

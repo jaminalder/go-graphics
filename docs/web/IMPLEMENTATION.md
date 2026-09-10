@@ -51,6 +51,10 @@ Verification for this revision:
   real 1200 px download, delayed prepared native sharing with active user gesture,
   blocked localStorage, no-JavaScript progress/download, and mobile cross-artwork
   favourites with no horizontal overflow.
+- Final review also covered an all-four renderer failure during similarity:
+  the failure-only retry now carries its batch identity and retains the original
+  parent, with owned-batch validation and idempotent replay. Ready batches are
+  rejected as failure retries.
 - Studio tests defend one-batch admission on replay, one-parent trait/palette
   preservation, repeated play beyond four entries, retained favourites, ownership,
   and failed-admission rollback; HTTP tests defend the shared generation quota.

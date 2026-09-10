@@ -494,7 +494,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	case "choices":
 		allowed = a.allowed(r, "revision", "style", "colour")
 	case "batches":
-		allowed = a.allowed(r, "revision", "action")
+		allowed = a.allowed(r, "revision", "action", "batch")
 	case "similar":
 		allowed = a.allowed(r, "revision", "action", "sample")
 	case "favourites":
@@ -518,7 +518,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	case "choices":
 		e = a.cfg.Studio.Choices(session.Token, id, revision, r.PostForm.Get("style"), r.PostForm.Get("colour"))
 	case "batches":
-		_, e = a.cfg.Studio.Generate(session.Token, id, revision, r.PostForm.Get("action"), nil, false)
+		_, e = a.cfg.Studio.Retry(session.Token, id, revision, r.PostForm.Get("action"), r.PostForm.Get("batch"))
 	case "similar":
 		_, e = a.cfg.Studio.Generate(session.Token, id, revision, r.PostForm.Get("action"), []string{r.PostForm.Get("sample")}, false)
 	case "favourites":

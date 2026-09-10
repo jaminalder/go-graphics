@@ -2,10 +2,12 @@ package studio_test
 
 import (
 	"context"
+	"errors"
 	"image"
 	"image/png"
 	"io"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -139,5 +141,74 @@ func TestSimilarityUsesOneUnfavouritedImageAndKeepsItsVisualFamily(t *testing.T)
 	}
 	if _, err := store.Generate(w.Token, id, latest.Revision, studio.Token(), []string{studio.Token()}, false); err == nil {
 		t.Fatal("accepted an unowned parent")
+	}
+}
+
+type failingRenderer struct{ fail atomic.Bool }
+
+func (r *failingRenderer) Render(ctx context.Context, q renderjob.Request, w io.Writer) error {
+	if r.fail.Load() {
+		return errors.New("render failed")
+	}
+	return (blankRenderer{}).Render(ctx, q, w)
+}
+
+// TestRetryKeepsTheFailedSimilarityParent prevents a temporary renderer failure
+// from silently replacing the chosen visual family with base-space samples.
+func TestRetryKeepsTheFailedSimilarityParent(t *testing.T) {
+	renderer := &failingRenderer{}
+	jobs, err := renderjob.New(renderjob.Config{Directory: t.TempDir(), Build: "test", Renderer: renderer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(jobs.Close)
+	store := studio.New(jobs, "test")
+	workspace, _ := store.Create()
+	id, err := store.Enter(workspace.Token, "iris", "layered", "tchelitchew-hide-and-seek", studio.Token())
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := completed(t, store, workspace.Token, id)
+	parent := initial.Samples[0]
+	renderer.fail.Store(true)
+	failedID, err := store.Generate(workspace.Token, id, initial.Revision, studio.Token(), []string{parent.ID}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed := completed(t, store, workspace.Token, id)
+	for _, sample := range failed.Samples[4:] {
+		if sample.Status.State != "failed" {
+			t.Fatal("expected the renderer failure")
+		}
+	}
+	renderer.fail.Store(false)
+	action := studio.Token()
+	if _, err := store.Retry("another workspace", id, failed.Revision, action, failedID); err == nil {
+		t.Fatal("accepted an unowned retry")
+	}
+	if _, err := store.Retry(workspace.Token, id, failed.Revision, action, studio.Token()); err == nil {
+		t.Fatal("accepted an unknown batch")
+	}
+	retryID, err := store.Retry(workspace.Token, id, failed.Revision, action, failedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay, err := store.Retry(workspace.Token, id, failed.Revision, action, failedID); err != nil || replay != retryID {
+		t.Fatal("retry was not idempotent", err)
+	}
+	retried := completed(t, store, workspace.Token, id)
+	if len(retried.Batches) != 3 || len(retried.Samples) != 12 {
+		t.Fatal("retry admitted more than four images")
+	}
+	if retried.Batches[2].Parent != parent.ID {
+		t.Fatal("retry forgot the parent")
+	}
+	for _, sample := range retried.Samples[8:] {
+		if sample.Status.State != "ready" || sample.Recipe.Palette() != parent.Recipe.Palette() || !reflect.DeepEqual(sample.Recipe.Traits(), parent.Recipe.Traits()) {
+			t.Fatal("retry left the parent's visual family")
+		}
+	}
+	if _, err := store.Retry(workspace.Token, id, retried.Revision, studio.Token(), retryID); err == nil {
+		t.Fatal("ready batch was offered as a failure retry")
 	}
 }
