@@ -2,7 +2,9 @@
 
 Implementation approval authorizes local development. It does not approve
 publication, licences, cloud expenditure, DNS changes or final artistic choices.
-No public site has been provisioned or deployed by this implementation.
+No public site has been provisioned or deployed by this implementation. The
+selected target is now CAX11 ARM64 in nbg1; earlier amd64 release checks do not
+constitute verification of that host.
 
 | Gate | Local evidence / required next evidence |
 |---|---|

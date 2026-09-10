@@ -1,8 +1,9 @@
 # Operating Singular Seed with Docker Compose
 
 The chosen public domain is `singularseed.art`. The runtime is one Ubuntu VPS
-with three Compose services: Caddy, `web` (`artweb`), and `renderer`
-(`artrender`). The owner selected Compose on 2026-09-10; see
+on a CAX11 in Nuremberg (`nbg1`), with three Compose services: Caddy, `web`
+(`artweb`), and `renderer` (`artrender`). The owner selected Compose and a CAX11
+ARM64 target on 2026-09-10; see
 [ADR 0004](../docs/adr/0004-compose-runtime.md). Cloud provisioning, DNS and
 public launch remain separate owner actions. No live host is claimed here.
 
@@ -79,10 +80,12 @@ on the target: a healthy laptop rehearsal cannot establish VPS capacity.
 
 1. Follow [Terraform state and lifecycle](terraform/README.md): independent
    encrypted/versioned backend, two-client locking and recovery proof, then a
-   saved plan reviewed before an approved apply. Choose administrator IPv4/IPv6
-   CIDRs, spending ceiling and a staging hostname. Never put tokens in tfvars,
-   cloud-init, release archives or the app containers.
-2. Cloud-init prepares Ubuntu 24.04 amd64. Run `scripts/bootstrap-host.sh` as
+   saved plan reviewed before an approved apply. Supply `TF_VAR_hcloud_token`;
+   the SSH public key defaults to
+   `~/.ssh/id_ed25519.pub` and is registered as `macbook-key`. Choose administrator
+   IPv4/IPv6 CIDRs, spending ceiling and a staging hostname. Never put tokens
+   in tfvars, cloud-init, release archives or the app containers.
+2. Cloud-init prepares Ubuntu 24.04 arm64. Run `scripts/bootstrap-host.sh` as
    root there to install pinned Docker packages. It does not launch the app,
    enable UFW, change DNS or create approval records. Host systemd supervises
    Docker; there are no host `artweb`/`artrender` units or host Caddy install.
@@ -119,7 +122,7 @@ From a clean committed checkout:
 deploy/scripts/build-release.sh
 ```
 
-This builds Linux amd64 images and writes `out/releases/<full-commit>/` with
+This builds Linux arm64 images and writes `out/releases/<full-commit>/` with
 `images.tar`, immutable image IDs in `images.env`, versioned deployment files,
 source/tool/edition manifest, catalogue and SHA256 checksums. No registry is
 required: upload the complete directory over the operator's SSH connection to
@@ -199,5 +202,5 @@ machine, recover backend access/state, rebuild an approved host, install Docker,
 restore operator files and TLS volumes, load a retained release and activate it.
 Review IP/DNS lifecycle, verify HTTPS, render and download an image, reboot and
 check again. Record operator, elapsed time, state version, image IDs, release and
-gaps. Linux amd64 OOM, reboot, dual-stack firewall, live TLS/renewal, state locking
+gaps. Linux arm64 OOM, reboot, dual-stack firewall, live TLS/renewal, state locking
 and clean-host restore remain target-host launch gates.
