@@ -1,0 +1,8 @@
+bucket       = "OWNER-SELECTED-PRIVATE-STATE-BUCKET"
+key          = "singular-seed/staging.tfstate"
+region       = "OWNER-SELECTED-REGION"
+encrypt      = true
+use_lockfile = true
+# Credentials come from AWS_PROFILE/environment, never this file.
+# Use an independently bootstrapped encrypted/versioned backend.
+# Do not disable locking to work around an S3-compatible provider failure.

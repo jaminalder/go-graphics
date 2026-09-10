@@ -40,6 +40,7 @@ internal/publish/              explicit public catalogue and choice mappings
 internal/studio/               exploration commands and ephemeral workspaces
 internal/renderjob/            admission, queue, lifecycle, artifacts, renderer adapter
 internal/web/                  handlers, view models, templates, embedded assets
+internal/logging/              service-tagged slog setup and safe HTTP completion records
 internal/sketch/<name>/        existing art policy + typed config where promoted
 internal/{render,paint,...}/   existing mechanisms
 web/catalog/                  reviewed example manifest and deliberate public assets
@@ -204,17 +205,22 @@ candidates, no duplicates, parent representation, bounded retries and safe
 handling of empty/invalid favourites. Compare CLI manifest and pixel output
 for fixed existing cases before and after extraction.
 
+The 2026-09-10 interaction revision holds a chosen sample's complete traits
+and palette while generating all four new compositions. The existing planner
+receives those traits as explicit pins; its CLI ratios and default public
+sampling remain unchanged. The sample also records its original human-facing
+style and colour choices for navigation. See [the current product brief](product-and-ux.md).
+
 ## 5. State without a database
 
-Recommend a small server-side workspace with an opaque cookie, plus optional
-browser recovery. A workspace is transient navigation state, not an account.
+Use a small server-side workspace with an opaque cookie. A workspace is transient navigation state, not an account.
 The cookie grants access to that workspace and is still a capability worth
 protecting. Generate it securely; set `Secure`, `HttpOnly`, `SameSite=Lax`,
 `Path=/`, no Domain, and use a `__Host-` name on HTTPS.
 
 Create server state lazily on an explicit interaction, not for every anonymous
 gallery GET. Proposed initial bounds are 30 minutes idle / 24 hours absolute,
-24 favourites, four selected parents, eight recent batches, 1000 live
+24 favourites, one selected parent, eight recent batches, 1000 live
 workspaces and a separate total-byte ceiling. These are configurable starting
 points to validate against the host memory budget. All maps, limiter entries,
 subscriptions, polling metadata and idempotency records need bounds too.
@@ -225,25 +231,23 @@ submission returns a conflict/reload state, not a silent overwrite; idempotent
 retries of the same action return the existing batch. Protect cookie-bound
 mutations with CSRF checks/token validation.
 
-Browser recovery stores only a bounded versioned set of selected recipe
-records, favourites and navigation hints in localStorage. No cookies, image
-bytes or secret keys are stored there. It is not an authority: restoration
-POSTs pass through the same strict public validation and admission rules.
-If storage is blocked/full, the active server workspace continues and the UI
-offers an optional small recipe export. Imported/exported recipe files, if
-implemented, are size-limited data, never executable code or image uploads.
+The current UI keeps favourites only in the server workspace; it does not
+access localStorage or expose export/restore/clear controls. The earlier
+strictly validated recovery endpoints remain compatibility mechanisms, not
+part of the visitor journey. No persistence beyond the workspace is promised.
+Downloaded files remain independent of application state.
 
-Do not write browser state on every render-progress tick. Save explicit
-choices/favourites through a small external script, expose “Clear this device”,
-and handle schema upgrades, expired workspaces and another tab's changes.
-Without JavaScript the current workspace remains functional, but persistence
-after expiry/restart is not promised. State this plainly in the favourites UI.
+Initial creation is atomic and idempotent within the workspace. Re-entering
+an art form reuses its bounded exploration, preserves favourites and retains
+recent links. Failed admission restores the previous direction and removes a
+new empty exploration. Initial creation, similarity and download share the
+same generation quota (burst three, sustained 12/IP and 6/workspace per minute).
 
 | State | Location | Loss/recovery behaviour |
 |---|---|---|
 | Catalogue, recipes for examples, assets | Versioned release/Git | Rebuild from repository and release artifact |
-| Workspace and jobs | Bounded web-process memory | Restart loses active work; restore allowed recipes from browser/export |
-| Favourite recovery | This browser, bounded | No cross-device sync; deletion/private browsing can remove it |
+| Workspace and jobs | Bounded web-process memory | Restart loses active work and favourites |
+| Favourites | Bounded workspace memory | Explicitly downloaded images survive expiry/restart |
 | Generated images | Bounded disk cache | Evictable; regenerate only after a new admitted POST |
 | Downloaded image | Visitor's device | Independent of server lifecycle |
 | Infrastructure state, TLS, secrets | Operator-controlled storage | Separate backup/recovery responsibilities |
@@ -354,16 +358,16 @@ Keep route design navigable and mostly resource-oriented:
 |---|---|
 | `GET /` | Gallery and pre-rendered examples; no job creation |
 | `GET /art/{slug}` | Artwork introduction and visual choices |
-| `POST /explorations` | Create bounded workspace/exploration |
-| `GET /explorations/{id}` | Complete studio page for its visitor |
-| `POST /explorations/{id}/choices` | Validate/set choices with revision protection |
-| `POST /explorations/{id}/batches` | Initial generation or refinement, idempotent admission |
-| `POST /explorations/{id}/favourites` | Add/remove an existing sample, bounded |
-| `POST /batches/{id}/cancel` | Remove visitor's interest; preserve completed samples |
-| `GET /batches/{id}` | Cheap status and completed samples; complete page |
-| `GET /fragments/batches/{id}` | Corresponding htmx fragment only |
-| `GET /samples/{id}` | Sample page scoped to workspace in the baseline |
-| `POST /samples/{id}/download-rendition` | Admit a higher-quality low-res rendition if needed |
+| `POST /explorations` | Atomically enter and admit the first four images |
+| `GET /explorations/{id}` | Current four images and compact selected directions |
+| `POST /explorations/{id}/batches` | Explicit failed-batch retry, idempotent admission |
+| `POST /explorations/{id}/similar` | Four fresh compositions from one owned image |
+| `POST /explorations/{id}/favourites` | Add/remove one sample and preserve originating view |
+| `GET /favourites` | Kept images across all art forms |
+| `GET /explorations/{id}/samples/{sample}` | One owned image and its actions |
+| `GET /fragments/explorations/{id}` | Corresponding active grid fragment |
+| `GET /fragments/explorations/{id}/samples/{sample}` | Corresponding active detail fragment |
+| `POST /explorations/{id}/download` | Admit the 1200 px rendition if needed |
 | `GET /images/{key}` / `GET /downloads/{key}` | Existing bytes only; no regeneration |
 
 These are implementation starting points, not an external API promise. Prefer

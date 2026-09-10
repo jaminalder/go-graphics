@@ -1,0 +1,4 @@
+name = "singular-seed-staging"
+location = "nbg1"
+admin_cidrs = ["192.0.2.10/32", "2001:db8::10/128"]
+ssh_public_key = "ssh-ed25519 REPLACE_WITH_OWNER_PUBLIC_KEY"

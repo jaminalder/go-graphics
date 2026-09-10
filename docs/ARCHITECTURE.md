@@ -5,10 +5,10 @@ Read this before changing package structure or adding cross-cutting features.
 For day-to-day agent workflow (commands, conventions, how to add things), see
 [../CLAUDE.md](../CLAUDE.md).
 
-The proposed public application extension is documented in
+The public application extension is documented in
 [web/README.md](web/README.md) (2026-09-09). It preserves the local laboratory
 and the artwork internals described here. Its product/runtime architecture is
-planned, not implemented; shared domain terms are in [../CONTEXT.md](../CONTEXT.md).
+implemented locally with pending public launch gates; shared domain terms are in [../CONTEXT.md](../CONTEXT.md).
 
 ## 1. Vision & scope
 
@@ -518,3 +518,41 @@ renumbering earlier duplicate entries.
 7. Possible later: more IFS looks on the same `internal/flame` mechanism,
    tilings, SVG export, gallery index generator. Sketch 016 is the first
    fractal flame.
+
+### 61. Published recipes and bounded exploration (2026-09-09)
+
+The public application uses explicit factory definitions in `internal/artwork`,
+immutable canonical edition recipes, and concrete pointer-valued configuration
+owned by pools, foam and iris. CLI and typed adapters share the existing opt
+and trait validators; omitted overrides retain their meaning. Numeric defaults
+and named artistic streams are fixed by an edition's retained renderer release.
+The serialized recipe records resolved traits, effective palette and override
+presence; no public preset name is needed to execute it. `internal/publish`
+restricts public recipes further, forbidding numeric overrides and experimental
+materials. `internal/explore` owns pure local/public candidate planning.
+No third-party Go dependency is introduced. Published edition 1 is provisional
+until Linux compatibility, provenance and owner review pass.
+
+### 62. Patch the published runtime toolchain (2026-09-09)
+
+The HTTP/template path makes six existing Go 1.26.5 standard-library advisories
+reachable according to govulncheck. Pin Go 1.26.8, the current supported patch
+in the existing minor line, for the module and release CI. Do not suppress
+vulnerability results to preserve the workstation's older toolchain. Keep
+artistic edition compatibility guarded by fixed-pixel and existing golden tests.
+Source: https://go.dev/dl/ and the Go vulnerability database, including
+https://pkg.go.dev/vuln/GO-2026-6091 .
+
+### 63. One image guides public similarity (2026-09-10)
+
+The owner simplified the public journey to direction choice, four images, and
+one image with download/share/similarity actions. The chosen sample supplies
+its complete permitted traits and palette to all four fresh composition seeds.
+Favouriting is independent; there is no multi-parent selection or unrelated
+base candidate in this action. This makes “Generate similar ones” predictable
+while preserving the CLI flock policy and shared planner's existing defaults.
+Samples retain their original direction labels. Re-entering an art form reuses
+bounded navigation and preserves favourites; initial admission is atomic and
+idempotent, and failures leave prior directions unchanged. The interface uses
+server-side favourites without browser recovery controls. Full rationale:
+[web/ux-simplification.md](web/ux-simplification.md).

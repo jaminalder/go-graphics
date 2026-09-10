@@ -12,3 +12,16 @@
 # Agent worktrees live inside the repo; they are checkouts, not content.
 .claude/worktrees/
 .worktrees/
+
+# Public runtime/deployment secrets, state and browser tooling
+web/browser/node_modules/
+web/browser/test-results/
+web/browser/playwright-report/
+deploy/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+backend.hcl
+crash.log
+.env

@@ -1,0 +1,626 @@
+[
+  {
+    "file": "pools-hero.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "arrange": "scatter",
+          "colourway": "diebenkorn-seawall",
+          "fill": "open",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "5bacb63230f243aa423e2553f6400145a6361df816897258031275be3b7e9a56",
+    "width": 600,
+    "height": 600,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "pools-spacious.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "arrange": "scatter",
+          "colourway": "diebenkorn-seawall",
+          "fill": "open",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "0eafd74b97c26889e32a756e0ea6fa20cd58c4b5fd747589745164e1809cb6e3",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "pools-flowing.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "arrange": "orbital",
+          "colourway": "diebenkorn-seawall",
+          "fill": "busy",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "2be629080f406950c08eb14f34d8f93a9ebf71a1811b38351d7a4302e1312d6f",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "pools-gathered.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "arrange": "formation",
+          "colourway": "diebenkorn-seawall",
+          "fill": "packed",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "90e3a3cfe89d55c3baada281211b9bef5fa95442c13e372f3d57c45322235ba0",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "pools-diebenkorn-seawall.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "arrange": "scatter",
+          "colourway": "diebenkorn-seawall",
+          "fill": "open",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "0eafd74b97c26889e32a756e0ea6fa20cd58c4b5fd747589745164e1809cb6e3",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "pools-tchelitchew-hide-and-seek.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "tchelitchew-hide-and-seek",
+      "config": {
+        "traits": {
+          "arrange": "scatter",
+          "colourway": "tchelitchew-hide-and-seek",
+          "fill": "open",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "36ff998b081607ebe396fe52b26acdd94502baec0bea986bf8f7fb68ab56a760",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette tchelitchew-hide-and-seek; provisional owner review"
+  },
+  {
+    "file": "pools-hopper-night-windows.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "hopper-night-windows",
+      "config": {
+        "traits": {
+          "arrange": "scatter",
+          "colourway": "hopper-night-windows",
+          "fill": "open",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "c2cbcb784f2e51f6fbc39f108989e91a0e42f0a1a2760dfd542252d3f13b01be",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette hopper-night-windows; provisional owner review"
+  },
+  {
+    "file": "pools-cezanne-bathers.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "pools",
+      "edition": "1",
+      "seed": "42",
+      "palette": "cezanne-bathers",
+      "config": {
+        "traits": {
+          "arrange": "scatter",
+          "colourway": "cezanne-bathers",
+          "fill": "open",
+          "flow": "horizontal",
+          "size-variety": "varied"
+        }
+      }
+    },
+    "sha256": "cf22d4ecd3a5102ba88e88ba3bfe5cdfdaa42ab2027bc469cebb9a19871d514d",
+    "width": 300,
+    "height": 300,
+    "alt": "Transparent circles drift and overlap like pigment on paper.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette cezanne-bathers; provisional owner review"
+  },
+  {
+    "file": "foam-hero.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "hopper-night-windows",
+      "config": {
+        "traits": {
+          "colourway": "hopper-night-windows",
+          "density": "open",
+          "fills": "drawn",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "4309d2d1d6c81231603de495f24c6cdbe9e4fc1ab98e535963ed3613862c36cb",
+    "width": 600,
+    "height": 600,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette hopper-night-windows; provisional owner review"
+  },
+  {
+    "file": "foam-ink.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "colourway": "diebenkorn-seawall",
+          "density": "open",
+          "fills": "drawn",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "f116e69f13f47fdd344561a44c54c7e78697f79d658bf957e33b5927b863d4a5",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "foam-painted.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "colourway": "diebenkorn-seawall",
+          "density": "open",
+          "fills": "watercolour",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "287bf97739b794d32252ca9360c1ae9147983740d32a928db5c93597916e65cc",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "foam-airy.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "colourway": "diebenkorn-seawall",
+          "density": "open",
+          "fills": "airy",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "d26bebdd0bb350d104a5a37a492d1007221ca3c1416357b0bc06b3b96c649c0b",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "foam-diebenkorn-seawall.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "colourway": "diebenkorn-seawall",
+          "density": "open",
+          "fills": "drawn",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "f116e69f13f47fdd344561a44c54c7e78697f79d658bf957e33b5927b863d4a5",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "foam-tchelitchew-hide-and-seek.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "tchelitchew-hide-and-seek",
+      "config": {
+        "traits": {
+          "colourway": "tchelitchew-hide-and-seek",
+          "density": "open",
+          "fills": "drawn",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "a5421564c688f80c63d5fd5549f4c7635307c2583f29a4f34e3e516bc5ae9d95",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette tchelitchew-hide-and-seek; provisional owner review"
+  },
+  {
+    "file": "foam-hopper-night-windows.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "hopper-night-windows",
+      "config": {
+        "traits": {
+          "colourway": "hopper-night-windows",
+          "density": "open",
+          "fills": "drawn",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "46b19c2ac16863fdcf631ebbd0901b399f39bbc90d15448c98e86dda4957e1af",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette hopper-night-windows; provisional owner review"
+  },
+  {
+    "file": "foam-cezanne-bathers.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "foam",
+      "edition": "1",
+      "seed": "42",
+      "palette": "cezanne-bathers",
+      "config": {
+        "traits": {
+          "colourway": "cezanne-bathers",
+          "density": "open",
+          "fills": "drawn",
+          "line": "fine",
+          "lobes": "few",
+          "mosaic": "plain",
+          "relief": "flat",
+          "scheme": "passage"
+        }
+      }
+    },
+    "sha256": "43614c22f57b3b5c2b3a2719f6b82bbe01c5028100dfb5b5ff65c2625f6b0c10",
+    "width": 300,
+    "height": 300,
+    "alt": "A field of inked cells, each carrying a different trace of colour.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette cezanne-bathers; provisional owner review"
+  },
+  {
+    "file": "iris-hero.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "tchelitchew-hide-and-seek",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "f5ea7ff5a02c969c22bb225b62ea614d6916ba4b64891fe85803ec2a2452f826",
+    "width": 600,
+    "height": 600,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette tchelitchew-hide-and-seek; provisional owner review"
+  },
+  {
+    "file": "iris-fine.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "ebc86e7f5756a05c92d23022541e44c0eadecd6af252b975f5d6caedf24925de",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "iris-winding.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "swirl"
+        }
+      }
+    },
+    "sha256": "8304d3b4d2b1421c2aadef7ab259b34634d4d1638a39064c03d88b136c92aca2",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "iris-layered.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "strata",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "7965198c6907154545a08ffd99237689dc659490490ff58e3770c2508b6cde68",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "iris-diebenkorn-seawall.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "diebenkorn-seawall",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "ebc86e7f5756a05c92d23022541e44c0eadecd6af252b975f5d6caedf24925de",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+  },
+  {
+    "file": "iris-tchelitchew-hide-and-seek.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "tchelitchew-hide-and-seek",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "7c4ac35f2b35a1c32764837f392554f7b0f63f0e05972db458d0bb379668a785",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette tchelitchew-hide-and-seek; provisional owner review"
+  },
+  {
+    "file": "iris-hopper-night-windows.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "hopper-night-windows",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "e1e24b2769811fd3dc3a04d957b89641b70a71b1bed638add150c8e4c3d853b4",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette hopper-night-windows; provisional owner review"
+  },
+  {
+    "file": "iris-cezanne-bathers.png",
+    "recipe": {
+      "recipe_version": 1,
+      "artwork_id": "iris",
+      "edition": "1",
+      "seed": "42",
+      "palette": "cezanne-bathers",
+      "config": {
+        "traits": {
+          "aperture": "narrow",
+          "grain": "fine",
+          "ground": "light",
+          "reach": "long",
+          "rim": "band",
+          "structure": "fiber",
+          "tint": "plain",
+          "weave": "radial"
+        }
+      }
+    },
+    "sha256": "20decf443b537e990037621816a00977d7e1dd0dcb92b8f1a69ca74b73158b0d",
+    "width": 300,
+    "height": 300,
+    "alt": "Fine fibres gather around a dark centre, winding out into light.",
+    "provenance": "go-graphics edition 1; repository ColorLisa palette cezanne-bathers; provisional owner review"
+  }
+]

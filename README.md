@@ -13,21 +13,23 @@ Color palettes are grounded in artist palettes from
 **Status:** sixteen artwork sketches plus the `hatchbook` specimen generator,
 from contour fields and watercolour to faceted stones, warped materials,
 abstract irises, and fractal flames. The project remains a local art laboratory;
-a curated public Go SSR + htmx application is now
-[planned in docs/web](docs/web/README.md), not yet implemented.
+**Singular Seed**, a curated Go SSR + htmx studio, is
+[implemented locally](docs/web/README.md) alongside it. The chosen public domain
+is `singularseed.art`; deployment and publication remain pending.
+See the [local run and deployment guide](deploy/README.md).
 All 133 ColorLisa palettes are built in (`staticart palettes`; `staticart
 list` shows the complete set).
 
 ## Quick start
 
-Requires Go ≥ 1.26.5 and, for `make fmt`/`make lint`, golangci-lint ≥ 2.12.
+Requires Go ≥ 1.26.8 and, for `make fmt`/`make lint`, golangci-lint ≥ 2.12.
 
 ```sh
 make help                 # list targets
 make check                # fmt + vet + lint + test
 make preview              # render the contour sketch at preview size → out/
 
-# General form (once cmd/staticart exists):
+# General form:
 go run ./cmd/staticart render contour --profile print --seed 42 \
     --palette hokusai-great-wave --out out
 ```
@@ -54,7 +56,7 @@ out/               rendered images (gitignored)
 ```
 
 - **Design & invariants:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **Public web application plan:** [docs/web/README.md](docs/web/README.md)
+- **Singular Seed web application:** [docs/web/README.md](docs/web/README.md)
 - **Domain vocabulary:** [CONTEXT.md](CONTEXT.md)
 - **First sketch spec:** [docs/sketches/001-contour-noise.md](docs/sketches/001-contour-noise.md)
 - **Agent/contributor guide:** [AGENTS.md](AGENTS.md)

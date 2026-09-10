@@ -101,3 +101,17 @@ func (o *Options) Resolve(rng *rand.Rand) Set {
 func (o *Options) NameSuffix(set Set) string {
 	return o.schema.NameSuffix(set, o.over)
 }
+
+// SetOverrides validates and copies a typed caller's choices without CLI parsing.
+func (o *Options) SetOverrides(set Set) error {
+	over := make(Set, len(set))
+	for k, v := range set {
+		d, ok := o.schema.Dim(k)
+		if !ok || !d.Has(v) {
+			return fmt.Errorf("invalid trait %s=%s", k, v)
+		}
+		over[k] = v
+	}
+	o.over = over
+	return nil
+}

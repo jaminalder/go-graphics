@@ -8,13 +8,14 @@ import (
 	"fmt"
 	"image"
 	"io"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/jaminalder/go-graphics/internal/explore"
 
 	"github.com/jaminalder/go-graphics/internal/render"
 	"github.com/jaminalder/go-graphics/internal/sketch"
@@ -23,10 +24,6 @@ import (
 
 // flockLimit caps explore/breed size the same way sweep guards typos.
 const flockLimit = 120
-
-// neighborStride spaces child seeds away from a liked parent so the
-// continuous recipe draw moves without leaving the trait cell.
-const neighborStride uint64 = 100003
 
 // flockEntry is one row of flock.jsonl — enough to like a sheep and breed.
 type flockEntry struct {
@@ -377,28 +374,16 @@ func planBreed(t sketch.Traited, o flockOpts) ([]flockMember, error) {
 		likedSets = append(likedSets, trait.Set(e.Traits))
 	}
 
-	boosted := t.Schema().Boost(likedSets, o.boost)
-	nBoost := o.count / 2
-	nNeigh := o.count - nBoost
-	out := make([]flockMember, 0, o.count)
+	parents := make([]explore.Candidate, len(liked))
+	for i, p := range liked {
+		parents[i] = explore.Candidate{Seed: p.Seed, Traits: likedSets[i]}
+	}
+	candidates := explore.LocalBreed(t.Schema(), parents, o.count, o.seedBase, o.boost)
+	out := make([]flockMember, len(candidates))
+	for i, c := range candidates {
+		out[i] = flockMember{seed: c.Seed, traits: c.Traits, mode: c.Mode, parent: c.Parent, pins: pinArgs(t.Schema(), c.Traits)}
+	}
 
-	for i := 0; i < nBoost; i++ {
-		seed := o.seedBase + uint64(i)
-		set := boosted.Derive(rand.New(rand.NewPCG(seed, 2)))
-		out = append(out, flockMember{
-			seed: seed, traits: set, mode: "boosted",
-			pins: pinArgs(t.Schema(), set),
-		})
-	}
-	for i := 0; i < nNeigh; i++ {
-		parent := liked[i%len(liked)]
-		seed := parent.Seed + uint64(i+1)*neighborStride
-		set := trait.Set(parent.Traits)
-		out = append(out, flockMember{
-			seed: seed, traits: set, mode: "neighbor", parent: parent.Seed,
-			pins: pinArgs(t.Schema(), set),
-		})
-	}
 	return out, nil
 }
 

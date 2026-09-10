@@ -1,7 +1,14 @@
+> Interaction revision, 2026-09-10: the owner’s simpler [current product brief](product-and-ux.md)
+> supersedes the multi-parent refinement and visible browser-recovery UI below.
+> Implementation and verification are recorded in [IMPLEMENTATION.md](IMPLEMENTATION.md).
+
 # Implementation plan and future-session handoff
 
-Status: proposed, based on `63c622a`, 2026-09-09. All tasks below are future
-implementation work. The documentation task did not start these changes.
+Status: implemented locally on `exp/public-art-app`, with external launch gates
+pending. The original plan below remains the acceptance specification. See
+[the implementation evidence](IMPLEMENTATION.md), [launch gates](launch-gates.md)
+and [operations runbook](../../deploy/README.md) for actual results and remaining
+owner/target-host work. The original planning baseline was `63c622a`.
 
 ## Order and working rules
 
@@ -27,8 +34,9 @@ the older completed artwork lifecycle migration.
 
 Scope: documentation/content exploration and a disposable UI prototype.
 
-- Confirm public name/domain, launch shortlist and image-file versus link
-  sharing. Choose source/output licences after provenance inventory.
+- Public name/domain settled on 2026-09-10: Singular Seed, `singularseed.art`.
+  Confirm the final launch shortlist; image-file sharing remains the baseline.
+  Choose source/output licences after provenance inventory.
 - Curate provisional examples for `pools`, `foam`, `iris`; the artist may choose
   another set. Include multiple seeds and relevant colour/style comparisons.
 - Prototype gallery, visual choice cards, four-image studio, favourites and

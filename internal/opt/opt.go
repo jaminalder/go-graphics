@@ -150,6 +150,20 @@ func (s *Set) Configure() (string, error) {
 	if s.fs != nil {
 		s.fs.Visit(func(f *flag.Flag) { s.seen[f.Name] = true })
 	}
+	return s.validate()
+}
+
+// Apply validates already assigned typed overrides, preserving explicit presence.
+// It does not parse flags or accept values: the owning sketch assigns concrete fields.
+func (s *Set) Apply(names ...string) (string, error) {
+	s.seen = make(map[string]bool, len(names))
+	for _, name := range names {
+		s.seen[name] = true
+	}
+	return s.validate()
+}
+
+func (s *Set) validate() (string, error) {
 	var parts []string
 	for _, k := range s.knobs {
 		if !s.seen[k.name] {
