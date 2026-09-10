@@ -226,7 +226,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/about" {
-		a.page(w, r, page{Title: "About this studio", Kind: "about"})
+		a.page(w, r, page{Title: "About Singular Seed", Kind: "about"})
 		return
 	}
 	if path == "/recover" {
@@ -601,9 +601,9 @@ func (a *app) image(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", `"`+digest+`"`)
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	if strings.HasPrefix(r.URL.Path, "/downloads/") {
-		w.Header().Set("Content-Disposition", `attachment; filename="artwork-`+id[:12]+`.png"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="singular-seed-`+id[:12]+`.png"`)
 	}
-	http.ServeContent(w, r, "artwork.png", info.ModTime(), f)
+	http.ServeContent(w, r, "singular-seed.png", info.ModTime(), f)
 }
 
 func (a *app) page(w http.ResponseWriter, r *http.Request, p page) {

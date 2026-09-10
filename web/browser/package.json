@@ -1,1 +1,1 @@
-{"name":"art-forms-browser-tests","private":true,"scripts":{"test":"playwright test"},"devDependencies":{"@playwright/test":"1.63.0"}}
+{"name":"singular-seed-browser-tests","private":true,"scripts":{"test":"playwright test"},"devDependencies":{"@playwright/test":"1.63.0"}}

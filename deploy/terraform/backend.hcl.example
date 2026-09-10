@@ -1,5 +1,5 @@
 bucket       = "OWNER-SELECTED-PRIVATE-STATE-BUCKET"
-key          = "art-forms/staging.tfstate"
+key          = "singular-seed/staging.tfstate"
 region       = "OWNER-SELECTED-REGION"
 encrypt      = true
 use_lockfile = true

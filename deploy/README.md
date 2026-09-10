@@ -1,6 +1,7 @@
-# Operating the public studio
+# Operating Singular Seed
 
-The repository now contains the local application and reviewable deployment
+Singular Seed’s chosen public domain is `singularseed.art`.
+The repository contains the local application and reviewable deployment
 artifacts. No cloud resource, DNS record or public release has been created.
 The owner must approve publication separately from implementation.
 
@@ -26,7 +27,7 @@ replaces any visitor-supplied value. Direct forwarding headers are ignored.
 
 `npm ci && npm test` inside `web/browser` starts isolated local test processes,
 uses pinned Playwright, and verifies real enhancement and no-JavaScript forms.
-Ordinary image files and recipe exports are the sharing contract; no durable
+Ordinary image files are the sharing contract; no durable
 links, user accounts, database, image uploads or public API are offered.
 
 ## Pinned deployment and configuration
@@ -50,8 +51,8 @@ Never report workstation timing as target-host evidence.
    test, choose a supported backend; do not turn off locking.
 4. Bootstrap creates separate service users, SSH hardening and bounded journals.
    Install the checksum-verified pinned Caddy binary and its upstream service
-   unit. Create `/etc/art/web.env` containing `ART_ORIGIN=https://your.domain`;
-   `/etc/art/domain.env` contains `ART_DOMAIN=your.domain`. Set a Caddy systemd
+   unit. Create `/etc/art/web.env` containing `ART_ORIGIN=https://singularseed.art`;
+   `/etc/art/domain.env` contains `ART_DOMAIN=singularseed.art`. Set a Caddy systemd
    drop-in with `EnvironmentFile=/etc/art/domain.env` and preserve Caddy's TLS
    storage. Confirm console recovery, add administrator CIDR UFW rules and only
    then enable UFW. Keep 8080/8081/8180/8181/2019 and Unix sockets private.
@@ -98,7 +99,7 @@ configuration evidence; remote resource creation remains untested.
   failures, sustained queue occupancy and certificate expiry.
 - A bad release: disable admission, retain logs, run the same activation script
   with the previous committed release. Old in-memory exploration/jobs can be
-  lost; browser recipes and downloaded files remain the recovery path.
+  lost; downloaded files remain independent copies.
 - Renderer hangs/panics/oversized stdout are killed/reaped by the supervisor.
   A renderer OOM must affect only its service cgroup. Prove this on staging
   while gallery and downloads remain available; Darwin tests cannot prove it.
@@ -125,7 +126,7 @@ Proposed recovery objective: two hours, to be measured. From a second machine,
 restore state credentials and the latest verified state, build a clean host,
 restore service configuration and TLS data with correct ownership, verify the
 retained release manifest and activate it. Check DNS/IP lifecycle before switching
-traffic. Confirm old browser recipe recovery and image download on the new host.
+traffic. Confirm artwork generation and image download on the new host.
 Record elapsed time, discovered gaps, tested state version, release identity and
 operator in the external run log. Do not mark this demonstrated until performed.
 

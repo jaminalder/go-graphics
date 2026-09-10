@@ -1,5 +1,5 @@
 [Unit]
-Description=Art Forms web studio
+Description=Singular Seed web studio
 After=network.target artrender.service
 Wants=artrender.service
 StartLimitIntervalSec=60

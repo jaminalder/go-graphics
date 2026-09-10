@@ -1,7 +1,8 @@
-# Public art application
+# Singular Seed
 
 Planning baseline: **2026-09-09**, repository `63c622a` on `master`.
 Status: **implemented locally on `exp/public-art-app`; public launch pending**.
+The owner selected **Singular Seed** and **`singularseed.art`** on 2026-09-10.
 The architecture documents retain the planning baseline; the [product brief](product-and-ux.md) and [UX rationale](ux-simplification.md) record the owner’s simpler 2026-09-10 journey. See the
 [implementation record](IMPLEMENTATION.md), [local run and deployment guide](../../deploy/README.md),
 and [remaining launch gates](launch-gates.md) for the completed work and its limits.
@@ -52,6 +53,7 @@ its existing refactor checklist is historical work, not a fresh web backlog.
 | Topic | User requirement / planning choice |
 |---|---|
 | Local work | Keep offline CLI generation, experiments, new sketches, and print output |
+| Identity | Singular Seed; canonical public domain `singularseed.art` (chosen, not deployed) |
 | Public content | Selected long-form artworks; publication is explicit, not automatic |
 | Interaction | Visual examples first; generated samples, favourites, and a few choices later |
 | Stack | Go SSR + htmx, few dependencies, robust public operation |
@@ -74,7 +76,7 @@ assigned by this plan.
 
 These do not prevent the foundational work in the implementation plan:
 
-1. Public name/domain, final launch artworks, and final visual examples.
+1. Final launch artworks and final visual examples.
 2. Whether to add durable artwork links in a later edition; v1 implements image-file
    sharing. Durable links require an explicit edition-retention commitment.
 3. Source/output licences and provenance clearance, especially for the QQL port.

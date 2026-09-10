@@ -1,4 +1,4 @@
-# Public launch evidence
+# Singular Seed launch evidence
 
 Implementation approval authorizes local development. It does not approve
 publication, licences, cloud expenditure, DNS changes or final artistic choices.
@@ -9,7 +9,8 @@ No public site has been provisioned or deployed by this implementation.
 | Application journey | SSR gallery/choices/batches/favourites/refinement/result/download; automated Chromium and no-JavaScript journeys |
 | Recipe compatibility | Painted/raster CLI pixel comparison, override/canonical/concurrency/key tests; Linux edition pixel verification still required |
 | Artwork curation | 24 real provisional assets with recipes/hashes, fixed-seed style sheets in `out/`; final artist review pending |
-| Owner name/domain/contact | Not supplied; required before public release |
+| Site name/domain | Owner selected Singular Seed and `singularseed.art` on 2026-09-10; DNS and deployment remain separate |
+| Operator identity/contact | Not supplied; required before public release |
 | Source/output usage terms | Not chosen; repository palette provenance recorded, owner/legal review pending; no licence grant invented |
 | Privacy/retention copy | Implemented local draft; operator/jurisdiction-specific information pending |
 | Browser accessibility | Keyboard/focus controls, responsive/no-JS/blocked-storage checks; unfamiliar-user and assistive-technology review pending |

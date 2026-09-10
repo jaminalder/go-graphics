@@ -9,7 +9,7 @@ terraform {
   backend "s3" {}
 }
 provider "hcloud" {}
-variable "name" { default = "art-forms" }
+variable "name" { default = "singular-seed" }
 variable "location" { default = "nbg1" }
 variable "admin_cidrs" { type = list(string) }
 variable "ssh_public_key" { type = string }
@@ -70,7 +70,7 @@ resource "hcloud_server" "web" {
     ipv6         = hcloud_primary_ip.v6.id
   }
   lifecycle { prevent_destroy = true }
-  labels = { service = "art-forms", environment = "staging" }
+  labels = { service = "singular-seed", environment = "staging" }
 }
 output "ipv4" { value = hcloud_primary_ip.v4.ip_address }
 output "ipv6" { value = hcloud_primary_ip.v6.ip_address }

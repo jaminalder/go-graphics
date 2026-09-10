@@ -18,6 +18,24 @@ dedicated sibling worktree. Do not integrate or publish without approval.
 - Test seams agreed in the approved plan: recipes/configuration, exploration,
   HTTP journeys, admission/artifact lifecycle and renderer protocol.
 
+## Site identity (2026-09-10)
+
+The owner selected **Singular Seed** and **`singularseed.art`**. The site
+wordmark, HTML titles/description, About copy, shared/downloaded filenames,
+service descriptions and deployment examples use that identity. Terraform
+resource labels/default names and the example state key use `singular-seed`;
+no existing infrastructure was changed. Local listeners and test hosts retain
+their original defaults. Name/domain selection is complete; operator contact,
+licences, DNS, deployment and public launch remain separate pending work.
+
+Verification: `make check`, Terraform format/validate and Caddy validation
+with `ART_DOMAIN=singularseed.art` passed; validation did not start a public
+server or change DNS. Loaded Chromium
+screenshots at 1440, 390 and 320 px confirm the exact name/title and a readable
+header with no overlap or horizontal overflow; desktop and mobile PNGs were
+visually inspected under `out/singular-seed-*.png`. Standard local binaries
+were rebuilt so the existing run commands pick up the identity after restart.
+
 ## Current interaction revision (2026-09-10)
 
 The owner's revised brief supersedes the original multi-parent, recovery-heavy
@@ -79,7 +97,7 @@ separate. No human usability study, merge, deployment or publication is claimed.
 - [x] Local browser, race, security, visual and recovery verification.
 
 Human-dependent launch gates remain separate from local implementation:
-source/output licences, domain/operator details, target-host benchmarks,
+source/output licences, operator identity/contact, target-host benchmarks,
 infrastructure credentials and public launch approval.
 
 ## Recipe and exploration slice
@@ -188,8 +206,8 @@ out/artbench-local-download-smoke.jsonl; these runs predate separate renderer/to
 version fields and identify the actual build versions above. These are cold
 isolated children, without artifact-cache hits, on the same workstation.
 
-Remaining launch work is explicitly listed in `launch-gates.md`: owner name,
-contact/licence/provenance decisions, final visual/visitor/assistive-tech review,
+Remaining launch work is explicitly listed in `launch-gates.md`: operator
+identity/contact and licence/provenance decisions, final visual/visitor/assistive-tech review,
 actual target100-seed/class/saturation measurements, staged deploy/rollback,
 OOM/reboot isolation, remote-state two-client lock proof, TLS/second-machine
 recovery and final publication approval. These need an owner or target host;

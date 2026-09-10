@@ -17,7 +17,7 @@
    button.disabled=true;
    fetch(url).then(response=>{if(!response.ok)throw Error('unavailable');return response.blob();}).then(blob=>{
     // The native share call must happen on a fresh click, after the file is ready.
-    files.set(url,new File([blob],'artwork.png',{type:'image/png'}));
+    files.set(url,new File([blob],'singular-seed.png',{type:'image/png'}));
     if(files.size>4)files.delete(files.keys().next().value);
     button.disabled=false;
    }).catch(()=>{button.disabled=false;});
@@ -41,7 +41,7 @@
   if(!button.dataset.share)return;
   const file=files.get(button.dataset.share);
   if(!file||!navigator.canShare||!navigator.canShare({files:[file]})){notice('Download the image to share it from your photos or files.');return;}
-  try{await navigator.share({files:[file],title:'My artwork'});}catch(error){if(error.name!=='AbortError')notice('Sharing did not open. Download the image to share it.');}
+  try{await navigator.share({files:[file],title:'Singular Seed artwork'});}catch(error){if(error.name!=='AbortError')notice('Sharing did not open. Download the image to share it.');}
  });
  enhance();
 })();

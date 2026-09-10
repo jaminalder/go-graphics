@@ -1,9 +1,10 @@
-# Product and interaction design
+# Singular Seed — product and interaction design
 
 Status: implemented local review revision, **2026-09-10**. The owner's simpler
 journey below supersedes the 2026-09-09 multi-parent refinement and browser
-recovery interface. Public name, usage terms, final curation and unfamiliar-user
-review remain launch decisions. This is not a completed human usability study.
+recovery interface. The name **Singular Seed** and public domain
+**`singularseed.art`** are owner-approved. Usage terms, final curation and
+unfamiliar-user review remain launch decisions. This is not a completed human usability study.
 
 ## The experience
 

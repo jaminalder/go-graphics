@@ -34,8 +34,9 @@ the older completed artwork lifecycle migration.
 
 Scope: documentation/content exploration and a disposable UI prototype.
 
-- Confirm public name/domain, launch shortlist and image-file versus link
-  sharing. Choose source/output licences after provenance inventory.
+- Public name/domain settled on 2026-09-10: Singular Seed, `singularseed.art`.
+  Confirm the final launch shortlist; image-file sharing remains the baseline.
+  Choose source/output licences after provenance inventory.
 - Curate provisional examples for `pools`, `foam`, `iris`; the artist may choose
   another set. Include multiple seeds and relevant colour/style comparisons.
 - Prototype gallery, visual choice cards, four-image studio, favourites and

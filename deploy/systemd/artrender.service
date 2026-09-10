@@ -1,5 +1,5 @@
 [Unit]
-Description=Art Forms isolated renderer supervisor
+Description=Singular Seed isolated renderer supervisor
 After=network.target
 StartLimitIntervalSec=60
 StartLimitBurst=3
