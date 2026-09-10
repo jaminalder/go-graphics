@@ -1,10 +1,22 @@
 # Small-shop VPS resources
 
-Prefer these over blog posts that assume every service is a container in EKS.
+Use primary sources against this repository's single-host Compose runtime.
 Read the contract for the tool you are about to run; then run it against this
 repository's `deploy/` files.
 
-## Knowledge
+## Container-first reading
+
+- [Docker images and multi-stage builds](https://docs.docker.com/build/building/multi-stage/): compiler image versus static runtime image.
+- [Compose services](https://docs.docker.com/reference/compose-file/services/): users, limits, mounts, networking, health and restart behavior.
+- [Compose networking](https://docs.docker.com/compose/how-tos/networking/): service names, internal networks, ports and replacement.
+- [Docker storage volumes](https://docs.docker.com/engine/storage/volumes/): mount lifecycle and backup/restore.
+- [Resource constraints](https://docs.docker.com/engine/containers/resource_constraints/): CPU, memory, swap and OOM behavior.
+- [Docker security](https://docs.docker.com/engine/security/): namespaces, cgroups, capabilities and daemon privilege.
+- [Firewall integration](https://docs.docker.com/engine/network/packet-filtering-firewalls/): published ports and UFW forwarding differences.
+- [Ubuntu installation](https://docs.docker.com/engine/install/ubuntu/): signed repository and pinned package installation.
+- [Container startup order](https://docs.docker.com/compose/how-tos/startup-order/): started versus ready; do not prevent gallery startup when renderer is down.
+
+## Cloud, edge and Linux foundations
 
 - [Terraform provisioners](https://developer.hashicorp.com/terraform/language/provisioners)
   Official last-resort guidance. Use for: why this project deploys with
@@ -36,8 +48,7 @@ repository's `deploy/` files.
 - [systemd.resource-control(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html)
   `MemoryMax`, CPU quota, OOM policy. Use for: proving renderer isolation.
 - [systemd.exec(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html)
-  `ProtectSystem`, `RestrictAddressFamilies`, credentials. Use for: reading
-  `artweb.service` / `artrender.service` as a security policy, not boilerplate.
+  `ProtectSystem`, `RestrictAddressFamilies`, credentials. Use for: understanding the Linux controls underneath containers and comparing the historical host-unit design.
 - [Hetzner Cloud servers](https://docs.hetzner.com/cloud/servers/overview/)
   Product facts. Use for: CX sizing, backups vs snapshots, rebuild protection.
 - [Hetzner firewalls](https://docs.hetzner.com/cloud/firewalls/overview)
@@ -88,6 +99,6 @@ repository's `deploy/` files.
 - Hetzner has no AWS-style autoscaling group. Stage 2 autoscaling resources
   are therefore scripts-plus-metrics, or a later scheduler — there is no
   official “Hetzner ASG” document to follow.
-- systemd socket-activated rolling restart of a Go process that owns an
-  in-memory queue is under-documented as a *pattern*. Prove it on this app
-  rather than copying nginx-centric tutorials.
+- Compose replacement does not preserve the in-memory queue/workspaces.
+  Stage 2 must prove admission and state behavior rather than copying a
+  stateless rolling-deployment tutorial.

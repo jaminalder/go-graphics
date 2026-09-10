@@ -1,174 +1,203 @@
-# Operating Singular Seed
+# Operating Singular Seed with Docker Compose
 
-Singular Seed’s chosen public domain is `singularseed.art`.
-The repository contains the local application and reviewable deployment
-artifacts. No cloud resource, DNS record or public release has been created.
-The owner must approve publication separately from implementation.
+The chosen public domain is `singularseed.art`. The runtime is one Ubuntu VPS
+with three Compose services: Caddy, `web` (`artweb`), and `renderer`
+(`artrender`). The owner selected Compose on 2026-09-10; see
+[ADR 0004](../docs/adr/0004-compose-runtime.md). Cloud provisioning, DNS and
+public launch remain separate owner actions. No live host is claimed here.
 
-## Local operation
+## Local rehearsal
 
-From the implementation checkout, run these in separate terminals:
-
-```sh
-mkdir -p out
-go build -o out/artrender ./cmd/artrender
-go build -o out/artweb ./cmd/artweb
-out/artrender
-out/artweb
-```
-
-Open `http://127.0.0.1:8080`. Both executables default to build identity
-`development`, socket `out/artrender.sock`, and disposable `out/cache`.
-`ART_ORIGIN`, `ART_ADDR`, `ART_ADMIN_ADDR`, `ART_SOCKET`, `ART_CACHE`,
-`ART_GENERATION=off` and `ART_TRUST_PROXY=yes` are startup configuration.
-Only loopback app/admin listeners are accepted. Trust proxy is only appropriate
-when the configured Caddy owns the sole public edge; its `X-Art-Client` value
-replaces any visitor-supplied value. Direct forwarding headers are ignored.
-
-`npm ci && npm test` inside `web/browser` starts isolated local test processes,
-uses pinned Playwright, and verifies real enhancement and no-JavaScript forms.
-Ordinary image files are the sharing contract; no durable
-links, user accounts, database, image uploads or public API are offered.
-
-## Reading application logs
-
-Both executables write structured text logs to stderr, tagged `service=artweb`
-or `service=artrender`. The default level is `info`. Normal page navigation and
-POST actions produce one incoming HTTP completion with method, route pattern,
-status, elapsed milliseconds and bytes. Paths omit exploration/sample IDs,
-queries and arbitrary URL text; request bodies, cookies and headers are not logged.
-
-Successful health/metrics probes, polling, asset loads and preview image loads
-are debug-only, so the normal output stays readable. Failed requests remain
-visible. To include every HTTP completion locally, start either process with:
+Requires Docker Engine with Compose v2.24+ (tested locally with Compose 5.4.0).
+On macOS, Docker runs inside a Linux VM such as Colima or Docker Desktop.
+From the repository root:
 
 ```sh
-ART_LOG_LEVEL=debug out/artweb
-ART_LOG_LEVEL=debug out/artrender
+docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml build web caddy
+docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml up -d --no-build --wait
 ```
 
-The accepted levels are `debug`, `info`, `warn` and `error`; an invalid setting
-fails startup. In production, set the variable in the service environment or a
-systemd override, then restart that service. View both services together with:
+Open **http://localhost:8088**. Use that exact hostname: the app validates its
+canonical origin. The local configuration publishes only loopback ports and
+uses HTTP, so it does not request certificates. Stop with the same command
+prefix followed by `down`; volumes survive. `down --volumes` intentionally
+removes that project's cache/socket/TLS data and is only for disposable labs.
+
+`make check-compose` runs an isolated rehearsal, checks actual resource limits,
+private paths, four rendered PNGs, and renderer failure/recreation. It removes
+only its temporary project's volumes. Native Go development remains available:
+run `go run ./cmd/artrender` and `go run ./cmd/artweb` in separate terminals.
+The defaults remain loopback HTTP, `out/artrender.sock`, and `out/cache`.
+
+## Runtime and ownership
+
+```text
+Internet :80/:443 -> Hetzner firewall + Docker-aware host filtering
+  -> Caddy container -> internal proxy network -> web container :8080
+    -> shared Unix socket -> renderer supervisor -> disposable child process
+```
+
+| Layer | Source of truth |
+|---|---|
+| VPS, IPs, firewall, SSH public key | `terraform/` |
+| Host users, SSH, journals, OS update policy | `cloud-init/user-data.yaml` |
+| Docker installation | `scripts/bootstrap-host.sh` |
+| Binaries and pinned base images | `Dockerfile` |
+| Processes, cgroups, networks, mounts, logging | `compose.yaml` |
+| Edge HTTP/TLS behavior | `caddy/Caddyfile`, baked into the edge image |
+| Release identity and rollback | `scripts/build-release.sh`, `activate-release.sh` |
+| Host environment and approval | Root-owned `/etc/art/*`, outside Git |
+
+The web process owns the only queue, temporary workspaces and image cache.
+The renderer accepts one active job, starts a fixed child executable without a
+shell, and returns bounded image bytes. The web container has a 384 MiB memory
+limit and half a CPU; the renderer has 2 GiB and 1.5 CPUs, including children.
+Each has 64 tasks maximum, no swap budget, a read-only root filesystem, no Linux
+capabilities and `no-new-privileges`. Users are web `10001:10000`, renderer
+`10002:10000`, and Caddy `10003:10003`. Caddy has a 256 MiB/half-CPU ceiling.
+These are starting budgets, not proven target-host capacity.
+
+Only Caddy publishes ports. It joins an external network for ACME and an
+internal network for proxying. The web container joins only that internal
+network. `ART_TRUSTED_PROXY` is the single fixed Caddy IP (`172.30.80.2` by
+default); other peers cannot supply `X-Art-Client`. Caddy overwrites that header
+and removes visitor forwarding headers. `ART_PROXY_NET` changes the private
+IPv4 prefix for both Compose and proxy trust; reserve a nonconflicting /29.
+The renderer uses `network_mode: none`, and shares only `/run/art` with web.
+Web mounts that socket directory read-only. Neither receives the Docker socket,
+cloud credentials or host home directories. Admin HTTP remains loopback inside
+web; use `docker compose exec`, never publish 8081 or 2019.
+
+Container health checks do not render. Web health is gallery liveness, separate
+from `/app/artctl ready`, which checks renderer compatibility. Docker restart
+policies restart exited containers; an unhealthy status alone does not trigger
+a restart. There is no startup dependency that prevents browsing when rendering
+is unavailable. Container shutdown kills remaining children. Prove OOM behavior
+on the target: a healthy laptop rehearsal cannot establish VPS capacity.
+
+## Prepare an approved host
+
+1. Follow [Terraform state and lifecycle](terraform/README.md): independent
+   encrypted/versioned backend, two-client locking and recovery proof, then a
+   saved plan reviewed before an approved apply. Choose administrator IPv4/IPv6
+   CIDRs, spending ceiling and a staging hostname. Never put tokens in tfvars,
+   cloud-init, release archives or the app containers.
+2. Cloud-init prepares Ubuntu 24.04 amd64. Run `scripts/bootstrap-host.sh` as
+   root there to install pinned Docker packages. It does not launch the app,
+   enable UFW, change DNS or create approval records. Host systemd supervises
+   Docker; there are no host `artweb`/`artrender` units or host Caddy install.
+3. Confirm console recovery. Allow SSH from the same administrator CIDRs in
+   UFW, confirm IPv6 support, then enable it. Docker-published ports can bypass
+   UFW's INPUT rules: apply forwarding policy through `DOCKER-USER` for Docker's
+   iptables backend, allow established traffic and incoming TCP 80/443, and deny
+   other unsolicited public forwarding. Reapply after Docker/host restart.
+   Test both IP families externally. Do not disable Docker firewall management.
+   See [Docker's firewall contract](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
+4. Create `/etc/art/operator.env` from `operator.env.example`, root-owned mode
+   0600. Choose `ART_ENVIRONMENT=staging` and a staging hostname for rehearsal;
+   production uses `singularseed.art`. Domain/origin are configuration, not
+   secrets. Set public binds only on the approved host. Verify A/AAAA reachability
+   and correct HTTPS separately; a local IPv4 check is insufficient.
+5. Record infrastructure/staging approval in root-owned `/etc/art/staging-approved`
+   for staging. Production requires `/etc/art/launch-approved` with the actual
+   owner's approval and [launch-gate evidence](../docs/web/launch-gates.md).
+   Staging approval does not grant artwork/public-launch approval. Scripts do
+   not fabricate either record.
+
+Bootstrap pins Docker 29.8.0, Compose 5.4.0, containerd 2.3.5 and Buildx 0.37.0
+from Docker's signed Ubuntu repository. Image builds pin Go 1.26.8 and Caddy
+2.11.4 by digest in `Dockerfile`. Review and test updates deliberately; the OS
+security-update policy disables automatic reboot. Schedule host/runtime restarts
+and monitor overdue updates. Bootstrap is intended for a new host, not an
+unreviewed runtime upgrade on a busy server.
+
+## Build, activate, roll back
+
+From a clean committed checkout:
 
 ```sh
-journalctl -u artweb -u artrender -f -o cat
+deploy/scripts/build-release.sh
 ```
 
-Render start/completion records carry `job`, `artwork` and `tier`, with queue
-wait, elapsed time and output bytes where relevant. The same job key appears
-in the web process's outgoing renderer-call record and the renderer's child
-execution records. Search one `job=` value to follow a slow or failed image.
-An HTTP status of `0` means no response arrived (or a handler aborted before
-sending headers); it is not a status returned to the visitor. A 200 renderer
-response may still have an error if its body is truncated or release mismatched.
+This builds Linux amd64 images and writes `out/releases/<full-commit>/` with
+`images.tar`, immutable image IDs in `images.env`, versioned deployment files,
+source/tool/edition manifest, catalogue and SHA256 checksums. No registry is
+required: upload the complete directory over the operator's SSH connection to
+`/opt/art/releases/<full-commit>`. Keep images/archives for retained artwork
+editions, including at least the previous working release. The archive checksum
+is meaningful only when delivered through that trusted operator channel.
 
-Timeout, cancellation, output-limit and child-exit errors are recorded without
-copying child stderr or protocol bodies into logs. No per-pixel or per-progress
-messages are emitted. Journald retention remains bounded by the deployed host
-configuration; use debug temporarily when investigating noisy request traffic.
+On the host, run its `deploy/scripts/activate-release.sh <full-commit>` as root.
+It takes an exclusive deployment lock, checks the environment's approval and
+archive checksums, loads images, validates Compose/Caddy, then rehearses a private
+candidate with generation disabled. The smoke project uses its own network and
+volumes and no published ports. It cannot add a second active rendering queue.
+After smoke passes, activation pauses admission and requires a confirmed empty
+queue; missing metrics or a drain timeout aborts the change. It stops old web
+and renderer, switches `/opt/art/current`, recreates services from verified image
+IDs, checks readiness/liveness, and checks the canonical HTTPS URL.
 
-## Pinned deployment and configuration
+Failure restores the previous release's images/configuration and verifies its
+renderer readiness. First-install failure removes the candidate containers and
+current pointer while preserving volumes. Inspect the exit status, logs and
+`previous=` message; failure to recover needs operator intervention. Manual
+rollback is activation of the retained previous commit through the same script.
+Never use moving tags such as `latest` as production release identity.
 
-Target: Ubuntu 24.04, Linux amd64, Go 1.26.8, Caddy 2.11.4, Terraform 1.14.9,
-hcloud provider 1.68.0. Initial candidate host: CX23, with separate 384 MiB web
-and 2 GiB renderer memory limits. These are unproven capacity assumptions.
-Never report workstation timing as target-host evidence.
+The single fixed host project is `singular-seed`. Do not start another public
+project or scale `web`: that would create another admission queue. A brief
+restart is expected. In-memory explorations/jobs are lost. Caddy may also be
+recreated when its release image changes; Compose is not a rolling-deploy system.
+Deploy only when generation should resume: recovery from a failed drain reopens
+admission on the old release; an incident kill switch must be handled separately.
 
-1. Bootstrap an independently hosted private encrypted, versioned S3 backend.
-   Copy `terraform/backend.hcl.example` outside Git; supply credentials using
-   an approved credential profile/environment. Give state and lockfile separate
-   least-privilege permissions. Do not put tokens in tfvars, cloud-init or logs.
-2. Configure public SSH key and restricted IPv4/IPv6 administrator CIDRs. Run
-   `terraform init -backend-config=/private/path/backend.hcl`, then review a
-   saved plan. `apply` requires explicit infrastructure approval. Server and
-   primary-IP deletion protections are deliberate; do not bypass them routinely.
-3. Before production, prove simultaneous lock contention from two clients,
-   interrupted operation recovery and restoration of a prior state version.
-   Object retention is not state locking. If a compatible S3 backend fails the
-   test, choose a supported backend; do not turn off locking.
-4. Bootstrap creates separate service users, SSH hardening and bounded journals.
-   Install the checksum-verified pinned Caddy binary and its upstream service
-   unit. Create `/etc/art/web.env` containing `ART_ORIGIN=https://singularseed.art`;
-   `/etc/art/domain.env` contains `ART_DOMAIN=singularseed.art`. Set a Caddy systemd
-   drop-in with `EnvironmentFile=/etc/art/domain.env` and preserve Caddy's TLS
-   storage. Confirm console recovery, add administrator CIDR UFW rules and only
-   then enable UFW. Keep 8080/8081/8180/8181/2019 and Unix sockets private.
-5. Finish `docs/web/launch-gates.md`. Record the actual owner's approval and
-   evidence references in root-owned `/etc/art/launch-approved`. This is an
-   operational gate, not evidence created by the build or a licence grant.
-6. From a clean committed checkout run `deploy/scripts/build-release.sh`.
-   It cross-builds static Linux binaries and packages only tracked deployment
-   files, a source/tool/edition manifest and SHA256 checksums. Upload that
-   directory to `/opt/art/releases/<full-commit>` without changing its contents.
-   Keep at least the previous working release and its checksum manifest.
-7. Run `activate-release.sh <full-commit>` on the host. It verifies checksums,
-   validates candidate units/Caddy, pauses admission and drains active work,
-   smoke-tests candidate private services in separate cgroups, switches release
-   pointers, restarts, verifies application and renderer health, and reloads
-   Caddy. Failure restores prior binaries, units and Caddy configuration.
-   First deployment failure stops the newly started services. Review the
-   `previous=` result and keep that directory for rollback.
-8. Verify HTTPS from a second machine, asset/image delivery, CSRF/cookie/CSP,
-   the edge's private-path blocking and certificate persistence. HSTS is
-   deliberately a separate post-HTTPS readiness step; do not add preload or
-   includeSubDomains without domain-wide approval.
+## Private operations
 
-Sources used for configuration contracts:
-[Caddy server limits](https://caddyserver.com/docs/caddyfile/options),
-[Terraform S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3),
-[hcloud provider](https://registry.terraform.io/providers/hetznercloud/hcloud/1.68.0/docs).
-The checked-in provider lockfile and actual local validators are the current
-configuration evidence; remote resource creation remains untested.
+Use the release wrapper so every command uses the same project/config/images:
 
-## Private operation and failure handling
+```sh
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current ps
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current logs --tail 100 web renderer
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl metrics
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl ready
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl generation-off
+```
 
-- `GET http://127.0.0.1:8081/metrics`: bounded queue/running/cache file/byte counts.
-  HTTP and render logs include safe route patterns, status, correlation keys, duration and bytes;
-  no cookies, CSRF values, addresses or raw recipes are logged.
-- `GET /ready` on the private listener checks compatible renderer availability
-  without making an image. Public gallery liveness stays independent of a
-  failing renderer. Jobs fail explicitly and never retry on a status GET.
-- `POST /generation/off`: immediate admission kill switch. Existing artifacts
-  keep downloading. Use `POST /generation/on` only after the incident clears.
-- Inspect `journalctl -u artweb -u artrender --since -15min` and
-  `systemctl show ... -p MemoryCurrent -p MemoryPeak -p NRestarts`. Journald is
-  bounded to 256 MiB/seven days. Watch OS free disk, cgroup OOM events, repeated
-  failures, sustained queue occupancy and certificate expiry.
-- A bad release: disable admission, retain logs, run the same activation script
-  with the previous committed release. Old in-memory exploration/jobs can be
-  lost; downloaded files remain independent copies.
-- Renderer hangs/panics/oversized stdout are killed/reaped by the supervisor.
-  A renderer OOM must affect only its service cgroup. Prove this on staging
-  while gallery and downloads remain available; Darwin tests cannot prove it.
-- Cache full/low disk: stop generation, inspect the dedicated cache path and
-  available filesystem space. The app removes expired unused artifacts and
-  respects open-download leases. Do not remove release assets or Terraform
-  state to reclaim cache space. Only the web service owns generated artifacts.
+`generation-on` resumes admission after recovery. `/app/artctl live` checks the
+web process without requiring rendering. A stopped renderer must degrade ready
+while the gallery and existing downloads remain available. For a failed job,
+correlate `job=` in web and renderer logs. Logs omit cookies, raw recipes and
+headers. `ART_LOG_LEVEL=debug` is temporary diagnostic configuration.
 
-Select an external HTTPS uptime service and an alert recipient before launch.
-Check the gallery and alert on repeated failures, disk below the operating
-reserve, renderer restart loops and certificate trouble. Keep all detailed
-metrics private (SSH tunnel or on-host collector). Document recipient, escalation
-hours and the chosen service in the operator's environment inventory.
+Compose uses the bounded `local` log driver (three 10 MiB files per service).
+Host journald retains 256 MiB/seven days. Inspect `docker stats`, container
+`State.OOMKilled`, health and restart counts, cgroup memory events, and host free
+disk. An OOM child can fail without the supervisor exiting, so container restart
+count alone is insufficient. Configure an external gallery HTTPS check, recipient,
+escalation hours and a short runbook; track disk reserve, restart loops and TLS
+trouble. Keep metrics private.
 
-## Backup and clean-host recovery
+## Volumes, backups and recovery
 
-Back up independently of the VPS: encrypted/versioned Terraform state, release
-artifacts/checksums, operator configuration/approval records, and Caddy account
-and certificate storage. Do not back up transient workspaces/jobs or promise
-permanent generated-image retention. Credentials use a separate encrypted
-operator-controlled store; keep neither plaintext copies nor state backups here.
+| State | Lifetime / recovery |
+|---|---|
+| `singular-seed_caddy_data`, `singular-seed_caddy_config` | Retain and back up account/certificate/config state with correct ownership |
+| `singular-seed_cache` | Disposable generated images, only web can write; app enforces cache bounds |
+| `singular-seed_socket` | Runtime socket only; may recreate when services are stopped |
+| `/etc/art`, release archives/checksums, Terraform state | Independent encrypted backup outside the VPS |
+| Workspaces/jobs in web memory | Lost on restart; no durable-session promise |
 
-Proposed recovery objective: two hours, to be measured. From a second machine,
-restore state credentials and the latest verified state, build a clean host,
-restore service configuration and TLS data with correct ownership, verify the
-retained release manifest and activate it. Check DNS/IP lifecycle before switching
-traffic. Confirm artwork generation and image download on the new host.
-Record elapsed time, discovered gaps, tested state version, release identity and
-operator in the external run log. Do not mark this demonstrated until performed.
+A volume surviving container replacement is not a backup. Never run production
+`down --volumes` or indiscriminate Docker prune commands. Review release/image
+retention and free disk before upload; keep previous archives and any renderer
+needed for retained editions. Restore TLS volumes while Caddy is stopped, then
+verify permissions, certificates and renewal. Do not store the only copy of
+state or recovery credentials on the managed VPS.
 
-An artwork edition does not execute old code by itself. Retain a compatible
-renderer release and its Linux/toolchain manifest or retire that edition. Never
-silently reinterpret a saved recipe using a newer artistic default. A security
-issue may require retiring an old renderer even if some images cannot regenerate.
+Proposed recovery objective: two hours, still to be measured. From a second
+machine, recover backend access/state, rebuild an approved host, install Docker,
+restore operator files and TLS volumes, load a retained release and activate it.
+Review IP/DNS lifecycle, verify HTTPS, render and download an image, reboot and
+check again. Record operator, elapsed time, state version, image IDs, release and
+gaps. Linux amd64 OOM, reboot, dual-stack firewall, live TLS/renewal, state locking
+and clean-host restore remain target-host launch gates.

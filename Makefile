@@ -74,3 +74,7 @@ hatchbook: ## Render the internal/hatch specimen sheets + manifest into $(HATCHB
 
 sweep: ## Sweep 12 seeds of a sketch into a contact sheet (S=pools)
 	go run ./cmd/staticart sweep $(or $(S),pools) --seeds 1-12 --out out/sweep
+
+.PHONY: check-compose
+check-compose: ## Rehearse the container runtime locally (Docker + Compose required)
+	deploy/scripts/verify-compose.sh

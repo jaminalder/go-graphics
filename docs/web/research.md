@@ -94,7 +94,7 @@ checks. Recommendation: progressive file sharing with a normal download
 fallback; no third-party social scripts.
 [Web Share specification](https://www.w3.org/TR/web-share/).
 
-## Caddy and systemd
+## Caddy and process isolation
 
 Caddy's automatic HTTPS is a good fit for one public domain. Use persistent
 TLS storage and explicit networking/timeouts. Its reverse-proxy documentation
@@ -109,12 +109,12 @@ cost-aware admission in Go. Introducing a custom proxy build merely to obtain
 this directive adds an avoidable maintenance obligation.
 [Module status](https://caddyserver.com/docs/modules/http.handlers.rate_limit).
 
-Systemd has service execution restrictions and cgroup resource controls.
-Recommendation: separate web and renderer services, with one supervised child
-per image job, so hard limits do not require a rewrite of every artwork loop.
-Measure the subprocess overhead alongside render latency. A Docker deployment
-could also isolate processes, but would add image/runtime operations without
-solving another v1 requirement; systemd is the smaller initial operating model.
+Historical baseline, superseded by ADR 0004: systemd service restrictions and
+cgroups supported a small host-service deployment with one supervised child per
+job. The owner subsequently made container packaging and operating experience
+explicit goals and selected Compose. The separate process/resource boundary
+remains; the preferred packaging and supervision changed. Linux resource and
+execution controls remain useful background reading.
 [Execution controls](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml),
 [resource controls](https://github.com/systemd/systemd/blob/main/man/systemd.resource-control.xml).
 
@@ -189,3 +189,15 @@ latency, real-browser CSP and accessibility checks, style curation, backend
 locking tests and a restore drill. We have not provisioned a server, measured
 Hetzner throughput, performed a public load test or assigned source/output
 licences in this task.
+
+## Docker Compose decision (2026-09-10)
+
+The owner chose Compose for standard image packaging and container operations
+learning. Current implementation is described in [the runbook](../../deploy/README.md).
+It retains separate resource groups and the private renderer protocol.
+Official references: [Compose service controls](https://docs.docker.com/reference/compose-file/services/),
+[resource limits](https://docs.docker.com/engine/containers/resource_constraints/),
+[firewall integration](https://docs.docker.com/engine/network/packet-filtering-firewalls/),
+[Ubuntu installation](https://docs.docker.com/engine/install/ubuntu/).
+The earlier preference for host units above is historical, not a constraint
+against the owner's approved runtime change.

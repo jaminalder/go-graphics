@@ -16,7 +16,8 @@ abstract irises, and fractal flames. The project remains a local art laboratory;
 **Singular Seed**, a curated Go SSR + htmx studio, is
 [implemented locally](docs/web/README.md) alongside it. The chosen public domain
 is `singularseed.art`; deployment and publication remain pending.
-See the [local run and deployment guide](deploy/README.md).
+See the [Docker Compose run and deployment guide](deploy/README.md) and
+[container-first infrastructure learning track](docs/learning/infra/README.md).
 All 133 ColorLisa palettes are built in (`staticart palettes`; `staticart
 list` shows the complete set).
 

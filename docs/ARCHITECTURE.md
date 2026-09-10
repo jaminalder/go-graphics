@@ -556,3 +556,12 @@ bounded navigation and preserves favourites; initial admission is atomic and
 idempotent, and failures leave prior directions unchanged. The interface uses
 server-side favourites without browser recovery controls. Full rationale:
 [web/ux-simplification.md](web/ux-simplification.md).
+
+### 64. Docker Compose owns the public runtime (2026-09-10)
+
+The owner chose three containers on one VPS for portable image releases and
+container-first infrastructure learning. [ADR 0004](adr/0004-compose-runtime.md)
+supersedes ADR 0003's host application units while preserving one queue, private
+renderer supervision and separate resource limits. Terraform/cloud-init still
+own the host; Compose owns processes/networks/volumes. Image archives and release
+scripts retain smoke, drain and rollback; host/TLS/recovery proof remains pending.

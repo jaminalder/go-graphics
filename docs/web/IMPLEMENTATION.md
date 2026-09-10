@@ -1,3 +1,7 @@
+> Current runtime update (2026-09-10): Docker Compose on `master` supersedes the
+> initial host-unit deployment below. See ADR 0004 and deploy/README.md. Earlier
+> worktree and systemd verification entries are historical evidence only.
+
 # Implementation checkpoint
 
 Branch: `exp/public-art-app`, based on planning commit `7807154`.
@@ -14,7 +18,7 @@ dedicated sibling worktree. Do not integrate or publish without approval.
 - Typed configurations and canonical recipes; fresh sketch instances.
 - Pure exploration planner, bounded transient workspaces and jobs.
 - Separate renderer supervisor, hard process deadlines, bounded artifacts.
-- Caddy + systemd + Terraform deployment artifacts; no paid provisioning yet.
+- Caddy + Docker Compose + Terraform deployment artifacts; no paid provisioning yet.
 - Test seams agreed in the approved plan: recipes/configuration, exploration,
   HTTP journeys, admission/artifact lifecycle and renderer protocol.
 
@@ -267,3 +271,35 @@ the local implementation does not fabricate evidence for them.
 
 The complete implementation is committed on the dedicated branch for owner review.
 Master remains unchanged; no integration or public deployment has occurred.
+
+## Compose runtime implementation (2026-09-10)
+
+Owner requested Docker Compose and documentation/learning updates on master.
+ADR 0004 supersedes host application units. Added pinned multi-stage image
+builds, static app image, Caddy image, private bridge with explicit proxy trust,
+Unix socket volume, distinct users/resource limits, persistent TLS volumes,
+bounded Docker logs, and private artctl health/admin operations. Only Caddy
+publishes ports; renderer networking is disabled and no container receives the
+Docker socket. Native loopback development remains available.
+
+Release artifacts now contain a checksummed Linux amd64 image archive, exact
+image IDs, Compose configuration and source/edition metadata. Activation has a
+deploy lock, separate staging/public approval records, generation-disabled smoke,
+confirmed queue drain, replacement and rollback. First-install failure removes
+the candidate pointer without deleting volumes. Added pinned Docker host
+bootstrap and Terraform environment selection; OS automatic reboot is disabled.
+CI runs real Compose checks and activation failure-path tests. The learning
+track now starts with local images, networking, volumes and resource failure,
+then state/host/TLS/recovery before later scaling and Kubernetes experiments.
+
+Local evidence: Go proxy/listener tests and focused race tests passed; seven
+activation tests passed; Compose generated four real PNGs, checked memory/swap/
+CPU/task/rootfs/capability/mount/port settings, rejected private paths and wrong
+Host, and kept browsing alive while renderer was stopped, then recovered after
+recreation. Rehearsal used Docker 29.7.1 / Compose 5.4.0 in Colima Linux arm64.
+Terraform format/validate passed without backend/cloud access. Full `make check` passed with fresh Go/linter caches (the old cache referenced
+a removed worktree). Release archive/smoke results are recorded below when completed.
+
+Target Ubuntu amd64 installation, real OOM/reboot, dual-stack forwarding policy,
+public TLS/renewal, state-lock/restore and measured second-machine recovery
+remain pending. No cloud resources, DNS or public release were changed.

@@ -1,56 +1,62 @@
-# Glossary for this track
+# Infrastructure learning glossary
 
-Use these words as the web docs use them. Do not rename a designed mechanism
-to sound more “cloud native”.
+**Image:** immutable packaged filesystem and execution metadata. An image does
+not contain a running process, live volume data or the host kernel.
 
-**Infrastructure as code (IaC)**:
-The cloud objects (server, firewall, IPs, SSH key, later DNS) declared so that
-`plan` shows the next change. Not a synonym for “all configuration on the
-host”.
+**Container:** a process environment created from an image with configured
+namespaces, resource limits, mounts and networking. It shares the Linux kernel.
 
-**Bootstrap**:
-First-boot host facts: users, packages, directories, sshd, journal bounds.
-This project's vehicle is cloud-init. It is not the application release.
+**Tag / digest / image ID:** a tag is a movable name; a digest identifies image
+content; Docker's local image ID identifies its configuration. Our release
+archive records exact image IDs and its own checksum, not only tags.
 
-**Release**:
-A checksummed, immutable directory of Linux binaries plus the Caddyfile and
-unit files that belong to that commit. Activation points `/opt/art/current` at
-it. Distinct from an artwork **edition**.
+**Compose service / project:** a service declares a container role. A project
+groups its services, networks and volumes. The fixed production project owns
+one web queue; another project would create another queue.
 
-**Admission**:
-The application decision to accept expensive render work. The primary rate
-limit that matters for this product. Distinct from TCP connection throttling.
+**Namespace:** Linux's isolation of a process view, such as networking or PIDs.
+**Cgroup:** accounting and limits for a group of processes, including children.
+These are different mechanisms, both used by containers.
 
-**Edge**:
-The process that speaks TLS to the internet. Here: Caddy, bound to :80/:443.
-`artweb` listens on loopback only.
+**Published port:** forwarding from a host address/port into a container.
+An internal listening port is not automatically a public published port.
+Docker forwarding can follow a different firewall path from host INPUT.
 
-**Isolation**:
-Making a renderer OOM, hang, or panic fail the job without taking down
-browsing. Here: separate users, a Unix socket, and systemd cgroups.
-Container runtimes are one way to get isolation, not the definition of it.
+**Loopback:** the current network namespace's own interface. A container's
+`127.0.0.1` is not another container or the VPS host.
 
-**Drain**:
-Stop admitting new generation, wait for running jobs, then restart. The
-current activation script already does this. It is not zero-downtime.
+**Volume / bind mount:** storage mounted outside the image's writable layer.
+A named volume is managed by Docker; a bind mount exposes an explicit host path.
+Neither is automatically backed up. Our socket/cache/TLS mounts are named volumes.
 
-**Vertical scale**:
-A larger VPS (more RAM/CPU). The first scaling move for a CPU-bound renderer.
+**Infrastructure as code:** declarations of cloud objects and their lifecycle,
+not a synonym for all host and application configuration.
 
-**Horizontal scale**:
-More machines. For this app that means a second renderer or a second web
-process, which immediately raises the question of *who owns the only queue*.
+**Bootstrap:** host first-boot facts and runtime prerequisites. Separate from
+an application release; changing cloud-init may mean replacing the host.
 
-**Scheduler**:
-A system that places processes on machines and restarts them (Kubernetes,
-Nomad, even systemd on one box). You already have a one-node scheduler.
+**Release:** a source revision's retained image archive, configuration, image
+IDs, edition manifest and checksums. Distinct from an artwork edition.
 
-**State**:
-Anything that must survive a process restart. Terraform remote state, Caddy
-certificates, `/etc/art/*`, and release tarballs are operator state.
-Workspaces and the image cache are disposable by design.
+**Admission:** accepting expensive render work into the bounded application
+queue. Separate from HTTP request limits and packet-level filtering.
 
-**Hyperscaler**:
-AWS/GCP/Azure-style platforms with a large managed-service catalogue. Hetzner
-Cloud is still “cloud”; it is not that catalogue. The claim under test is that
-you do not *need* the catalogue for this product.
+**Edge:** the public TLS endpoint, here the Caddy container. It supplies
+sanitized client identity to web over the private proxy network.
+
+**Isolation:** a renderer failure fails a job while browsing survives. It must
+be demonstrated under the configured limits, not inferred from container names.
+
+**Liveness / readiness:** liveness answers whether web can serve; renderer
+readiness answers whether compatible generation is available. An unhealthy
+Docker container does not automatically restart just because it is unhealthy.
+
+**Drain:** stop admission and wait for queued/running work before replacement.
+It does not preserve in-memory workspaces or guarantee zero downtime.
+
+**Vertical / horizontal scale:** a larger machine / additional processes or
+machines. Additional web processes require a plan for shared admission/state.
+
+**State:** Terraform resource mapping, operator configuration, release archives
+and TLS data need recovery copies. In-memory workspaces, cache and sockets are
+disposable by this product's contract.

@@ -43,12 +43,5 @@ jobs:
           terraform -chdir=deploy/terraform fmt -check
           terraform -chdir=deploy/terraform init -backend=false -input=false
           terraform -chdir=deploy/terraform validate
-      - name: Verify pinned Caddy binary and proxy configuration
-        run: |
-          curl -fsSL https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz -o /tmp/caddy.tar.gz
-          echo '8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz' | sha512sum -c -
-          tar -xzf /tmp/caddy.tar.gz -C /tmp caddy
-          ART_DOMAIN=localhost /tmp/caddy validate --config deploy/caddy/Caddyfile --adapter caddyfile
-          sudo mkdir -p /opt/art/current
-          sudo cp out/releases/$(git rev-parse HEAD)/artweb out/releases/$(git rev-parse HEAD)/artrender /opt/art/current/
-          systemd-analyze verify deploy/systemd/*.service
+      - name: Verify Compose isolation and real rendering
+        run: deploy/scripts/verify-compose.sh

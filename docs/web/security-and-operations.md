@@ -1,8 +1,8 @@
 # Security, capacity and operations
 
-Status: proposed implementation requirements. None of the controls below is
-implemented or security-tested by this documentation task. Numeric limits are
-initial test configurations, not demonstrated production capacity.
+Status: implementation requirements aligned with the owner-approved Compose
+runtime (ADR 0004, 2026-09-10). Local checks do not establish target-host
+security or capacity; see launch-gates.md for outstanding evidence.
 
 ## Threat model
 
@@ -127,43 +127,38 @@ shared cache. No CORS permission is needed for this same-origin application.
 
 ## One-VPS deployment
 
-Recommended initial production shape:
+The owner selected Docker Compose on one Ubuntu 24.04 VPS:
 
 ```text
-Internet :80/:443
-        |
-Hetzner firewall (IPv4 + IPv6)
-        |
-Caddy — public TLS, static HTTP limits, private admin endpoint
-        |
-artweb — loopback HTTP, web cgroup, ephemeral state + disk cache
-        |
-private Unix socket (restricted service group)
-        |
-artrender — renderer cgroup, one active child, hard deadline
+Internet :80/:443 -> Hetzner firewall + Docker-aware host packet filtering
+  -> Caddy container -> internal bridge -> web container :8080
+    -> shared Unix socket -> renderer container -> disposable child
 ```
 
-Use a supported minimal Linux LTS image, pin its deployment choice, and keep
-security updates/reboots deliberate. For a starting 4 GB CX23 host, test a
-384 MiB web memory limit, 2 GiB renderer hard limit, renderer CPU quota around
-150%, and `GOMAXPROCS=2` within the renderer. Reserve the rest for Caddy, OS,
-page cache and other overhead; verify actual cgroup accounting under load.
-No per-request process-wide `GOMAXPROCS` changes. Flame keeps its eight logical
-orbit streams regardless of this runtime scheduling setting.
+The web container owns the only queue, workspaces and image cache. The renderer
+supervisor has no queue and no network interfaces beyond loopback. Web and
+renderer have separate numeric users, read-only roots, dropped capabilities,
+`no-new-privileges`, 64-task ceilings and limited writable mounts. The renderer
+shares only a group-owned socket directory with web; web's mount is read-only.
+The application containers never receive a Docker socket, cloud credentials,
+operator files or host home directories.
 
-Resource controls constrain a service's child processes through its cgroup;
-configure memory/OOM policy, CPU quotas, task counts and restart limits as a
-tested set. Renderer OOM must not include `artweb` in the killed group.
-[systemd resource-control source documentation](https://github.com/systemd/systemd/blob/main/man/systemd.resource-control.xml).
+Compose configures web at 384 MiB / 0.5 CPU and renderer at 2 GiB / 1.5 CPUs,
+with no swap headroom. Caddy has 256 MiB / 0.5 CPU. Reserve capacity for Docker,
+OS and page cache. Renderer uses `GOMAXPROCS=2`; never change per-request process
+scheduling or the flame's deterministic orbit partitioning. Confirm actual
+cgroup limits and OOM behavior under target load. Container limits include
+children. Docker's `unless-stopped` policy restarts exited processes; unhealthy
+status alone does not restart a container. Monitor restart loops and OOM events.
+[Docker resource controls](https://docs.docker.com/engine/containers/resource_constraints/).
 
-Run web/renderer under different unprivileged users. Application releases are
-read-only; only the web process writes the generated cache. The renderer has a
-private temporary directory, no cloud credentials, and no outbound networking
-requirement. Start with `NoNewPrivileges`, `ProtectSystem=strict`, protected
-home directories, bounded tasks, empty unnecessary capabilities and explicit
-writable paths. Test syscall/address-family restrictions against Go threads,
-Unix sockets, process execution and encoding rather than copying a generic
-unit blindly. [systemd execution controls](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml).
+Caddy and web use fixed addresses on a small internal network. Only Caddy
+publishes ports, and only Caddy's configured IP may supply sanitized client
+identity through `X-Art-Client`. `ART_TRUSTED_PROXY` is one literal IP, never
+an arbitrary forwarded range. Native development defaults to loopback without
+proxy trust. The web admin listener is always loopback inside its container;
+operators use `compose exec ... /app/artctl`, not a published admin port.
+The renderer uses `network_mode: none` and its existing private Unix protocol.
 
 Caddy handles certificate issuance/renewal and HTTP redirects. Preserve its
 certificate/account storage. Use normal automatic HTTPS for a configured
@@ -177,7 +172,13 @@ Open only 80/443 publicly and SSH from approved administration networks, with
 both IP families covered. Keep app, renderer, metrics, profiling and Caddy
 admin inaccessible from the internet. Use SSH keys, a non-root administrator,
 disabled password login and a documented console recovery route. Host firewall
-rules are defence in depth and should be checked against the cloud firewall.
+rules are defence in depth and must be checked against the cloud firewall.
+Docker-published ports can bypass UFW INPUT rules. For the chosen Docker
+iptables backend use DOCKER-USER forwarding policy, preserve established flows,
+allow only intended public TCP 80/443 and deny other unsolicited forwarding.
+Check IPv4 and IPv6, including any userland-proxy path, after reboot. Never
+assume UFW alone protects a published port or disable Docker firewall management.
+[Docker firewall integration](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
 
 ## Infrastructure as code and state
 
@@ -195,7 +196,7 @@ deletion protection / Terraform `prevent_destroy` where appropriate. Do not
 assume those controls replace state backup or operator review.
 
 Application deployment is a separate script shipping prebuilt versioned
-binaries/assets and validated configuration. Avoid `remote-exec` provisioners
+image archives and validated Compose configuration. Avoid `remote-exec` provisioners
 as the normal deploy loop. Terraform's own guidance treats provisioners as a
 last resort. [Provisioner guidance](https://developer.hashicorp.com/terraform/language/provisioners).
 
@@ -219,7 +220,8 @@ Terraform `sensitive` hides presentation, not state contents. Use environment
 or credential mechanisms for backend/provider tokens; restrict state and plan
 access, encrypt backups, and separate deploy credentials from infrastructure
 credentials. Deliver runtime secrets outside Terraform/cloud-init, for example
-root-owned systemd credential files via a restricted deployment step.
+root-owned operator files or explicit read-only secret mounts via a restricted
+deployment step; never bake secrets into images. This app needs no cloud tokens.
 [Sensitive data](https://developer.hashicorp.com/terraform/language/manage-sensitive-data).
 
 ## Deployment, observability and recovery
@@ -233,9 +235,14 @@ separate tooling environment; they do not belong in production.
 Create immutable releases with checksums and manifest containing source
 revision, Go/tool versions, catalogue/edition IDs and asset hashes. In the
 deployment script: upload to a staging directory, verify hashes and modes,
-validate Caddy and service config, smoke-test the candidate on private test
-listeners, pause new admission, drain or explicitly fail active jobs, switch
-release pointers, restart renderer/web and verify externally. Restore previous
+validate Caddy and Compose config, smoke-test a generation-disabled candidate
+on its own private network/socket/cache, pause new admission, drain or explicitly fail active jobs, switch
+release pointers, recreate renderer/web containers and verify externally.
+Use a fixed production Compose project and stop old application containers
+before replacement. Caddy configuration belongs to its versioned image; its
+certificate volumes survive recreation. Production uses immutable image IDs
+loaded from the checksummed archive, with no registry required. A host deploy
+lock serializes activation. Separate staging approval from public-launch approval. Restore previous
 pointers/configuration on failure. Web and renderer must reject incompatible
 protocol/build identities; do not cache an image under the wrong release key.
 
@@ -258,7 +265,7 @@ retention. Application IP counters can be ephemeral; permanent visitor tracking
 is unnecessary.
 
 Use an external uptime check and alerts for disk exhaustion, persistent render
-failures, service restarts and certificate trouble. Start with journald and
+failures, service restarts and certificate trouble. Start with bounded Docker logs, host journald and
 small private metrics; a full Prometheus/Grafana stack is optional, not a v1
 dependency. An alert must have a recipient and a short runbook.
 
@@ -271,8 +278,9 @@ present workstation results as proof.
 
 Propose a two-hour clean-host recovery objective for the small service. Active
 jobs may be lost. Browser-saved recipes/downloads remain visitor-controlled;
-infrastructure state, release manifests, secrets needed for retained editions
-or signed links, and Caddy storage need independent backups. Disposable image
+infrastructure state, release image archives/manifests, operator configuration,
+and Caddy account/certificate volumes need independent backups. Volume survival
+across container replacement is not a backup. Disposable image
 cache is not a backup priority. Restore once from another workstation before
 launch. Hetzner automatic server backups have seven slots, exclude attached
 volumes, and are removed with the server; they are not the only recovery copy.

@@ -1,288 +1,191 @@
 # Three-stage learning plan
 
-Operate the stack this project already designed. Add machinery only when you
-can name the failure it removes. The standard open-source set for that
-discipline is small:
+The owner selected Docker Compose as the runtime on 2026-09-10. This replaces
+the earlier systemd-first curriculum; see [ADR 0004](../../adr/0004-compose-runtime.md).
+The application still runs on one VPS with one admission queue.
 
-| Job | Tool | Why this and not a bigger one |
-|---|---|---|
-| Cloud objects | Terraform (or OpenTofu) + hcloud | Declares server, firewall, IPs, key; `plan` is the review artefact |
-| First boot | cloud-init | Runs once; no extra agent; matches HashiCorp's post-apply guidance |
-| TLS and HTTP edge | Caddy | Automatic HTTPS, reload without dropping listeners |
-| Process policy | systemd | Supervision, cgroups, sandboxing already on Ubuntu |
-| App release | shell scripts + checksums | Immutable directories; rollback is a symlink |
-| Host packets | Hetzner firewall + UFW/nftables | Two layers, same allowlist |
-| Secrets | env files / systemd credentials, never Git or tf state | Smallest store that is not the VPS itself |
-| Seeing failure | journald + one external HTTPS check | Enough until you have an alert without a recipient |
-
-Ansible, Docker, Prometheus, and Kubernetes each solve a *next* problem.
-They are not required to make the table above real.
-
-Keep configuration small by **not mixing layers**. Terraform must not SSH in
-to restart `artweb`. cloud-init must not contain the app binary. unit files
-must not contain the domain secret. CI must not hold production tokens until
-you have a dedicated deploy identity. Every extra tool that straddles two
-layers becomes a second source of truth.
-
-## How to work a stage
-
-1. Read the matching section below and the questions it names in
-   [QUESTIONS.md](QUESTIONS.md).
-2. Read the primary sources in [RESOURCES.md](RESOURCES.md) for that stage.
-3. Do the work against `deploy/` (worktree today, `master` after integrate).
-4. Write answers into QUESTIONS.md and a short
-   [learning record](learning-records/README.md) when something non-obvious
-   lands.
-5. Do not start the next stage because it is interesting. Start it when the
-   current stage's exit is true.
-
-Owner-only actions stay owner-only: `terraform apply`, DNS, buying the VPS,
-putting secrets on the host.
-
----
-
-## Stage 1 — one server that is boring under load
-
-**Goal.** A single Hetzner VPS, one domain, a proven firewall, Caddy, two
-isolated services, checksummed deploys, backups you have restored. This is
-the production architecture in
-[security and operations](../../web/security-and-operations.md)
-and ADR 0003. Treat it as the whole product runtime, not a toy on the way to
-a cluster.
-
-**What you already have** (worktree `deploy/`):
-
-```text
-Internet :80/:443
-        → Hetzner firewall (22 from admin CIDRs; 80/443 public)
-        → Caddy (TLS, body/header limits, private paths 404)
-        → artweb 127.0.0.1:8080 (384 MiB, CPUQuota 50%)
-        → Unix socket
-        → artrender (2 GiB, CPUQuota 150%, AF_UNIX only)
-```
-
-Terraform owns the server, firewall, and primary IPs. cloud-init owns users,
-sshd, directories, and a disabled-by-default UFW policy. Scripts own
-build → smoke on private ports → drain → symlink → restart → rollback.
-
-**Do not add Docker here.** Isolation for this app is already a second user,
-a private socket, and a cgroup that can OOM without killing `artweb`. A
-container runtime on one VPS would add image builds, a second supervisor, and
-a disk budget, without giving you a second machine or a second queue. If you
-still want to *learn* containers, do it as a disposable parallel experiment
-that must match the same memory split — see [ADDITIONS.md](ADDITIONS.md) —
-and keep systemd as what production runs.
-
-**Do not custom-build Caddy for `rate_limit`.** Standard Caddy does not ship
-that module. The expensive resource is render CPU; Go admission already owns
-that. Teach yourself the three different limits people collapse into the word
-“rate limit”:
-
-1. Request shape at the edge (size, timeouts, blocked paths) — Caddyfile.
-2. Generation admission (batches/minute, queue, one active job) — `artweb`.
-3. Abusive connection noise (scanner floods, SSH guessing) — firewall, and
-   later CrowdSec/fail2ban if SSH is not already CIDR-locked.
-
-**Curriculum (in order)**
-
-1. *Read the layers.* Map every file in `deploy/` onto the table at the top.
-   Notice what is *not* there: no `remote-exec`, no Docker Compose, no DNS
-   resource yet, no Caddy install in cloud-init.
-2. *Remote state before a server.* Bootstrap an independent, encrypted,
-   versioned object store. Prove two-client lock contention, interrupted
-   apply recovery, and restore of a prior state version. If a “S3 compatible”
-   bucket fails the lock test, change backend; do not set `use_lockfile=false`.
-3. *Plan, do not apply, until you can explain the plan.* Read
-   `prevent_destroy`, `delete_protection`, and the fact that changing
-   `user_data` can replace the VM. Answer the cloud-init lifecycle question.
-4. *Domain and DNS.* One hostname, A and AAAA to the primary IPs, no on-demand
-   TLS. Rehearse Let's Encrypt limits on a staging hostname if you will iterate.
-5. *Firewall as a pair.* Cloud firewall is the real public filter. UFW is
-   enabled only after console recovery works, with SSH limited to the same
-   CIDRs. Confirm IPv6 rules exist, not only IPv4.
-6. *Bootstrap vs release.* Install pinned Caddy the same way CI verifies it
-   (checksum). Put `ART_DOMAIN` / `ART_ORIGIN` in `/etc/art`, not in Git.
-   Activate a release with the existing scripts. Watch a failed smoke restore
-   `previous=`.
-7. *Prove isolation on Linux.* Fill the renderer cgroup; confirm the gallery
-   still answers. Reboot; confirm certificates persist. Kill the renderer;
-   confirm `/ready` degrades without taking public liveness with it.
-8. *Rate limits as tests, not feelings.* Saturate generation; browse; hit
-   `/metrics` and private paths from the internet (must 404). Spoof
-   `X-Forwarded-For`. Confirm Go limits fire and Caddy timeouts match the
-   security document.
-9. *Recovery drill.* From a second machine, rebuild using state + a retained
-   release + Caddy storage. Time it. That number is your availability story.
-10. *One external eye.* Gallery HTTPS check with a named recipient and a
-    three-line runbook. journald stays bounded. No Prometheus until an alert
-    has gone off and you wished for a graph.
-
-**What you will learn**
-
-- The difference between declaring cloud objects and configuring a Unix box.
-- Why provisioners make Terraform un-plannable, and why that pushed this repo
-  into scripts.
-- TLS as a directory you back up, not a certificate you paste.
-- cgroups as the actual isolation primitive Kubernetes would use later.
-- That “secure” is a list of demonstrated refusals (wrong host, too-big body,
-  GET does not render, renderer OOM is local), not a scanner score.
-- How little YAML you need when the OS already has a supervisor.
-
-**Exit.** You have a staging host you can destroy and recreate; launch-gate
-infra rows have evidence; you can teach the request path from memory; you
-have written answers for every stage-1 question. Containers are still
-optional homework, not the runtime.
-
----
-
-## Stage 2 — zero downtime and scale without Kubernetes
-
-**Goal.** Decide, with measurements from stage 1, which of these you actually
-need: deploys that do not drop Caddy, deploys that do not drop in-flight
-studio sessions, a bigger box, a second box, or automatic capacity. Kubernetes
-is still off the table. The honest ceiling of this stage is **a small fleet
-you can SSH to**, not infinite scale.
-
-**The constraint this app imposes.** `artweb` owns the only queue and the
-workspaces in memory. The security document already warns: starting a second
-independently queued web process on the same host **doubles admission and
-memory**. Zero-downtime is therefore not “run two containers and a load
-balancer”. It is one of:
-
-| Move | What stays up | What you pay |
-|---|---|---|
-| Current drain + restart | Caddy, existing image bytes | In-memory explorations die; a few seconds of 502/retry |
-| Socket activation / process replace | The listening socket | Still one process; in-memory state still dies unless you snapshot it |
-| Two local ports, Caddy `reverse_proxy` swap | Browse, if the new process is up first | Easy to run two queues; must pause admission on the old one and *not* admit on the new until swap |
-| Split renderer onto host B | Web deploys without touching the worker | The Unix socket becomes a private TCP/WireGuard protocol; still one owner of the queue |
-| Persist workspaces (SQLite) | Sessions across web restart | First real database; contradicts v1 “no DB” until you have a reason |
-| Bigger VPS | Everything, same topology | Money; still one failure domain |
-| Hetzner load balancer + two webs | Host death | Shared admission, shared cache, sticky sessions or a store — this is the fork where k8s starts to look cheaper *in complexity*, not in euros |
-
-Caddy reload is already near-zero-downtime for TLS and routing. The gap is
-the Go processes. Learn that distinction before installing a scheduler.
-
-**Curriculum (in order)**
-
-1. *Measure the restart you already have.* Time `activate-release.sh` from
-   drain start to `/ready`. Count lost workspaces. That is the SLO you are
-   improving, not a generic “99.99%”.
-2. *Zero-downtime for the edge only.* Confirm Caddy `reload` never drops
-   :443. Put config that can change without an app restart (headers, HSTS
-   after HTTPS is proven) in Caddy, not in Go.
-3. *One-host rolling web.* Implement a rehearsal: start the candidate on
-   :8180 (the smoke path already does this), flip Caddy upstream, then stop
-   the old process. **Admission must remain global.** If you cannot do that
-   without two queues, you have found the application change stage 2 needs
-   (a lock file, a shared counter, or “only the active upstream admits”).
-4. *Renderer independently of web.* Restart `artrender` while Caddy+artweb
-   stay; jobs fail explicitly. This is the cheap decoupling. It is also the
-   seam for a second machine.
-5. *Vertical scale as a Terraform change.* CX23 → CX33 is a plan you can
-   read. Re-run the 100-seed benchmark. Learn `prevent_destroy` vs resize
-   vs replace.
-6. *Manual horizontal: dedicated renderer.* Second CX, private network or
-   WireGuard, no public :80 on the worker. Terraform grows by one server and
-   one firewall. systemd units stay. This is the furthest typical small shop
-   needs to go for a CPU-bound generator.
-7. *Autoscaling without a cluster.* Hetzner will not scale you like AWS ASG.
-   The realistic automation is: metrics → alert → `hcloud server create`
-   from the same image/user-data, or a scheduled bigger type for known
-   peaks. Write a script only after a human has done the same steps twice.
-   If the script needs a consensus store and a service registry, you are in
-   stage 3 territory.
-
-**What you will learn**
-
-- Availability is a property of *state*, not of YAML. Stateless Caddy is easy
-  to keep up; stateful `artweb` is not.
-- Load balancers multiply processes; they do not merge queues.
-- Most “we need Kubernetes to scale” stories for this workload are actually
-  “we need one more VPS and a private protocol”.
-- Autoscaling is a policy (when, from what image, with which secrets, how
-  traffic finds the new node). The policy is the hard part; `kubectl` would
-  not write it for you.
-
-**How far can you go without Kubernetes?**
-
-Far enough for this product, probably permanently:
-
-- One VPS: the designed production.
-- One VPS, rolling Caddy + drain: good enough if visitors can retry a batch.
-- Two VPS (web | renderer): when CPU/RAM fight each other on CX23.
-- N renderers behind one `artweb`: when the queue wait is the SLO you miss
-  and you are willing to fan the existing supervisor protocol out over a
-  private network.
-- Two web replicas: only with shared admission and either sticky sessions or
-  stored workspaces. That is the first time a scheduler's *standard* rolling
-  Deployment matches the problem.
-
-You do not get multi-AZ failover, fancy ingress, or a Helm ecosystem. You also
-do not spend a vCPU on etcd. For a free art studio on a €7–15 host, that is
-the correct trade until stage 1's restore drill is slower than you can
-tolerate *and* you have two humans operating it.
-
-**Exit.** You have numbers for restart loss, a written choice among the table
-above, and either a working one-host roll or a documented reason you kept
-drain-and-restart. Kubernetes is still a learning lab, not a migration.
-
----
-
-## Stage 3 — Kubernetes as a second language
-
-**Goal.** Understand what the control plane buys, by running a **throwaway**
-k3s (or kind) copy of the studio that is not the public host. Migrate
-production only if stage 2 left a problem Kubernetes uniquely solves.
-
-**What Kubernetes would add, mapped to this app**
-
-| Benefit people cite | On this studio |
+| Responsibility | Tool and file |
 |---|---|
-| Rolling updates | Needs 2+ ready replicas and no double queue — app change first |
-| Self-heal | systemd `Restart=` already does this on one node |
-| Resource limits | You already have `MemoryMax` / `CPUQuota`; k8s would wrap the same cgroups |
-| Service discovery | Replaces a Unix socket path with DNS and NetworkPolicies |
-| Horizontal Pod Autoscaler | Useful only after the queue is a cluster-wide object |
-| Declarative desired state | You already have this for cloud objects in Terraform; k8s adds it for *processes* |
-| Ecosystem (ingress, cert-manager, Helm) | Replaces Caddy-on-the-host with a pile of YAML that does the same TLS |
+| Cloud objects and state | Terraform, `deploy/terraform/` |
+| First boot | cloud-init, `deploy/cloud-init/user-data.yaml` |
+| Host container runtime | `deploy/scripts/bootstrap-host.sh` |
+| Packaged application and edge | `deploy/Dockerfile` |
+| Process/resource/network/storage policy | `deploy/compose.yaml` |
+| HTTPS and request shape | Caddyfile, baked into the edge image |
+| Releases | checksummed image archive + smoke/drain/activate/rollback scripts |
+| Visibility | bounded Docker logs, host journald, private metrics, external HTTPS check |
 
-**Curriculum**
+Do each exercise as: predict, run, inspect, explain. Answer the matching
+[questions](QUESTIONS.md) and write a learning record when an observation changes
+your understanding. Learning can run on `master` in this session. No exercise
+authorizes cloud spending, DNS or publication.
 
-1. Read [k3s architecture](https://docs.k3s.io/architecture). Install k3s on
-   a **separate** CX or a local VM. Measure idle RAM before any app pod.
-   That number is the tax.
-2. Wrap `artweb` and `artrender` as two Deployments, one ClusterIP, one
-   NetworkPolicy that is as strict as `RestrictAddressFamilies=AF_UNIX`.
-   Put Caddy or ingress-nginx in front. Compare the file count to `deploy/`.
-3. Attempt a rolling update. Watch whether you now run two admissions. Fix
-   that in the app or admit that k8s did not give you zero-downtime for free.
-4. Only then look at a managed Kubernetes (Hetzner CKS, Civo, a tiny EKS).
-   Price it against two CX33s. Include your time.
+## Stage 1 — one containerized server you can recover
 
-**What you will learn**
+**Goal:** operate the real three-container application on staging, demonstrate
+its failure boundaries, and recover it from independently retained state.
 
-- Kubernetes is an API for desired process state, not a requirement for
-  HTTPS or firewalls.
-- On one node it is a more expensive systemd. Its value appears at *many
-  heterogeneous services* or *many operators*, which this repo does not have.
-- The case for the VPS is won or lost in stages 1–2. Stage 3 is literacy so
-  you can reject (or accept) a cluster with specifics.
+### 1. Local containers before a server
 
-**Exit.** A short written comparison: file count, RAM tax, rolling-update
-behaviour, restore story. Production stays on systemd unless that comparison
-names a failure you are willing to pay for.
+Read Dockerfile and Compose alongside the [runbook](../../../deploy/README.md).
+Build and start the local stack; load http://localhost:8088. Identify the three
+containers, two images, internal bridge and published ports. Trace a real batch
+through web, Unix socket, renderer supervisor and child back to cached PNGs.
 
----
+Learn image vs container, build stage vs runtime stage, image tag vs immutable
+ID/digest, process vs VM. Inspect the static application image: the compiler,
+shell, browser test dependencies and credentials are absent. On macOS the
+containers run in a Linux VM; native ARM rehearsal is not an amd64 VPS benchmark.
 
-## Suggested weekly rhythm
+**Exercise:** explain what `build`, `up`, `stop`, `restart`, recreation and `down`
+change. Rebuild an image and show why an existing container has to be replaced
+to run it. Observe how restart differs from rebuilding source.
 
-Do not binge stages. A useful week is one layer:
+### 2. Networks, permissions and volumes
 
-- Week of state/DNS/firewall (no public app).
-- Week of Caddy + first release (staging hostname).
-- Week of isolation and load (the proofs).
-- Week of restore and monitoring.
-- Only then a zero-downtime experiment on staging.
+Caddy publishes HTTP/HTTPS and connects to web over an internal bridge. The
+web container trusts one Caddy IP and keeps admin HTTP on its own loopback.
+The renderer has `network_mode: none` and a shared group-owned Unix socket.
+Web mounts the socket directory read-only and alone writes the cache.
 
-If a week produces a new YAML stack instead of a proof (lock, OOM, restore,
-reload), you drifted into collecting tools. Return to the exit criteria.
+**Exercise:** inspect network membership, port bindings, numeric users and
+mounts. Attempt public access to `/metrics` and `/ready` (404). Explain why
+`localhost` inside one container is not another container. Identify which
+volumes survive recreation and what `down --volumes` would destroy. Never run
+that command against a production project.
+
+Learn filesystem layers, mounts, UID/GID ownership, namespaces and proxy trust.
+Separate Caddy TLS state, disposable cache/socket and in-memory workspaces.
+
+### 3. Resource limits and observable failure
+
+Inspect actual Docker/cgroup memory, swap, CPU and task limits. Stop renderer:
+web liveness and gallery must stay up while readiness fails. Recreate renderer
+and confirm recovery without creating a second queue. `make check-compose`
+automates local boundaries and real rendering.
+
+**Exercise:** follow a job in both logs; inspect health and restart status.
+Explain why an unhealthy container does not automatically restart. On a
+throwaway Linux environment, drive an actual renderer OOM and inspect cgroup
+memory events. A YAML limit is not an OOM proof. Check target-host OOM again
+before launch, together with gallery responsiveness and resource recovery.
+
+Learn how namespaces and cgroups differ, which limits include children, and
+why one container per rendering request or a mounted Docker socket is unnecessary.
+
+### 4. Remote state before cloud resources
+
+Answer questions 1–5, including DNS ownership, total cost ceiling and operator
+machine. `singularseed.art` is chosen; DNS ownership/access and a staging hostname
+still need confirmation. Existing tooling uses Terraform; a switch to OpenTofu
+would be a separate decision.
+
+Bootstrap an independent encrypted/versioned backend. Use a disposable state
+key to prove two-client lock contention, interrupted operation recovery and
+restoration of a prior state version. Never disable locking for a backend.
+
+Learn Terraform's resource mapping, plan vs apply, state vs configuration,
+locking vs object retention, and why the managed VPS cannot hold the only copy
+of its own recovery state.
+
+### 5. Host bootstrap and firewall
+
+Read a saved Terraform plan before an approved apply. Explain primary-IP
+retention, deletion protection and how immutable cloud-init changes can require
+replacement. After provisioning, install pinned Docker with bootstrap-host.sh.
+Cloud-init contains no app images or credentials; app updates never use Terraform.
+
+Prove console recovery before enabling UFW. Match SSH administrator CIDRs in
+cloud/host rules. Inspect Docker's published-port forwarding: UFW INPUT rules
+alone do not protect that path. Configure DOCKER-USER policy for the chosen
+iptables backend and test public refusal over IPv4 and IPv6 after reboot.
+
+Learn first-boot vs ongoing configuration, signed package repositories,
+Docker's daemon privilege, NAT/forwarding vs host input and deliberate updates.
+
+### 6. Staging HTTPS and release operations
+
+Use an owner-controlled staging hostname and correct origin. Configure TLS
+through Caddy; retain its account/certificate volumes. Use ACME staging when
+iterating certificate setup. Record staging authorization separately from
+public-launch approval.
+
+Build a committed Linux amd64 release. Read its archive checksums and immutable
+image IDs. Upload it using the operator identity, then run the activation script.
+Watch private candidate smoke, generation drain, replacement, readiness and
+external HTTPS checks. Cause a bad candidate or readiness failure; observe
+rollback and verify the actual images running afterward.
+
+Learn image distribution without requiring a registry, trusted artifact delivery,
+release identity, drain vs restart and the loss of in-memory explorations.
+Compose alone does not coordinate a zero-downtime deployment.
+
+### 7. Recovery and one external alert
+
+Measure real allowed artwork configurations on the target host, including
+saturated rendering while browsing/downloading. Verify timeout/body bounds,
+forwarded-header spoofing, low disk, stop/start, OOM, and certificate persistence.
+
+From a second machine, restore backend access/state, rebuild the host, restore
+operator files/TLS volumes, load retained images and activate. Time the drill;
+two hours is a proposed objective, not a demonstrated result. Connect an external
+gallery HTTPS check to a named recipient with a short runbook. Bound Docker logs
+and journald, monitor disk and restart loops, schedule security-update reboots.
+
+**Stage-1 exit:** staging deployment, rollback, OOM isolation, reboot, dual-stack
+firewall, state locking and clean-host restore have recorded evidence; questions
+1–15 have answers. You can explain the path and recover it without undocumented
+laptop files. Production launch still requires its own gates and owner approval.
+
+## Stage 2 — availability and scale with Compose
+
+Start from measurements of restart downtime, lost explorations, CPU, memory
+and queue wait. Decide which property needs improvement before adding replicas.
+
+| Change | What it addresses | Constraint |
+|---|---|---|
+| Keep drain/recreate | Small operational surface | Brief outage and lost workspaces |
+| Reload unchanged Caddy separately | Edge config continuity | Does not preserve web state |
+| Larger VPS | CPU/RAM pressure | Same failure domain; remeasure |
+| Two web containers with upstream switch | Potentially smoother deploy | Must preserve one global admission and address workspace loss |
+| Dedicated renderer host | Separates CPU capacity | Unix socket becomes an authenticated private-network protocol |
+| Multiple renderers | Queue wait | One queue owner needs explicit dispatch and capacity accounting |
+| Durable workspaces | Sessions across restarts | Real application persistence change |
+
+**Exercises:** measure the existing restart; rehearse a routing change; stop and
+restart only renderer; compare vertical sizing using target measurements. Do
+not use `compose --scale web=2` as a substitute for a shared-admission design.
+Define autoscaling as an observable threshold and action before automating it.
+
+**Learn:** image portability does not create shared state, load balancing does
+not merge queues, and recovery/availability are application properties as well
+as infrastructure properties. A single Docker host is still a single host.
+
+**Exit:** measured availability loss, a written choice, and a demonstrated
+improvement or a justified decision to keep drain/recreate. Answers 16–22.
+
+## Stage 3 — Kubernetes as a second operating language
+
+Use a separate disposable kind/k3s environment. Reuse the same application
+images and map Compose services, health checks, mounts, resource limits and
+network policy to Kubernetes. Measure control-plane RAM and configuration cost.
+Investigate whether Caddy belongs alongside the application or behind another
+ingress; do not copy ingress examples without preserving proxy trust.
+
+Try a rolling update and identify how admission and workspaces behave. Shared
+pod namespaces/volumes, Deployments, Services, probes, storage and scheduler
+placement are new concepts, not reasons to change the production runtime.
+A NetworkPolicy alone is not identical to disabling renderer networking.
+
+**Learn:** which management work a scheduler supplies, which state and protocol
+problems still belong to this app, and when multiple hosts/operators justify it.
+
+**Exit:** answers 23–27 plus measured file count, RAM, update behavior and restore
+story. Production stays on Compose unless a new owner-approved decision names
+a concrete unmet requirement.
+
+## Suggested rhythm
+
+One layer per session: local images; network/storage; limits/failure; remote
+state; host/firewall; TLS/releases; restore/monitoring. Begin with a prediction
+and finish with an observation, not a pile of new tooling.

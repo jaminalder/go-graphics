@@ -1,7 +1,7 @@
 # Singular Seed
 
 Planning baseline: **2026-09-09**, repository `63c622a` on `master`.
-Status: **implemented locally on `exp/public-art-app`; public launch pending**.
+Status: **implemented on `master`; Compose runtime selected; public launch pending**.
 The owner selected **Singular Seed** and **`singularseed.art`** on 2026-09-10.
 The architecture documents retain the planning baseline; the [product brief](product-and-ux.md) and [UX rationale](ux-simplification.md) record the owner’s simpler 2026-09-10 journey. See the
 [implementation record](IMPLEMENTATION.md), [local run and deployment guide](../../deploy/README.md),
@@ -22,7 +22,7 @@ artwork large and the controls sparse. A normal form-based path must work
 without htmx.
 
 Start on one Hetzner VPS with Terraform-managed infrastructure, Caddy for TLS,
-and systemd for application and renderer supervision. Use a bounded in-memory
+and Docker Compose for separate Caddy, web and renderer containers. Use a bounded in-memory
 queue and disposable disk image cache. Isolate expensive rendering from the
 web process, including hard process deadlines and memory limits. No database,
 accounts, Redis, Kubernetes, or public rendering API are required.
@@ -41,6 +41,7 @@ states. Browsing the gallery must remain usable when rendering is busy.
 | [Security and operations](security-and-operations.md) | Threat model, limits, HTTP behaviour, deployment, recovery, launch gates |
 | [Research](research.md) | Primary-source findings, version/pricing caveats, QQL lessons, infrastructure choices |
 | [Implementation plan](implementation-plan.md) | Ordered, reviewable slices and handoff instructions for later sessions |
+| [Infrastructure learning](../learning/infra/README.md) | Container-first single-server operation, recovery, later scaling |
 | [Domain glossary](../../CONTEXT.md) | Shared terminology |
 
 Read this set as the design for the public-app extension to
@@ -59,7 +60,7 @@ its existing refactor checklist is historical work, not a fresh web backlog.
 | Stack | Go SSR + htmx, few dependencies, robust public operation |
 | Access | Free, open access, no authentication or application database in v1 |
 | Output | Download and share a low-resolution image |
-| Infrastructure | DIY infrastructure as code, Terraform, cost-efficient Hetzner VPS; Caddy recommended |
+| Infrastructure | Terraform, one Hetzner VPS, Docker Compose, Caddy; owner selected Compose on 2026-09-10 |
 | Current task | Local implementation complete; deployment and publication remain separate owner decisions |
 | Launch set | Implemented provisional `pools`, `foam`, and `iris`; owner approves final publication |
 | Sharing | Baseline is image-file sharing; reproducible public links are an optional extension pending owner preference |

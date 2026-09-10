@@ -1,3 +1,4 @@
+environment = "staging"
 name = "singular-seed-staging"
 location = "nbg1"
 admin_cidrs = ["192.0.2.10/32", "2001:db8::10/128"]

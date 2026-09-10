@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: superseded by ADR-0004
 ---
 
 # Bound and isolate public rendering on one VPS
@@ -20,3 +20,6 @@ Terraform provisions cloud resources; release scripts deploy versioned
 binaries. Public release introduces CI/security/recovery gates, superseding
 architecture decision 3's local-only policy when implemented. See
 [security and operations](../web/security-and-operations.md).
+
+ADR 0004 replaces host application units with Compose containers. The isolated
+supervisor, one queue, Unix socket and child deadlines remain the design.

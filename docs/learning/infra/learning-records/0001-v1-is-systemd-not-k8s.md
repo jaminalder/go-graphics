@@ -1,3 +1,7 @@
+> Historical starting point, 2026-09-09. The owner superseded the systemd
+> runtime choice on 2026-09-10; see [record 0002](0002-compose-before-provisioning.md).
+> The original observation below is retained as decision history.
+
 # The v1 runtime is already a complete small-shop stack
 
 The public studio is designed as Terraform-managed Hetzner resources, cloud-init

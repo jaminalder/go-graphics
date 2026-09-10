@@ -11,6 +11,14 @@ terraform {
 provider "hcloud" {}
 variable "name" { default = "singular-seed" }
 variable "location" { default = "nbg1" }
+variable "environment" {
+  type    = string
+  default = "staging"
+  validation {
+    condition     = contains(["staging", "production"], var.environment)
+    error_message = "Environment must be staging or production."
+  }
+}
 variable "admin_cidrs" { type = list(string) }
 variable "ssh_public_key" { type = string }
 resource "hcloud_ssh_key" "admin" {
@@ -70,7 +78,7 @@ resource "hcloud_server" "web" {
     ipv6         = hcloud_primary_ip.v6.id
   }
   lifecycle { prevent_destroy = true }
-  labels = { service = "singular-seed", environment = "staging" }
+  labels = { service = "singular-seed", environment = var.environment }
 }
 output "ipv4" { value = hcloud_primary_ip.v4.ip_address }
 output "ipv6" { value = hcloud_primary_ip.v6.ip_address }

@@ -1,31 +1,25 @@
-# Learning track: small-shop infrastructure
+# Learning track: operate Singular Seed with Docker Compose
 
-This folder is a **learning plan**, not an implementation plan.
+The owner chose Docker Compose on 2026-09-10. Learn by operating this
+application on one inexpensive Hetzner VPS. The runtime files now live in
+`deploy/` on `master`; older worktree-only references are historical.
 
-The public application's runtime is specified in [`docs/web/`](../../web/README.md)
-and implemented on the `public-art-app` worktree under `deploy/`. Those documents
-remain the product contract. Nothing here authorises changing them, applying
-Terraform, buying a server, or opening DNS.
+This folder is the curriculum. [The deployment runbook](../../../deploy/README.md)
+and [web security contract](../../web/security-and-operations.md) describe the
+implemented runtime. Learning notes never constitute cloud-spending, DNS or
+public-launch approval. Staging rehearsal has a separate approval from launch.
 
-Use this track to learn infrastructure as code by operating **this** service on
-a cost-efficient VPS, and to test the claim that a robust public studio does
-not require a hyperscaler account or Kubernetes.
-
-| File | Use it for |
+| File | Purpose |
 |---|---|
-| [MISSION.md](MISSION.md) | Why this track exists and what “done” looks like |
-| [PLAN.md](PLAN.md) | The three stages, in order, with what each one teaches |
-| [QUESTIONS.md](QUESTIONS.md) | Decisions to answer in writing before adding tools |
-| [ADDITIONS.md](ADDITIONS.md) | Suggested later changes to `deploy/`; do not merge these into `docs/web/` yet |
-| [RESOURCES.md](RESOURCES.md) | Primary sources to read instead of folklore |
-| [GLOSSARY.md](GLOSSARY.md) | Shared words for this track |
-| [NOTES.md](NOTES.md) | Preferences that should steer later teaching sessions |
-| [learning-records/](learning-records/README.md) | Insights after you have actually done the work |
+| [MISSION.md](MISSION.md) | Outcome and boundaries |
+| [PLAN.md](PLAN.md) | Three stages with exercises and exit criteria |
+| [QUESTIONS.md](QUESTIONS.md) | Owner decisions and explanations to write as you learn |
+| [ADDITIONS.md](ADDITIONS.md) | Remaining gaps; distinguish implementation from operational proof |
+| [RESOURCES.md](RESOURCES.md) | Official documentation for each layer |
+| [GLOSSARY.md](GLOSSARY.md) | Container and infrastructure vocabulary |
+| [NOTES.md](NOTES.md) | Teaching preferences and decision history |
+| [learning-records/](learning-records/README.md) | What changed in our understanding |
 
-Start with [MISSION.md](MISSION.md), then [PLAN.md](PLAN.md) stage 1. Record
-answers in [QUESTIONS.md](QUESTIONS.md) as you go; do not skip ahead to
-containers, zero-downtime, or Kubernetes because they sound like “real infra”.
-The existing stack is already the classroom.
-
-When this track and the web implementation disagree, the web implementation
-wins for production and this track explains *why* that choice is the lesson.
+Start with stage 1's local Compose rehearsal. Explain a layer, run it, inspect
+its actual behavior, then deliberately break it and recover. Record results;
+configuration that looks right is not the same as a demonstrated property.

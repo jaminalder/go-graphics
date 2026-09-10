@@ -31,10 +31,10 @@ var files embed.FS
 // Config fixes the canonical origin and app dependencies at startup.
 type (
 	Config struct {
-		Origin     string
-		Studio     *studio.Store
-		Jobs       *renderjob.Manager
-		TrustProxy bool
+		Origin       string
+		Studio       *studio.Store
+		Jobs         *renderjob.Manager
+		TrustedProxy netip.Addr
 	}
 	app struct {
 		cfg          Config
@@ -173,7 +173,7 @@ func (a *app) client(r *http.Request) string {
 	if e != nil {
 		return "unknown"
 	}
-	if a.cfg.TrustProxy && ip.IsLoopback() {
+	if a.cfg.TrustedProxy.IsValid() && ip.Unmap() == a.cfg.TrustedProxy.Unmap() {
 		if candidate, e := netip.ParseAddr(r.Header.Get("X-Art-Client")); e == nil {
 			ip = candidate
 		}

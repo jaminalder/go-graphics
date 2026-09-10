@@ -44,13 +44,9 @@ func env(key, fallback string) string {
 
 func run() error {
 	addr := env("ART_ADDR", "127.0.0.1:8080")
-	host, _, err := net.SplitHostPort(addr)
+	proxy, err := listenerProxy(addr, os.Getenv("ART_TRUSTED_PROXY"))
 	if err != nil {
 		return err
-	}
-	ip, err := netip.ParseAddr(host)
-	if err != nil || !ip.IsLoopback() {
-		return errors.New("web listener must be loopback; use the configured proxy")
 	}
 	origin := env("ART_ORIGIN", "http://"+addr)
 	client := renderjob.NewClient(env("ART_SOCKET", "out/artrender.sock"), build)
@@ -60,7 +56,7 @@ func run() error {
 	}
 	defer jobs.Close()
 	jobs.Enable(os.Getenv("ART_GENERATION") != "off")
-	handler, err := web.New(web.Config{Origin: origin, Studio: studio.New(jobs, build), Jobs: jobs, TrustProxy: os.Getenv("ART_TRUST_PROXY") == "yes"})
+	handler, err := web.New(web.Config{Origin: origin, Studio: studio.New(jobs, build), Jobs: jobs, TrustedProxy: proxy})
 	if err != nil {
 		return err
 	}
@@ -113,4 +109,27 @@ func run() error {
 		return nil
 	}
 	return fmt.Errorf("serve: %w", err)
+}
+
+// listenerProxy allows a container listener only with one explicit proxy address.
+// Admin HTTP remains loopback-only regardless of this setting.
+func listenerProxy(addr, trusted string) (netip.Addr, error) {
+	var proxy netip.Addr
+	if trusted != "" {
+		var err error
+		proxy, err = netip.ParseAddr(trusted)
+		if err != nil || proxy.IsUnspecified() || proxy.IsMulticast() || proxy.Zone() != "" {
+			return netip.Addr{}, errors.New("ART_TRUSTED_PROXY must be one unicast IP address")
+		}
+		proxy = proxy.Unmap()
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil || (!ip.IsLoopback() && !proxy.IsValid()) {
+		return netip.Addr{}, errors.New("web listener must be loopback unless ART_TRUSTED_PROXY is set")
+	}
+	return proxy, nil
 }

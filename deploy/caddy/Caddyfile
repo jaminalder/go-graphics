@@ -10,13 +10,16 @@
 		}
 	}
 }
+http:// {
+	respond "unknown host" 421
+}
 {$ART_DOMAIN} {
 	request_body {
 		max_size 64KB
 	}
-	@private path /health/* /metrics /generation/*
+	@private path /health/* /ready /metrics /generation/*
 	respond @private 404
-	reverse_proxy 127.0.0.1:8080 {
+	reverse_proxy web:8080 {
 		header_up X-Art-Client {remote_host}
 		header_up -X-Forwarded-For
 		header_up -X-Forwarded-Host

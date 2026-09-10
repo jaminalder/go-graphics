@@ -5,7 +5,7 @@ make check
 go test -race ./internal/artwork ./internal/explore ./internal/publish ./internal/renderjob ./internal/studio ./internal/web ./cmd/staticart
 govulncheck ./...
 python3 deploy/tests/test_activation.py
-ART_DOMAIN=localhost caddy validate --config deploy/caddy/Caddyfile --adapter caddyfile
+deploy/scripts/verify-compose.sh
 terraform -chdir=deploy/terraform fmt -check
 terraform -chdir=deploy/terraform init -backend=false -input=false
 terraform -chdir=deploy/terraform validate

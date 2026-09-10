@@ -1,18 +1,21 @@
-# Preferences for later sessions
+# Teaching preferences and decisions
 
-Recorded 2026-09-09 from the request that created this track.
+Original learning request: 2026-09-09. Runtime decision updated: 2026-09-10.
 
-- Keep existing web/infra plans untouched; add files under `docs/learning/`
-  only.
-- The argument to test is: a robust public runtime can live on a plain cloud
-  VPS; AWS + Kubernetes is not a prerequisite.
-- Desired shape of learning: stage 1 single server, stage 2 zero-downtime and
-  scaling without Kubernetes, stage 3 Kubernetes only if stage 2 runs out of
-  road.
-- Values: small config, high automation, standard open-source tools,
-  cost-efficient Hetzner.
-- “Containerization” and “proxy rate limits” were named as stage-1 wants.
-  Treat them as questions to answer against the existing systemd/Caddy/Go
-  design, not as missing defaults.
-- Teaching should stay tied to this repository's `deploy/` artifacts and
-  `docs/web/security-and-operations.md`, not a generic VPS tutorial.
+- Learn by deploying this repository's application, with small configuration,
+  standard tools, high automation and a cost-efficient Hetzner VPS.
+- The owner selected **Docker Compose first** after comparing host services
+  with containers. Update deployment and learning documentation together;
+  the earlier learning-only editing restriction is superseded by that request.
+- Work on `master` for this session, as explicitly requested. Do not describe
+  `deploy/` as living only in an implementation worktree.
+- Stage 1 is single-server container operation and recovery; stage 2 is
+  availability/scaling without Kubernetes; stage 3 is Kubernetes literacy.
+- Explain images/containers, private networks, volumes, cgroups and failure
+  recovery directly. Do not hide Linux fundamentals behind Compose commands.
+- Use the pattern: explain, predict, run, inspect, deliberately fail, recover,
+  record. A successful command is not evidence of every security property.
+- Preserve the separate web/renderer boundary and one queue. Docker Compose
+  does not imply a registry, Redis, a database or a cluster.
+- Public hostname is `singularseed.art`; DNS ownership/access, staging hostname,
+  budget, credentials and publication remain separate owner decisions.

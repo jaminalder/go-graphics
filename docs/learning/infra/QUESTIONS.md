@@ -1,11 +1,11 @@
 # Questions to answer in writing
 
-Answer in this file, under each question, as you learn. A tool you cannot
-justify with an answer is not allowed onto the host. Copy a question into a
+Answer in this file, under each question, as you learn. Explain each tool against the failure it addresses and record evidence
+separately from the decision to use it. Copy a question into a
 [learning record](learning-records/README.md) only when the answer changed
 your mind.
 
-Status key: `unanswered` · `decided` · `revisit after stage N`
+Status key: `unanswered` · `partially decided` · `decided` · `revisit after stage N`
 
 ---
 
@@ -15,7 +15,9 @@ These overlap the owner decisions in [`docs/web/README.md`](../../web/README.md)
 Infrastructure cannot invent them.
 
 1. **What is the public hostname, and who owns the DNS?**
-   Status: unanswered
+   Status: partially decided
+   Public hostname: `singularseed.art` (owner, 2026-09-10). DNS ownership/access
+   and the staging hostname remain unanswered.
    Why it matters: Caddy automatic HTTPS and `ART_ORIGIN` are meaningless
    without one canonical name. Terraform can manage records only after this.
 
@@ -80,23 +82,26 @@ Infrastructure cannot invent them.
     numbers: max body, batches/minute, and what happens to the rest of the
     internet scanners.
 
-11. **Do containers earn a place on this host?**
-    Status: unanswered
-    Why it matters: systemd already isolates the renderer. A container must
-    buy you something you can name (reproducible libc, an extra binary with a
-    nasty system dependency, a learning goal). “Everyone uses Docker” is not
-    a name.
+11. **Why are we using containers, and which boundaries must they preserve?**
+    Status: decided
+    Owner selected Docker Compose on 2026-09-10 for standard image packaging,
+    reproducible local topology and container operations learning. Keep Caddy,
+    web and renderer separate, one queue, explicit limits, private Unix socket,
+    no renderer networking or Docker control socket. See ADR 0004.
+    Exercise still required: explain images, volumes, namespaces and cgroups
+    against the running configuration; prove failure isolation on the target.
 
 12. **When do security updates reboot the box, and who is awake?**
-    Status: unanswered
-    Why it matters: `unattended-upgrades` is installed in cloud-init but not
-    configured. Automatic reboot of a single VPS *is* downtime. That is an
+    Status: partially decided
+    Automatic reboot is disabled in cloud-init. The maintenance window and
+    responsible operator remain unanswered.
+    Why it matters: Automatic reboot of a single VPS *is* downtime. That is an
     SLO choice.
 
-13. **What is backed up besides Hetzner's seven server-backup slots?**
+13. **Which image archives, operator files and volumes have independent backups?**
     Status: unanswered
     Why it matters: those slots die with the server. List: state, releases,
-    `/etc/art`, Caddy storage, credentials. The image cache is not on the list
+    `/etc/art`, Caddy data/config volumes, credentials. The image cache is not on the list
     unless you changed the product promise.
 
 14. **What is the one alert that pages you, and what do you do in ten minutes?**
@@ -138,8 +143,8 @@ Infrastructure cannot invent them.
 19. **What is the private network between web and renderer if they split?**
     Status: unanswered
     Why it matters: Hetzner private networks vs WireGuard vs public bind +
-    firewall. The current renderer has `RestrictAddressFamilies=AF_UNIX`.
-    Splitting hosts is an application-protocol change, not a compose-file
+    firewall. The current renderer uses `network_mode: none` and a Unix socket.
+    Splitting hosts is an application-protocol change, not only a Compose-file
     change.
 
 20. **What would make you add a database?**
@@ -166,7 +171,7 @@ Infrastructure cannot invent them.
 23. **Which stage-2 failure is still open, in one sentence?**
     Status: unanswered
     Why it matters: if the sentence is empty, k3s is a lab. If it is “two
-    people ship twice a day and systemd units drift”, you have an operators
+    people ship twice a day and Compose definitions drift”, you have an operators
     problem. If it is “I need a rolling update of 12 services”, you have a
     different product.
 
@@ -208,3 +213,12 @@ Infrastructure cannot invent them.
     one secret store?**
     If the answer depends on a laptop directory named `~/stuff`, it is not
     infrastructure as code yet.
+
+## Container-first stage-1 exercises
+
+31. Which files are in an image, a writable layer, a named volume and the host?
+32. Which service can reach which ports? Why is the web admin port still private?
+33. Why does a container's unhealthy status not automatically restart it?
+34. Which exact image IDs run now, and how do you restore the previous release?
+35. Where do Docker-published packets meet firewall policy over IPv4 and IPv6?
+36. What does Compose recreation preserve, and what does it lose?

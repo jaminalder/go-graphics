@@ -1,0 +1,15 @@
+**
+!go.mod
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!web/
+!web/catalog/
+!web/catalog/**
+!deploy/
+!deploy/Dockerfile
+!deploy/caddy/
+!deploy/caddy/**
+**/testdata/
+**/*_test.go

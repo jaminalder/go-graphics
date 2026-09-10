@@ -136,9 +136,10 @@ Scope: `deploy/`, CI configuration, operational documentation.
 - Select/pin a supported Linux image, architecture, Go and tool versions.
 - Implement Terraform for server/firewall/IP/key resources; select/bootstrap
   remote state, then prove locking/version recovery from two clients.
-- Add nonsecret cloud-init, separate systemd web/renderer cgroups, Caddy config,
+- Add nonsecret cloud-init, separate Compose web/renderer cgroups, Caddy config,
   private endpoints and restricted administrative access.
-- Add immutable release build/deploy/rollback scripts and checksummed manifests.
+- Add pinned image builds, immutable image archives, private candidate smoke,
+  drain/deploy/rollback scripts and checksummed manifests.
   CI runs `make check`, race tests, vulnerability checks and required browser/
   protocol checks. Keep production secrets out of test output/state.
 - Add external uptime alerting, bounded logs, resource dashboards or simple
@@ -185,7 +186,8 @@ does not start expensive generation.
 No universal `Plan`/`Scene`/field interface, mass sketch renaming, full renderer
 cancellation migration, paint tiling, all-sketch trait conversion, microservices,
 database, user accounts, uploads, payments, live collaboration, infinite
-generation, public REST API, WASM engine, Kubernetes or container platform.
+generation, public REST API, WASM engine, Kubernetes or a multi-host container platform. Docker Compose on one VPS is
+the approved runtime (ADR 0004).
 Each has a possible later motivation; none is required for this first product.
 
 Revisit cooperative cancellation for efficiency if process overhead is material;

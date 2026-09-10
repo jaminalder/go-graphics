@@ -46,7 +46,8 @@ internal/{render,paint,...}/   existing mechanisms
 web/catalog/                  reviewed example manifest and deliberate public assets
 deploy/terraform/             cloud resources and backend configuration examples
 deploy/cloud-init/            initial host bootstrap, no secrets
-deploy/systemd/                service units and sandbox configuration
+deploy/compose.yaml            containers, resource limits, networks and volumes
+deploy/Dockerfile              pinned image builds
 deploy/caddy/                  proxy configuration
 deploy/scripts/                versioned deploy, verify, rollback and recovery
 ```
@@ -276,7 +277,8 @@ that re-enters normal admission.
 
 The existing render loops do not accept cancellation. A request deadline
 around `Sketch.Render` cannot stop a goroutine or prevent process-wide OOM.
-Use **two systemd services** on the same host:
+Use **two application containers**, with a third Caddy container at the edge,
+on the same host (owner decision [ADR 0004](../adr/0004-compose-runtime.md)):
 
 1. `artweb`: HTTP, temporary workspaces, admission, the only queue, and image
    cache management.
@@ -293,15 +295,18 @@ request controls executable name, arguments, working directory or file paths.
 Set a hard supervisor execution deadline, cap output bytes and always kill
 and reap a timed-out child. `exec.CommandContext` is a building block, not the
 whole lifecycle: account for pipe closure, `WaitDelay`, child exit errors and
-cleanup. The controlled executable must not spawn descendants; use service
+cleanup. The controlled executable must not spawn descendants; use container
 control-group cleanup on shutdown. Test a hung child, oversized output, panic,
 and abrupt supervisor death. [Go process control](https://pkg.go.dev/os/exec).
 
-Place the renderer service and its children in a separate systemd cgroup with
-`MemoryMax`, CPU budget and task limits. If it OOMs or restarts, the web service
-stays alive and marks the job failed. Bound restart rate. The Unix socket is
-accessible only to the two service users through an explicit group; do not
-disable address-family support needed by that socket while hardening services.
+Place the renderer container and its children in a separate cgroup with
+Compose `mem_limit`, `memswap_limit`, `cpus` and `pids_limit`. If it OOMs or
+restarts, web stays alive and marks the job failed. Monitor restart loops;
+`unless-stopped` restarts exited containers, not unhealthy-but-running ones.
+The Unix socket is accessible only to the two numeric service users through an
+explicit group and mounted directory. Renderer uses `network_mode: none`.
+Caddy reaches web over an internal bridge; web trusts only Caddy's configured
+IP for client identity. Admin HTTP is loopback inside web, never published.
 
 This is a local execution adapter, not a distributed rendering platform. Its
 extra process is justified by three existing execution models without
