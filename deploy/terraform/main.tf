@@ -76,7 +76,7 @@ resource "hcloud_primary_ip" "v6" {
 }
 resource "hcloud_server" "web" {
   name               = var.name
-  server_type        = "cax11"
+  server_type        = "cx23"
   image              = "ubuntu-24.04"
   location           = var.location
   ssh_keys           = [hcloud_ssh_key.admin.id]

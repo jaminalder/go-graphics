@@ -3,8 +3,8 @@
 Implementation approval authorizes local development. It does not approve
 publication, licences, cloud expenditure, DNS changes or final artistic choices.
 No public site has been provisioned or deployed by this implementation. The
-selected target is now CAX11 ARM64 in nbg1; earlier amd64 release checks do not
-constitute verification of that host.
+selected target is now CX23 x86-64 in nbg1 after Hetzner rejected CAX11 there.
+Local image checks do not constitute verification of the target host.
 
 | Gate | Local evidence / required next evidence |
 |---|---|
@@ -19,8 +19,8 @@ constitute verification of that host.
 | Isolated execution | Actual hung/panic/overflow child tests, local Compose resource/private-path checks and real PNG generation; target Compose OOM/reboot isolation pending |
 | Security | Host/Origin/CSRF/body/form bounds, strict recipe allowlist, no GET rendering; adversarial HTTP/runtime tests recorded in implementation log |
 | Capacity | Named 600px preview/1200px download tiers; target-host 100-seed/configuration-class CPU/p50/p95/p99/RSS/bytes and saturation results pending |
-| Infrastructure | Terraform configuration and Compose images/configuration; target Docker install, IPv4/IPv6 forwarding and TLS proof pending; no apply or DNS changes |
-| State protection | Hetzner bucket/versioning bootstrap and SSE-C/lockfile configuration defined; actual bucket creation and two-client lock/recovery proof pending |
+| Infrastructure | Owner applied Terraform: SSH key, firewall and primary IPs created; CAX11 server creation failed. Configuration changed to CX23; fresh plan/apply, Docker installation and public networking/TLS pending |
+| State protection | Owner reports bucket setup complete; plan succeeds after loading the SSE-C key. Lock contention and restore exercises deferred by owner for staging; recovery proof remains pending |
 | Release operations | Immutable image archives/checksums, candidate smoke, activation/rollback scripts and seven local failure-path tests; target staged deployment/rollback/reboot proof pending |
 | Clean-host recovery | Runbook supplied; second-machine restore and measured two-hour objective pending |
 | Monitoring | Private metrics/logs and runbook; external alert service/recipient pending |

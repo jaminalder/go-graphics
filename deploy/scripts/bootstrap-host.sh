@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Ubuntu 24.04 arm64 only. Run as root on an owner-approved staging/production host.
+# Ubuntu 24.04 amd64 only. Run as root on an owner-approved staging/production host.
 # Installs the runtime; does not launch the app, write credentials, DNS, or enable UFW.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Run as root on the target host' >&2; exit 1; }
 . /etc/os-release
-[[ "$ID" == ubuntu && "$VERSION_ID" == 24.04 && $(dpkg --print-architecture) == arm64 ]]
+[[ "$ID" == ubuntu && "$VERSION_ID" == 24.04 && $(dpkg --print-architecture) == amd64 ]]
 apt-get update
 apt-get install -y ca-certificates curl
 install -d -m 0755 /etc/apt/keyrings /etc/docker /opt/art/releases /etc/art
@@ -15,7 +15,7 @@ Types: deb
 URIs: https://download.docker.com/linux/ubuntu
 Suites: noble
 Components: stable
-Architectures: arm64
+Architectures: amd64
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 apt-get update

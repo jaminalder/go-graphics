@@ -581,3 +581,19 @@ configuration update. Previous amd64 verification remains historical evidence.
 
 Sources: [Hetzner CAX architecture](https://www.hetzner.com/pressroom/arm64-cloud/),
 [GitHub ARM64 runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+
+### 66. Use CX23 x86-64 after CAX11 provisioning was rejected (2026-09-10)
+
+Hetzner rejected CAX11 in nbg1 after creating the SSH key, firewall and primary
+IPs. The owner's console shows CX23 selectable, with 2 shared vCPUs, 4 GB RAM
+and 40 GB disk. Use CX23 in nbg1 so the existing IPs can be reused. This
+supersedes decision 65's ARM target; SSH access configuration is unchanged.
+Release images and manifests target linux/amd64, host bootstrap installs amd64
+Docker packages, and CI uses the x86-64 Ubuntu runner. The Dockerfile already
+cross-compiles Go through TARGETARCH; local development stays native-platform.
+Compose limits remain suitable for the same CPU/RAM tier. Existing ARM release
+archives are historical artifacts and must not be deployed to CX23. The owner
+executes a fresh plan/apply; no server or remote state is changed by this edit.
+
+Source: [Hetzner cost-optimized servers](https://www.hetzner.com/cloud/cost-optimized/).

@@ -30,7 +30,7 @@
 <a href="#operations">08 · Operations &amp; recovery</a>
 <a href="#find">09 · Further information</a>
 </nav>
-<p class="aside-note">SYSTEM REFERENCE<br>10 September 2026<br><br>Configuration baseline:<br><code>b3e4a81</code> + CAX11 configuration update<br><br>One document.<br>Source files linked throughout.</p>
+<p class="aside-note">SYSTEM REFERENCE<br>10 September 2026<br><br>Configuration baseline:<br><code>b3e4a81</code> + CX23 configuration update<br><br>One document.<br>Source files linked throughout.</p>
 </aside>
 <main id="main">
 <div class="topline"><span>System &amp; operations</span><span>Configuration, processes, file locations</span></div>
@@ -110,7 +110,7 @@ docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml d
 </details>
 <div class="table-wrap"><table><thead><tr><th>Setting</th><th>Local</th><th>Target VPS</th></tr></thead><tbody>
 <tr><td>Compose definition</td><td colspan="2"><code>deploy/compose.yaml</code>; host uses its retained release copy.</td></tr>
-<tr><td>Project / images</td><td><code>art-local</code>; development image tags, local build platform.</td><td><code>singular-seed</code>; exact Linux arm64 image IDs.</td></tr>
+<tr><td>Project / images</td><td><code>art-local</code>; development image tags, local build platform.</td><td><code>singular-seed</code>; exact Linux amd64 image IDs.</td></tr>
 <tr><td>Environment input</td><td><code>deploy/local.env</code></td><td><code>/etc/art/operator.env</code> plus release <code>images.env</code></td></tr>
 <tr><td>Site / browser origin</td><td><code>http://localhost</code> / <code>http://localhost:8088</code></td><td>Approved hostname / its full <code>https://…</code> origin</td></tr>
 <tr><td>Published addresses</td><td>Loopback IPv4/IPv6; host ports 8088 and 8443.</td><td>Public IPv4/IPv6; host ports 80 and 443, behind firewall rules.</td></tr>
@@ -138,7 +138,7 @@ docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml d
 <p><a href="../../../deploy/Dockerfile">Dockerfile</a> pins Go 1.26.8 and Caddy 2.11.4 by digest. <a href="../../../.dockerignore">.dockerignore</a> limits build inputs. <code>make build</code> only builds the native art CLI; the deployment release is built with:</p>
 <pre><code># Repository root; requires a clean committed checkout and Docker.
 deploy/scripts/build-release.sh</code></pre>
-<p>Output: <code>out/releases/&lt;full-commit&gt;/</code>. The script refuses to overwrite an existing release directory. It always targets <code>linux/arm64</code>; local ARM execution shares the target architecture but is not a VPS performance measurement.</p>
+<p>Output: <code>out/releases/&lt;full-commit&gt;/</code>. The script refuses to overwrite an existing release directory. It always targets <code>linux/amd64</code>; builds on Apple Silicon cross-compile the Go binaries, and local execution of these release images uses emulation. Local development builds remain native ARM; neither is a VPS performance measurement.</p>
 <div class="table-wrap"><table><thead><tr><th>Release file</th><th>Purpose</th></tr></thead><tbody>
 <tr><td><code>images.tar</code></td><td>App and edge images, saved for transport without a registry.</td></tr>
 <tr><td><code>images.env</code></td><td><code>ART_APP_IMAGE</code>, <code>ART_EDGE_IMAGE</code> as exact <code>sha256:…</code> image IDs; <code>ART_REVISION</code> as the source commit.</td></tr>
@@ -151,22 +151,23 @@ deploy/scripts/build-release.sh</code></pre>
 
 <section id="infrastructure">
 <h2><span class="n">05</span>VPS provisioning</h2>
-<p>Terraform manages the cloud objects. Application updates use release scripts after the host exists. The current configuration describes one Hetzner <code>cax11</code> (ARM64), Ubuntu 24.04, location <code>nbg1</code> by default, with backups enabled.</p>
+<p>Terraform manages the cloud objects. Application updates use release scripts after the host exists. The current configuration describes one Hetzner <code>cx23</code> (x86-64), Ubuntu 24.04, location <code>nbg1</code> by default, with backups enabled.</p>
 <div class="table-wrap"><table><thead><tr><th>Configuration</th><th>Current definition and purpose</th></tr></thead><tbody>
 <tr><td>Terraform / provider</td><td><code>main.tf</code> pins Terraform 1.14.9 and hcloud 1.68.0.</td></tr>
 <tr><td>Environment inputs</td><td><code>name</code>, <code>location</code>, <code>environment</code>, <code>admin_cidrs</code>, <code>ssh_public_key_path</code>, sensitive <code>hcloud_token</code>. Environment defaults to staging; the key path defaults to <code>~/.ssh/id_ed25519.pub</code>.</td></tr>
 <tr><td>Cloud firewall</td><td>SSH TCP 22 only from administrator CIDRs. TCP 80/443 from all IPv4/IPv6 addresses.</td></tr>
 <tr><td>Primary IPs / protections</td><td>Separate IPv4 and IPv6 resources with automatic deletion disabled. Terraform prevents their destruction; the server also has deletion and rebuild protections.</td></tr>
-<tr><td>Terraform state</td><td>A separate <a href="../../../deploy/terraform-state/README.md">Terraform bootstrap</a> creates the private, versioned bucket. Its output supplies this module’s S3 backend settings. State encryption requires the saved <code>AWS_SSE_CUSTOMER_KEY</code>; S3 credentials are separate from the cloud API token. Terraform lockfiles prevent concurrent writes. Creation and live lock/recovery checks are still pending.</td></tr>
+<tr><td>Terraform state</td><td>A separate <a href="../../../deploy/terraform-state/README.md">Terraform bootstrap</a> creates the private, versioned bucket. Its output supplies this module’s S3 backend settings. State encryption requires the saved <code>AWS_SSE_CUSTOMER_KEY</code>; S3 credentials are separate from the cloud API token. Terraform lockfiles prevent concurrent writes. The owner reports bucket creation complete and a successful plan after supplying the SSE-C key. Extra lock/recovery exercises were deferred for staging.</td></tr>
 <tr><td>First-boot data</td><td>Terraform renders <code>cloud-init/user-data.yaml</code> with the same public key read from the configured file. Changing this data can require server replacement.</td></tr>
 </tbody></table></div>
+<p class="small">Current provisioning status: the SSH key, cloud firewall and primary IPs were created. Hetzner rejected CAX11 server creation; the configuration now selects CX23. Generate a fresh plan to create the remaining server. The state bucket stays in nbg1.</p>
 <h3>Provisioning sequence</h3>
 <ol>
 <li>Choose the budget, staging hostname, administrator IPv4/IPv6 ranges and operator access. Run <code>deploy/terraform-state</code> to create the state bucket. Back up its local state independently, supply the saved SSE-C key, and verify remote locking and recovery.</li>
 <li>Prepare private backend and variable files from the examples. Supply the Hetzner token as <code>TF_VAR_hcloud_token</code> from the operator’s environment or credential store; the provider uses the sensitive <code>hcloud_token</code> variable. Backend credentials remain separate. Terraform reads <code>~/.ssh/id_ed25519.pub</code> by default (override <code>ssh_public_key_path</code>) and registers it as <code>macbook-key</code>.</li>
 <li>Initialize Terraform, save and review the plan, then apply the approved plan. Terraform returns the server’s IP addresses. DNS records are not managed by this module.</li>
 <li>Cloud-init creates the <code>operator</code> user, disables password/root SSH, configures bounded journald logs, disables automatic reboots and creates <code>/opt/art/releases</code> and <code>/etc/art</code>.</li>
-<li>Run <code>deploy/scripts/bootstrap-host.sh</code> as root on the Ubuntu arm64 host. It installs the pinned Docker stack and enables Docker through host systemd.</li>
+<li>Run <code>deploy/scripts/bootstrap-host.sh</code> as root on the Ubuntu amd64 host. It installs the pinned Docker stack and enables Docker through host systemd.</li>
 <li>Confirm console recovery; finish the host firewall, DNS and runtime environment before activating the application.</li>
 </ol>
 <details><summary>Terraform command sequence · operator machine</summary>
@@ -261,7 +262,7 @@ sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T
 <li><strong>Updates:</strong> base images and host packages are pinned. OS automatic reboot is disabled; runtime updates and maintenance reboots need an operator schedule.</li>
 <li><strong>Capacity:</strong> one web queue and one active renderer job. Adding a second web replica creates another independent queue. Scaling needs an application state/admission design.</li>
 <li><strong>Recovery:</strong> recover state access, rebuild the host, restore operator/TLS files, load a retained release and activate it. The proposed two-hour recovery objective is not yet demonstrated.</li>
-<li><strong>Still pending:</strong> target arm64 capacity/OOM, reboot and dual-stack firewall verification, live TLS/renewal, state locking/restore, external alert recipient, and a measured second-machine recovery.</li>
+<li><strong>Still pending:</strong> target amd64 capacity/OOM, reboot and dual-stack firewall verification, live TLS/renewal, state locking/restore, external alert recipient, and a measured second-machine recovery.</li>
 </ul>
 <p class="source">Full detail: <a href="../../../deploy/README.md#private-operations">operations runbook</a> and <a href="../../web/launch-gates.md">current launch gates</a>. Local implementation and tests do not establish these target-host results.</p>
 </section>
@@ -280,7 +281,7 @@ sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T
 </tbody></table></div>
 <p class="source">Links refer to files in this checkout. The document itself is standalone HTML with inline diagrams and styling; it requires no build, JavaScript or server. Keep it at <code>docs/learning/infra/index.html</code> for relative source links to resolve.</p>
 </section>
-<footer>Singular Seed system reference · 10 September 2026 · Configuration baseline <code>b3e4a81</code> + CAX11 configuration update. Runtime files and the deployment runbook are the source of truth for subsequent changes.</footer>
+<footer>Singular Seed system reference · 10 September 2026 · Configuration baseline <code>b3e4a81</code> + CX23 configuration update. Runtime files and the deployment runbook are the source of truth for subsequent changes.</footer>
 </main></div>
 </body>
 </html>
