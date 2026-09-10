@@ -20,7 +20,7 @@ constitute verification of that host.
 | Security | Host/Origin/CSRF/body/form bounds, strict recipe allowlist, no GET rendering; adversarial HTTP/runtime tests recorded in implementation log |
 | Capacity | Named 600px preview/1200px download tiers; target-host 100-seed/configuration-class CPU/p50/p95/p99/RSS/bytes and saturation results pending |
 | Infrastructure | Terraform configuration and Compose images/configuration; target Docker install, IPv4/IPv6 forwarding and TLS proof pending; no apply or DNS changes |
-| State protection | S3 lockfile/versioning configuration; independent backend bootstrap and two-client lock/recovery proof pending |
+| State protection | Hetzner bucket/versioning bootstrap and SSE-C/lockfile configuration defined; actual bucket creation and two-client lock/recovery proof pending |
 | Release operations | Immutable image archives/checksums, candidate smoke, activation/rollback scripts and seven local failure-path tests; target staged deployment/rollback/reboot proof pending |
 | Clean-host recovery | Runbook supplied; second-machine restore and measured two-hour objective pending |
 | Monitoring | Private metrics/logs and runbook; external alert service/recipient pending |

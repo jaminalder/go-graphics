@@ -27,9 +27,11 @@ imported into `hcloud_ssh_key.admin` after reviewing ownership.
 
 ## State and host lifecycle
 
-Before a real plan, independently bootstrap a private encrypted, versioned S3
-state bucket. Keep backend configuration and credentials outside Git. Use
-`backend.hcl.example`, then `terraform init -backend-config=/private/path/backend.hcl`.
+Before a real plan, create the private, versioned Hetzner state bucket with
+[the separate bootstrap configuration](../terraform-state/README.md). It also
+outputs the backend settings for this directory. Keep backend configuration
+and credentials outside Git. Supply the separate S3 credentials and the saved
+SSE-C encryption key through the environment, then initialize this backend.
 Prove lock contention from two clients, recovery after interruption, and prior
 state-version restoration in a disposable state key before provisioning.
 Do not disable locking to accommodate a backend. Provider credentials stay on
@@ -41,6 +43,6 @@ deletion protections intentionally stop casual replacement. Rebuild only as an
 explicit recovery/migration operation with backups and IP lifecycle reviewed.
 Updating a release uses Compose and does not change cloud-init.
 
-The state backend, DNS ownership, administrator CIDRs, spending ceiling and
+The state backend live verification, DNS ownership, administrator CIDRs, spending ceiling and
 apply remain owner decisions. No infrastructure has been provisioned by these
 files. See [the operating runbook](../README.md).

@@ -1,8 +1,17 @@
-bucket       = "OWNER-SELECTED-PRIVATE-STATE-BUCKET"
+bucket       = "BUCKET-NAME-FROM-BOOTSTRAP"
 key          = "singular-seed/staging.tfstate"
-region       = "OWNER-SELECTED-REGION"
+region       = "nbg1"
 encrypt      = true
 use_lockfile = true
-# Credentials come from AWS_PROFILE/environment, never this file.
-# Use an independently bootstrapped encrypted/versioned backend.
+endpoints = { s3 = "https://nbg1.your-objectstorage.com" }
+use_path_style              = true
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+# Export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY with Hetzner S3 credentials.
+# Export AWS_SSE_CUSTOMER_KEY with a stable base64-encoded 32-byte encryption key.
+# Hetzner supports SSE-C, not AWS-managed encryption. encrypt=true alone is insufficient.
+# Create the private/versioned bucket with deploy/terraform-state first.
 # Do not disable locking to work around an S3-compatible provider failure.

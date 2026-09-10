@@ -78,8 +78,9 @@ on the target: a healthy laptop rehearsal cannot establish VPS capacity.
 
 ## Prepare an approved host
 
-1. Follow [Terraform state and lifecycle](terraform/README.md): independent
-   encrypted/versioned backend, two-client locking and recovery proof, then a
+1. Create the state bucket with [Terraform bootstrap](terraform-state/README.md),
+   then follow [Terraform state and lifecycle](terraform/README.md): SSE-C
+   encryption, versioning, two-client locking and recovery proof, then a
    saved plan reviewed before an approved apply. Supply `TF_VAR_hcloud_token`;
    the SSH public key defaults to
    `~/.ssh/id_ed25519.pub` and is registered as `macbook-key`. Choose administrator

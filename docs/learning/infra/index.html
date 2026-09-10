@@ -80,6 +80,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>File</th><th>Defines</th><th>Why it lives here</th></tr></thead>
 <tbody>
+<tr><td><a href="../../../deploy/terraform-state/main.tf"><code>deploy/terraform-state/main.tf</code></a></td><td>Private Hetzner state bucket in nbg1, versioning and deletion protection. Uses the MinIO provider against Hetzner’s S3 API; no extra container.</td><td>The bucket must exist before the VPS backend can initialize. Bootstrap state is local and needs its own encrypted backup.</td></tr>
 <tr><td><a href="../../../deploy/terraform/main.tf"><code>deploy/terraform/main.tf</code></a></td><td>Hetzner server, primary IPs, cloud firewall, SSH public key, provider versions, backend type.</td><td>Cloud resources have a lifecycle separate from application releases.</td></tr>
 <tr><td><a href="../../../deploy/terraform/terraform.tfvars.example"><code>terraform.tfvars.example</code></a> / <a href="../../../deploy/terraform/backend.hcl.example"><code>backend.hcl.example</code></a></td><td>Examples for environment inputs and the independent state store. Real operator files stay outside Git.</td><td>Names, access ranges and backend settings vary by environment.</td></tr>
 <tr><td><a href="../../../deploy/cloud-init/user-data.yaml"><code>deploy/cloud-init/user-data.yaml</code></a></td><td>First-boot user, SSH policy, OS packages, log retention and reboot policy.</td><td>Prepares the operating system when Terraform creates the host.</td></tr>
@@ -156,12 +157,12 @@ deploy/scripts/build-release.sh</code></pre>
 <tr><td>Environment inputs</td><td><code>name</code>, <code>location</code>, <code>environment</code>, <code>admin_cidrs</code>, <code>ssh_public_key_path</code>, sensitive <code>hcloud_token</code>. Environment defaults to staging; the key path defaults to <code>~/.ssh/id_ed25519.pub</code>.</td></tr>
 <tr><td>Cloud firewall</td><td>SSH TCP 22 only from administrator CIDRs. TCP 80/443 from all IPv4/IPv6 addresses.</td></tr>
 <tr><td>Primary IPs / protections</td><td>Separate IPv4 and IPv6 resources with automatic deletion disabled. Terraform prevents their destruction; the server also has deletion and rebuild protections.</td></tr>
-<tr><td>Terraform state</td><td>An S3 backend; bucket, key and region supplied separately. Example enables encryption and lockfiles. Bucket creation/versioning is not provisioned by this module.</td></tr>
+<tr><td>Terraform state</td><td>A separate <a href="../../../deploy/terraform-state/README.md">Terraform bootstrap</a> creates the private, versioned bucket. Its output supplies this module’s S3 backend settings. State encryption requires the saved <code>AWS_SSE_CUSTOMER_KEY</code>; S3 credentials are separate from the cloud API token. Terraform lockfiles prevent concurrent writes. Creation and live lock/recovery checks are still pending.</td></tr>
 <tr><td>First-boot data</td><td>Terraform renders <code>cloud-init/user-data.yaml</code> with the same public key read from the configured file. Changing this data can require server replacement.</td></tr>
 </tbody></table></div>
 <h3>Provisioning sequence</h3>
 <ol>
-<li>Choose the budget, staging hostname, administrator IPv4/IPv6 ranges and operator access. Bootstrap an independent encrypted/versioned state store; verify its locking and recovery.</li>
+<li>Choose the budget, staging hostname, administrator IPv4/IPv6 ranges and operator access. Run <code>deploy/terraform-state</code> to create the state bucket. Back up its local state independently, supply the saved SSE-C key, and verify remote locking and recovery.</li>
 <li>Prepare private backend and variable files from the examples. Supply the Hetzner token as <code>TF_VAR_hcloud_token</code> from the operator’s environment or credential store; the provider uses the sensitive <code>hcloud_token</code> variable. Backend credentials remain separate. Terraform reads <code>~/.ssh/id_ed25519.pub</code> by default (override <code>ssh_public_key_path</code>) and registers it as <code>macbook-key</code>.</li>
 <li>Initialize Terraform, save and review the plan, then apply the approved plan. Terraform returns the server’s IP addresses. DNS records are not managed by this module.</li>
 <li>Cloud-init creates the <code>operator</code> user, disables password/root SSH, configures bounded journald logs, disables automatic reboots and creates <code>/opt/art/releases</code> and <code>/etc/art</code>.</li>

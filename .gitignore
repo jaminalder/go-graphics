@@ -17,7 +17,7 @@
 web/browser/node_modules/
 web/browser/test-results/
 web/browser/playwright-report/
-deploy/terraform/.terraform/
+**/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan
