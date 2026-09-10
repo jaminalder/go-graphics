@@ -8,7 +8,14 @@ terraform {
   }
   backend "s3" {}
 }
-provider "hcloud" {}
+variable "hcloud_token" {
+  description = "Hetzner project API token; supply through TF_VAR_hcloud_token."
+  type        = string
+  sensitive   = true
+}
+provider "hcloud" {
+  token = var.hcloud_token
+}
 variable "name" { default = "singular-seed" }
 variable "location" { default = "nbg1" }
 variable "environment" {
@@ -20,10 +27,17 @@ variable "environment" {
   }
 }
 variable "admin_cidrs" { type = list(string) }
-variable "ssh_public_key" { type = string }
+variable "ssh_public_key_path" {
+  description = "Public key file on the machine running Terraform."
+  type        = string
+  default     = "~/.ssh/id_ed25519.pub"
+}
+locals {
+  ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
+}
 resource "hcloud_ssh_key" "admin" {
-  name       = "${var.name}-admin"
-  public_key = var.ssh_public_key
+  name       = "macbook-key"
+  public_key = local.ssh_public_key
 }
 resource "hcloud_firewall" "web" {
   name = var.name
@@ -62,12 +76,12 @@ resource "hcloud_primary_ip" "v6" {
 }
 resource "hcloud_server" "web" {
   name               = var.name
-  server_type        = "cx23"
+  server_type        = "cax11"
   image              = "ubuntu-24.04"
   location           = var.location
   ssh_keys           = [hcloud_ssh_key.admin.id]
   firewall_ids       = [hcloud_firewall.web.id]
-  user_data          = templatefile("${path.module}/../cloud-init/user-data.yaml", { ssh_public_key = var.ssh_public_key })
+  user_data          = templatefile("${path.module}/../cloud-init/user-data.yaml", { ssh_public_key = local.ssh_public_key })
   delete_protection  = true
   rebuild_protection = true
   backups            = true

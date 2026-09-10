@@ -565,3 +565,19 @@ supersedes ADR 0003's host application units while preserving one queue, private
 renderer supervision and separate resource limits. Terraform/cloud-init still
 own the host; Compose owns processes/networks/volumes. Image archives and release
 scripts retain smoke, drain and rollback; host/TLS/recovery proof remains pending.
+
+### 65. Match the deployment target to CAX11 ARM64 (2026-09-10)
+
+The owner selected Hetzner CAX11 in nbg1 and the existing MacBook SSH public
+key. CAX is ARM64, so retained release builds, the Ubuntu Docker repository
+and bootstrap architecture check, and the CI runner all target ARM64 together.
+The Dockerfile already supports target-platform Go compilation and its pinned
+base images support ARM64. Local Compose remains native-platform development;
+it does not force an architecture or change the three-service boundary.
+Terraform reads one expanded public-key path for both its SSH-key resource and
+cloud-init; the sensitive API-token variable comes from the operator environment.
+No host creation or existing-resource ownership change is authorized by this
+configuration update. Previous amd64 verification remains historical evidence.
+
+Sources: [Hetzner CAX architecture](https://www.hetzner.com/pressroom/arm64-cloud/),
+[GitHub ARM64 runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).

@@ -1,25 +1,20 @@
-# Learning track: operate Singular Seed with Docker Compose
+# Singular Seed infrastructure documentation
 
-The owner chose Docker Compose on 2026-09-10. Learn by operating this
-application on one inexpensive Hetzner VPS. The runtime files now live in
-`deploy/` on `master`; older worktree-only references are historical.
+Open [System and operations](index.html) in a browser. This is the primary
+reference: system overview, configuration ownership, local Docker/Compose,
+VPS provisioning, host configuration, release builds, deployment, rollback,
+operations and recovery. It is one standalone HTML file with inline SVG diagrams.
+There is no course, exercise flow, quiz or progress tracking.
 
-This folder is the curriculum. [The deployment runbook](../../../deploy/README.md)
-and [web security contract](../../web/security-and-operations.md) describe the
-implemented runtime. Learning notes never constitute cloud-spending, DNS or
-public-launch approval. Staging rehearsal has a separate approval from launch.
+The document stays inside `docs/learning/infra/`. Links point to the actual
+configuration and implementation elsewhere in this checkout. No build, server
+or JavaScript is required; keep this location for source links to resolve.
 
-| File | Purpose |
-|---|---|
-| [MISSION.md](MISSION.md) | Outcome and boundaries |
-| [PLAN.md](PLAN.md) | Three stages with exercises and exit criteria |
-| [QUESTIONS.md](QUESTIONS.md) | Owner decisions and explanations to write as you learn |
-| [ADDITIONS.md](ADDITIONS.md) | Remaining gaps; distinguish implementation from operational proof |
-| [RESOURCES.md](RESOURCES.md) | Official documentation for each layer |
-| [GLOSSARY.md](GLOSSARY.md) | Container and infrastructure vocabulary |
-| [NOTES.md](NOTES.md) | Teaching preferences and decision history |
-| [learning-records/](learning-records/README.md) | What changed in our understanding |
+The [deployment runbook](../../../deploy/README.md) contains the complete
+operating instructions. [Launch gates](../../web/launch-gates.md) distinguishes
+local evidence from pending target-host and publication requirements.
 
-Start with stage 1's local Compose rehearsal. Explain a layer, run it, inspect
-its actual behavior, then deliberately break it and recover. Record results;
-configuration that looks right is not the same as a demonstrated property.
+Earlier Markdown planning material remains available as background:
+[mission](MISSION.md), [plan](PLAN.md), [open questions](QUESTIONS.md),
+[remaining work](ADDITIONS.md), [sources](RESOURCES.md), [glossary](GLOSSARY.md)
+and [decision history](learning-records/README.md).

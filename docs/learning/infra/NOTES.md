@@ -1,21 +1,20 @@
-# Teaching preferences and decisions
+# Documentation preferences and decisions
 
-Original learning request: 2026-09-09. Runtime decision updated: 2026-09-10.
+Updated 2026-09-10 after the owner reviewed and rejected the teaching-course format.
 
-- Learn by deploying this repository's application, with small configuration,
-  standard tools, high automation and a cost-efficient Hetzner VPS.
-- The owner selected **Docker Compose first** after comparing host services
-  with containers. Update deployment and learning documentation together;
-  the earlier learning-only editing restriction is superseded by that request.
-- Work on `master` for this session, as explicitly requested. Do not describe
-  `deploy/` as living only in an implementation worktree.
-- Stage 1 is single-server container operation and recovery; stage 2 is
-  availability/scaling without Kubernetes; stage 3 is Kubernetes literacy.
-- Explain images/containers, private networks, volumes, cgroups and failure
-  recovery directly. Do not hide Linux fundamentals behind Compose commands.
-- Use the pattern: explain, predict, run, inspect, deliberately fail, recover,
-  record. A successful command is not evidence of every security property.
-- Preserve the separate web/renderer boundary and one queue. Docker Compose
-  does not imply a registry, Redis, a database or a cluster.
-- Public hostname is `singularseed.art`; DNS ownership/access, staging hostname,
-  budget, credentials and publication remain separate owner decisions.
+- Provide direct system and operational information. Do not turn this material
+  into lessons, quizzes, exercises, spaced reviews, progress tracking or a course.
+- The owner knows Docker, Linux and CI/CD basics. Explain this system's specific
+  connections, configuration files, responsibilities and reasons for separation.
+- The requested deliverable is one HTML reference with useful diagrams. Keep all
+  documentation changes inside `docs/learning/infra/`; link to application and
+  deployment sources instead of changing or duplicating their implementations.
+- `index.html` replaces the rejected HTML course. The previous course pages,
+  shared course assets and browser-note features were removed. Earlier Markdown
+  planning files are background, not instructions to resume teaching.
+- The selected runtime remains Docker Compose on one Hetzner VPS, with Caddy,
+  separate web/renderer containers, one queue and no application database.
+- Public hostname: `singularseed.art`. Deployment/provisioning requirements and
+  operational proof belong in the existing runbook and launch-gate documents.
+- Follow the repository's worktree and integration rules. The earlier request
+  to implement Compose on master was specific to that historical session.
