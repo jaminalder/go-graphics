@@ -1,9 +1,285 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="You know the tools. This track connects them: what owns each responsibility, what a release changes, and how to tell whether the system is ready for its next step."><title>Start here · Singular Seed learning</title><link rel="stylesheet" href="assets/course.css"><script src="assets/course.js" defer></script></head>
-<body><a class="skip" href="#main">Skip to content</a><div class="layout"><aside><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span>Singular Seed</a><p class="eyebrow">The operator’s notebook</p><nav aria-label="Learning track"><a href="index.html" aria-current="page">Start here</a><a href="lessons/0001-trace-a-request.html">01 · Trace a request</a><a href="lessons/0002-build-a-release.html">02 · Build a release</a><a href="lessons/0003-deploy-and-recover.html">03 · Deploy & recover</a><a href="reference/field-guide.html">Field guide</a></nav><p class="aside-note">Learn to run a studio<br>you can explain.<br><br>Docker Compose →<br>one recoverable VPS.<br><br><a href="MISSION.md">Your learning mission ↗</a></p></aside><main id="main"><div class="topline"><span>Field notes / Infrastructure</span><span>Source snapshot · 10 Sep 2026</span></div><header><span class="eyebrow">Learning atlas / Start here</span><h1>From a working app<br>to a studio you can operate.</h1><p class="lede">You know the tools. This track connects them: what owns each responsibility, what a release changes, and how to tell whether the system is ready for its next step.</p></header><noscript><p class="callout">All explanations and diagrams are readable without JavaScript. Interactive feedback and browser notes need JavaScript; use the expandable answer keys and paper instead.</p></noscript>
-<div class="actions"><a class="button primary" href="lessons/0001-trace-a-request.html">Start with one request →</a><a class="button" href="#roadmap">See the route ahead</a><a class="button" href="reference/field-guide.html#find">Find a file</a></div>
-<section id="now"><div class="section-head"><h2>Where we stand</h2><span class="meta">Recorded evidence, not a live probe</span></div><div class="grid"><article class="card"><span class="pill done">Implemented</span><h3 style="margin-top:16px">The studio works locally.</h3><p>Go pages, htmx interactions, bounded generation, separate rendering and curated examples for pools, foam and iris.</p><p class="small"><a href="../../web/IMPLEMENTATION.md">Application evidence ↗</a></p></article><article class="card"><span class="pill done">Locally exercised</span><h3 style="margin-top:16px">The release is packaged.</h3><p>Compose rendered PNGs and recovered from renderer stoppage. An amd64 archive passed a private smoke test under emulation.</p><p class="small"><a href="../../web/IMPLEMENTATION.md#compose-runtime-implementation-2026-09-10">Compose &amp; release evidence ↗</a></p></article><article class="card"><span class="pill pending">Next operational proof</span><h3 style="margin-top:16px">The VPS is still ahead.</h3><p>Target-host limits, firewall, TLS, state recovery, deployment and restore remain unproven. The public domain is chosen; launch is pending.</p><p class="small"><a href="../../web/launch-gates.md">Remaining launch gates ↗</a></p></article></div><p class="small muted" style="margin-top:15px">The prior local rehearsal ran on Colima/Linux arm64; the release smoke used amd64 emulation. Neither establishes native VPS capacity. Your own learning progress starts with an explanation, not these implementation results.</p></section>
-<section id="system"><div class="section-head"><h2>The system in five responsibilities</h2><span class="meta">Follow ownership before commands</span></div><figure class="diagram"><div class="diagram-scroll" tabindex="0" aria-label="Diagram; scroll horizontally on narrow screens"><svg viewBox="0 0 900 265" role="img" aria-labelledby="diagram-title diagram-desc"><title id="diagram-title">Five responsibilities, one studio</title><desc id="diagram-desc">Terraform creates the VPS and network resources. Cloud-init and bootstrap establish Linux and Docker. Dockerfile packages two images. Compose runs three services. The release script coordinates replacement. These are ownership relationships, not a request sequence.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#116a61"/></marker><marker id="back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#334f90"/></marker></defs><text class="caption" x="15" y="26">01 / RESPONSIBILITY</text><g><rect class="node " x="10" y="43" width="160" height="75" rx="7"/><text x="26" y="72">Provision</text><text class="caption" x="26" y="92">Terraform</text></g><path class="wire " d="M 170 80 H 189"/><text class="caption" x="195" y="26">02 / RESPONSIBILITY</text><g><rect class="node " x="190" y="43" width="160" height="75" rx="7"/><text x="206" y="72">Prepare</text><text class="caption" x="206" y="92">first boot + Docker</text></g><path class="wire " d="M 350 80 H 369"/><text class="caption" x="375" y="26">03 / RESPONSIBILITY</text><g><rect class="node " x="370" y="43" width="160" height="75" rx="7"/><text x="386" y="72">Package</text><text class="caption" x="386" y="92">Dockerfile</text></g><path class="wire " d="M 530 80 H 549"/><text class="caption" x="555" y="26">04 / RESPONSIBILITY</text><g><rect class="node accent" x="550" y="43" width="160" height="75" rx="7"/><text x="566" y="72">Run</text><text class="caption" x="566" y="92">Compose</text></g><path class="wire " d="M 710 80 H 729"/><text class="caption" x="735" y="26">05 / RESPONSIBILITY</text><g><rect class="node " x="730" y="43" width="160" height="75" rx="7"/><text x="746" y="72">Replace</text><text class="caption" x="746" y="92">release scripts</text></g><path d="M 90 132 V 159 H 810 V 132" fill="none" stroke="#9aada5"/><text x="450" y="193" text-anchor="middle">One Ubuntu host · two images · three containers · one queue</text><text class="label" x="450" y="221" text-anchor="middle">Host creation and application replacement have separate lifecycles.</text></svg></div><figcaption><span class="pan-hint">On a small screen, scroll the diagram sideways.</span> Each box has a source of truth. A normal application release uses images, Compose and activation scripts; it does not recreate the server with Terraform.</figcaption></figure><p class="diagram-reading">The <strong>art laboratory</strong> and the <strong>public studio</strong> share the Go artwork code. The CLI remains the broad creative tool; the studio exposes a curated catalogue and finite render budgets. <a href="reference/field-guide.html#code-map">See the code-to-runtime map.</a></p></section>
-<section id="lessons"><div class="section-head"><h2>Three short wins</h2><span class="meta">Read → predict → inspect → explain</span></div><div class="grid"><article class="card"><span class="number">01 / REQUEST PATH</span><h3><a href="lessons/0001-trace-a-request.html">Where does an image come from?</a></h3><p>Switch between browsing, generating and renderer failure. Identify which process does the expensive work.</p><p class="meta" data-progress="request">Not yet self-checked.</p></article><article class="card"><span class="number">02 / BUILD PATH</span><h3><a href="lessons/0002-build-a-release.html">What actually gets shipped?</a></h3><p>Follow source into the compiler, images, archive and CI checks. Find the immutable identity.</p><p class="meta" data-progress="build">Not yet self-checked.</p></article><article class="card"><span class="number">03 / CHANGE PATH</span><h3><a href="lessons/0003-deploy-and-recover.html">What happens when a deploy fails?</a></h3><p>Work through failure points and choose what to restore. Explain the queue and storage tradeoffs.</p><p class="meta" data-progress="deploy">Not yet self-checked.</p></article></div></section>
-<section id="roadmap"><div class="section-head"><h2>The route ahead</h2><span class="meta">Proof unlocks the next step</span></div><ol class="roadmap"><li><span class="meta">Start here · 8 min</span><h3><a href="lessons/0001-trace-a-request.html">Trace the running system</a></h3><p><strong>You learn:</strong> Follow HTTP, admission, socket calls and returned PNGs. Locate the failure boundary.</p><p class="proof"><strong>Move on when:</strong> Explain why browsing survives a stopped renderer. Compare private liveness with readiness.</p></li><li><span class="meta">Next · 8 min</span><h3><a href="lessons/0002-build-a-release.html">Identify exactly what we ship</a></h3><p><strong>You learn:</strong> Connect Go binaries, build stages, two images, three services and the retained release archive.</p><p class="proof"><strong>Move on when:</strong> Find the source revision, two image IDs and checksums; distinguish CI verification from deployment.</p></li><li><span class="meta">Then · 10 min</span><h3><a href="lessons/0003-deploy-and-recover.html">Rehearse release decisions</a></h3><p><strong>You learn:</strong> Predict smoke, drain, replacement and rollback. Separate persistent storage from process memory.</p><p class="proof"><strong>Move on when:</strong> Explain the response to a failed smoke, a stuck drain and failed candidate readiness.</p></li><li><span class="meta">Stage 1 · local lab</span><h3><a href="PLAN.md#3-resource-limits-and-observable-failure">Prove local boundaries</a></h3><p><strong>You learn:</strong> Run the isolated Compose rehearsal. Inspect mounts, health, permissions and actual limits.</p><p class="proof"><strong>Move on when:</strong> Record actual results from make check-compose; reserve real OOM and capacity claims for the target host.</p></li><li><span class="meta">Stage 1 · approved infrastructure</span><h3><a href="PLAN.md#4-remote-state-before-cloud-resources">Prepare state and the host</a></h3><p><strong>You learn:</strong> Prove state locks and recovery; then review cloud objects, immutable bootstrap and forwarding policy.</p><p class="proof"><strong>Move on when:</strong> Two-client state test, reviewed budget/plan, recovery access, IPv4/IPv6 and reboot evidence.</p></li><li><span class="meta">Stage 1 · operating proof</span><h3><a href="PLAN.md#6-staging-https-and-release-operations">Deploy staging and restore it</a></h3><p><strong>You learn:</strong> Operate live TLS, release and rollback; recover from independently stored files and volumes.</p><p class="proof"><strong>Move on when:</strong> Staged release/rollback, target load/OOM, TLS persistence, timed second-machine restore and an alert recipient.</p></li><li><span class="meta">Stage 2 · after measurements</span><h3><a href="PLAN.md#stage-2--availability-and-scale-with-compose">Improve a measured bottleneck</a></h3><p><strong>You learn:</strong> Choose between accepting restarts, resizing, changing state ownership or adding renderer capacity.</p><p class="proof"><strong>Move on when:</strong> A measured problem and a demonstrated improvement; one global admission story before multiple web replicas.</p></li><li><span class="meta">Stage 3 · optional lab</span><h3><a href="PLAN.md#stage-3--kubernetes-as-a-second-operating-language">Learn a second operating model</a></h3><p><strong>You learn:</strong> Map Compose to Kubernetes in a separate lab; examine what a scheduler does and what remains application work.</p><p class="proof"><strong>Move on when:</strong> Compare rolling-update behaviour, queue ownership, RAM and recovery cost.</p></li></ol><div class="callout"><h3>Your next concrete session</h3><p>Take lesson 01. Draw the request path from memory, then inspect the local Compose configuration. End by explaining how a renderer outage can make <code>ready</code> fail while <code>live</code> succeeds.</p></div><p>The existing <a href="PLAN.md">full plan</a> holds the longer lab instructions. <a href="QUESTIONS.md">Owner questions</a> track budget, DNS, state, operator and recovery decisions; <a href="ADDITIONS.md">remaining work</a> tracks operational gaps. Staging and publication are separate decisions in that plan.</p></section>
-<section id="learning"><h2>Make it stick</h2><div class="grid two"><article class="card"><h3>Before looking</h3><p>Make a prediction. Trace the path or name the owner without opening a file. Then use the diagram and source to check yourself.</p></article><article class="card"><h3>Tomorrow, then next week</h3><p>Repeat the explanation from memory. Mix a network question with a release or storage question. Keep observations; a familiar diagram is not yet recall.</p></article></div><p class="small muted" style="margin-top:15px">Self-check notes stay in your browser and can be exported. Ask the agent to review an explanation; add a <a href="learning-records/README.md">learning record</a> once you demonstrate a new insight. No mastery is inferred from opening a lesson.</p></section><footer>Based on repository <code>b3e4a81</code> and the <a href="../../../deploy/README.md">deployment runbook</a>. This is a dated learning map, not live monitoring. <a href="RESOURCES.md">Sources</a> · <a href="GLOSSARY.md">Full glossary</a> · <a href="README.md">Learning folder</a><br>Ask the agent about anything unclear: name the lesson and the step that stopped making sense.</footer></main></div></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Singular Seed system reference: configuration ownership, local Docker operation, VPS provisioning, releases and recovery.">
+<title>Singular Seed — system &amp; operations</title>
+<style>
+:root{--bg:#f7f6f1;--paper:#fffefa;--ink:#23343b;--muted:#53676e;--line:#d2dcd6;--green:#12695e;--pale:#e7efea;--amber:#825013;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--green);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}:focus-visible{outline:3px solid #3757a0;outline-offset:4px}.skip{position:absolute;top:-80px;left:20px;background:white;padding:12px;z-index:4}.skip:focus{top:12px}.layout{max-width:1500px;margin:auto;display:grid;grid-template-columns:220px minmax(0,1fr)}aside{height:100vh;position:sticky;top:0;overflow:auto;padding:34px 24px;border-right:1px solid var(--line)}.brand{font-weight:700;font-size:19px;color:var(--ink);text-decoration:none;letter-spacing:-.5px}.brand:before{content:"";display:inline-block;width:12px;height:12px;border:3px solid var(--green);border-radius:50%;margin-right:9px}nav{margin-top:30px}nav a{display:block;font-size:13px;text-decoration:none;color:var(--muted);padding:9px 0}nav a:hover{color:var(--green)}.aside-note{font:11px/1.7 var(--mono);color:var(--muted);margin-top:30px;border-top:1px solid var(--line);padding-top:18px}main{min-width:0;padding:36px 5.5% 65px}.topline{border-bottom:1px solid var(--line);padding-bottom:18px;display:flex;justify-content:space-between;gap:18px;font:11px/1.5 var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:1px}header{padding:30px 0 8px}h1{font:400 clamp(36px,4.4vw,58px)/1.1 Georgia,serif;letter-spacing:-1.7px;margin:12px 0 20px}h2{font-size:25px;line-height:1.3;letter-spacing:-.6px;margin:0 0 18px}h2 .n{font:12px var(--mono);color:var(--green);margin-right:12px;vertical-align:middle}h3{font-size:17px;margin:22px 0 10px}.lede{max-width:740px;font-size:18px;color:var(--muted)}p{margin:0 0 15px}section{margin:36px 0 45px;padding-top:18px;border-top:1px solid var(--line)}.status{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0}.badge{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:12px;background:var(--paper)}.badge.good{color:var(--green);background:var(--pale)}.badge.pending{color:var(--amber);background:#f7eddf}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{padding:20px;border:1px solid var(--line);background:var(--paper);border-radius:7px}.panel h3{margin-top:0}.panel p:last-child{margin-bottom:0}.note{border-left:3px solid var(--green);padding:14px 18px;background:var(--pale);margin:20px 0}.note p:last-child{margin-bottom:0}.small,.source{font-size:13px;color:var(--muted)}.source{margin-top:12px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th{text-align:left;background:var(--pale);font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}th,td{padding:12px 13px;border-bottom:1px solid var(--line);vertical-align:top}td:first-child{font-weight:600}code{font:.87em/1.6 var(--mono);overflow-wrap:anywhere}pre{font-size:13px;line-height:1.6;background:#eaf0eb;border:1px solid var(--line);padding:16px 18px;border-radius:5px;overflow:auto;margin:12px 0 18px}pre code{white-space:pre;overflow-wrap:normal}.command-label{font:11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:20px}ol,ul{padding-left:23px}li{padding-left:4px;margin:9px 0}figure{margin:20px 0;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:18px}.diagram{overflow-x:auto}svg{display:block;width:100%;height:auto;min-width:820px}svg text{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:var(--ink)}svg .sub{font:11px var(--mono);fill:var(--muted)}svg .label{font-size:12px;fill:var(--muted)}svg .box{fill:#fffefa;stroke:#99aea3;stroke-width:1.4}svg .accent{fill:#e7efea;stroke:#12695e}svg .boundary{fill:#f3f5f0;stroke:#acbeb3;stroke-dasharray:5 5}svg .arrow{fill:none;stroke:#12695e;stroke-width:1.8}svg .return{stroke:#3757a0;stroke-dasharray:5 4}figcaption{font-size:13px;color:var(--muted);margin-top:13px}.scroll-hint{display:none}details{border:1px solid var(--line);border-radius:5px;margin:16px 0;padding:13px 17px}summary{cursor:pointer;color:var(--green);font-weight:600}details[open] summary{margin-bottom:14px}footer{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:20px} .file-list li{margin:8px 0}.section-links{display:flex;flex-wrap:wrap;gap:10px 22px;margin:22px 0;font-size:14px}
+@media(max-width:1000px){.layout{grid-template-columns:180px minmax(0,1fr)}aside{padding:28px 18px}main{padding:28px 4%}}
+@media(max-width:720px){.layout{display:block}aside{height:auto;position:static;border-right:0;border-bottom:1px solid var(--line);padding:18px 20px}nav{display:flex;flex-wrap:wrap;gap:4px 15px;margin-top:12px}nav a{font-size:12px;padding:4px 0}.aside-note{display:none}main{padding:25px 20px 45px}.grid{grid-template-columns:1fr}.topline{font-size:10px}h1{letter-spacing:-1px}.lede{font-size:17px}figure{padding:12px}.scroll-hint{display:block;margin-top:8px;font-weight:600}section{margin:28px 0 34px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{details::details-content{content-visibility:visible}body{font-size:10pt;background:white;color:black}.layout{display:block}aside,.skip,.section-links{display:none}main{padding:0}.topline{font-size:8pt}h1{font-size:29pt}h2{font-size:17pt}.lede{font-size:12pt}section{margin:20px 0;padding-top:12px}svg{min-width:0}.diagram,.table-wrap{overflow:visible}figure,pre,tr,.panel{break-inside:avoid}thead{display:table-header-group}table{font-size:9pt}pre{font-size:8pt;white-space:pre-wrap}pre code{white-space:pre-wrap}a{color:#12695e}.scroll-hint{display:none}details{display:block}details>*{display:block!important}footer{font-size:8pt}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="layout">
+<aside>
+<a class="brand" href="#main">Singular Seed</a>
+<nav aria-label="On this page">
+<a href="#overview">01 · System overview</a>
+<a href="#files">02 · Configuration map</a>
+<a href="#local">03 · Local Docker setup</a>
+<a href="#build">04 · Image &amp; release builds</a>
+<a href="#infrastructure">05 · VPS provisioning</a>
+<a href="#vps">06 · VPS configuration</a>
+<a href="#deployment">07 · Deployment &amp; rollback</a>
+<a href="#operations">08 · Operations &amp; recovery</a>
+<a href="#find">09 · Further information</a>
+</nav>
+<p class="aside-note">SYSTEM REFERENCE<br>10 September 2026<br><br>Configuration baseline:<br><code>b3e4a81</code><br><br>One document.<br>Source files linked throughout.</p>
+</aside>
+<main id="main">
+<div class="topline"><span>System &amp; operations</span><span>Configuration, processes, file locations</span></div>
+<header>
+<h1>How Singular Seed is set up.</h1>
+<p class="lede">The application, its local Docker stack, and the intended VPS deployment—what each configuration file defines and how the pieces connect.</p>
+<div class="status"><span class="badge good">Local: 3 healthy containers · HTTP 200</span><span class="badge">Runtime: Docker Compose</span><span class="badge pending">VPS provisioning &amp; public launch pending</span></div>
+<p class="small">Local status was checked on 10 September 2026 at <a href="http://localhost:8088">localhost:8088</a>. This page is a snapshot, not a live status display. The chosen public domain is <code>singularseed.art</code>.</p>
+</header>
+
+<section id="overview">
+<h2><span class="n">01</span>System overview</h2>
+<p>Singular Seed is the public studio alongside the local <code>staticart</code> CLI. It serves Go-rendered HTML with htmx enhancements and a curated artwork catalogue. The web process owns temporary visitor state, the single bounded job queue, and the generated-image cache. Rendering runs in a separate container.</p>
+<figure>
+<div class="diagram" tabindex="0" aria-label="System diagram; scroll horizontally if needed">
+<svg viewBox="0 0 920 370" role="img" aria-labelledby="runtime-title runtime-desc">
+<title id="runtime-title">The three-container runtime</title>
+<desc id="runtime-desc">Browser traffic reaches Caddy through local loopback ports or VPS firewall and forwarding rules. Caddy connects to web over the private proxy network. Web sends render requests through a shared Unix socket to the renderer supervisor, which runs a child process. Image bytes return to web and its cache. Only Caddy publishes ports; renderer has no network.</desc>
+<defs><marker id="r-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#12695e"/></marker><marker id="r-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#3757a0"/></marker></defs>
+<rect class="boundary" x="205" y="15" width="695" height="338" rx="10"/>
+<text class="sub" x="225" y="39">DOCKER ON LINUX · LOCAL VM OR TARGET VPS</text>
+<rect class="boundary" x="225" y="58" width="410" height="134" rx="8"/>
+<text class="sub" x="242" y="79">INTERNAL PROXY NETWORK</text>
+<g><rect class="box" x="10" y="102" width="160" height="70" rx="7"/><text x="26" y="131">Browser</text><text class="sub" x="26" y="151">HTTP / HTTPS</text></g>
+<g><rect class="box accent" x="242" y="102" width="160" height="70" rx="7"/><text x="258" y="131">Caddy</text><text class="sub" x="258" y="151">container :80 / :443</text></g>
+<g><rect class="box accent" x="467" y="102" width="150" height="70" rx="7"/><text x="483" y="131">web :8080</text><text class="sub" x="483" y="151">artweb · one queue</text></g>
+<g><rect class="box" x="710" y="102" width="170" height="70" rx="7"/><text x="726" y="131">renderer</text><text class="sub" x="726" y="151">artrender supervisor</text></g>
+<path class="arrow" d="M170 137H242" marker-end="url(#r-arrow)"/><path class="arrow" d="M402 137H467" marker-end="url(#r-arrow)"/><path class="arrow" d="M617 123H710" marker-end="url(#r-arrow)"/>
+<path class="arrow return" d="M710 153H617" marker-end="url(#r-back)"/>
+<text class="sub" x="664" y="88" text-anchor="middle">UNIX SOCKET</text><text class="sub" x="664" y="193" text-anchor="middle">PNG BYTES</text>
+<g><rect class="box" x="467" y="240" width="150" height="70" rx="7"/><text x="483" y="269">image cache</text><text class="sub" x="483" y="289">web-owned volume</text></g>
+<g><rect class="box" x="710" y="240" width="170" height="70" rx="7"/><text x="726" y="269">child process</text><text class="sub" x="726" y="289">artrender --child</text></g>
+<path class="arrow" d="M542 172V240" marker-end="url(#r-arrow)"/><path class="arrow" d="M795 172V240" marker-end="url(#r-arrow)"/>
+<text class="sub" x="10" y="218">LOCAL: localhost:8088</text>
+<text class="sub" x="10" y="241">VPS: firewall + host</text><text class="sub" x="10" y="258">forwarding → Caddy</text>
+<text class="label" x="242" y="272">Gallery served by web;</text><text class="label" x="242" y="294">no new render required.</text>
+<text class="sub" x="710" y="335">network_mode: none</text>
+</svg></div>
+<figcaption>Three services use two images: web and renderer share the app image; Caddy uses the edge image. The child is a process inside renderer. Caddy also joins an external network for certificate-related traffic.<span class="scroll-hint">Scroll the diagram sideways on small screens.</span></figcaption>
+</figure>
+<p>Only Caddy exposes host ports. Web administration stays at <code>127.0.0.1:8081</code> inside the web container. Caddy’s admin interface is also private. The renderer has no network and receives work through <code>/run/art/renderer.sock</code>. Neither application container receives the Docker control socket or cloud credentials. A stopped renderer can fail readiness while the gallery remains available.</p>
+<p class="source">Defined in <a href="../../../deploy/compose.yaml">deploy/compose.yaml</a>, <a href="../../../deploy/caddy/Caddyfile">Caddyfile</a>, <a href="../../../cmd/artweb/main.go">artweb</a> and <a href="../../../internal/renderjob/protocol.go">the renderer protocol</a>.</p>
+</section>
+
+<section id="files">
+<h2><span class="n">02</span>What is defined where—and why</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>File</th><th>Defines</th><th>Why it lives here</th></tr></thead>
+<tbody>
+<tr><td><a href="../../../deploy/terraform/main.tf"><code>deploy/terraform/main.tf</code></a></td><td>Hetzner server, primary IPs, cloud firewall, SSH public key, provider versions, backend type.</td><td>Cloud resources have a lifecycle separate from application releases.</td></tr>
+<tr><td><a href="../../../deploy/terraform/terraform.tfvars.example"><code>terraform.tfvars.example</code></a> / <a href="../../../deploy/terraform/backend.hcl.example"><code>backend.hcl.example</code></a></td><td>Examples for environment inputs and the independent state store. Real operator files stay outside Git.</td><td>Names, access ranges and backend settings vary by environment.</td></tr>
+<tr><td><a href="../../../deploy/cloud-init/user-data.yaml"><code>deploy/cloud-init/user-data.yaml</code></a></td><td>First-boot user, SSH policy, OS packages, log retention and reboot policy.</td><td>Prepares the operating system when Terraform creates the host.</td></tr>
+<tr><td><a href="../../../deploy/scripts/bootstrap-host.sh"><code>bootstrap-host.sh</code></a></td><td>Pinned Docker Engine, containerd, Buildx and Compose installation.</td><td>Establishes the host runtime; does not launch the app.</td></tr>
+<tr><td><a href="../../../deploy/Dockerfile"><code>deploy/Dockerfile</code></a></td><td>Build stages, Go binaries, base-image digests, image users and default entrypoints.</td><td>Packages software. Machine-specific addresses and limits belong elsewhere.</td></tr>
+<tr><td><a href="../../../deploy/compose.yaml"><code>deploy/compose.yaml</code></a></td><td>Service roles, users, networks, port mappings, volumes, environment variables, limits and health checks.</td><td>Runs the same topology locally and on the VPS using different inputs.</td></tr>
+<tr><td><a href="../../../deploy/local.env"><code>deploy/local.env</code></a> / <a href="../../../deploy/operator.env.example"><code>operator.env.example</code></a></td><td>Local inputs and a template for the host’s <code>/etc/art/operator.env</code>.</td><td>Selects domain, origin, bind addresses and environment without rewriting Compose.</td></tr>
+<tr><td><a href="../../../deploy/caddy/Caddyfile"><code>deploy/caddy/Caddyfile</code></a></td><td>Site address, proxy destination, header handling, body/time limits and private-path rejection.</td><td>HTTP/TLS edge behaviour; baked into the edge image.</td></tr>
+<tr><td><a href="../../../deploy/scripts/build-release.sh"><code>build-release.sh</code></a> / <a href="../../../deploy/scripts/activate-release.sh"><code>activate-release.sh</code></a></td><td>Release packaging and the smoke/drain/replace/rollback sequence.</td><td>Coordinates a change of running software; neither Dockerfile nor Terraform does this.</td></tr>
+<tr><td><a href="../../../.github/workflows/check.yml"><code>.github/workflows/check.yml</code></a></td><td>Automated Go, browser, packaging, infrastructure and Compose checks.</td><td>Verifies commits. It does not deploy to a host.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="local">
+<h2><span class="n">03</span>Local Docker and Compose setup</h2>
+<p>The local project is <code>art-local</code>. Docker runs Linux containers in a VM on macOS. The checked stack uses Colima. There are no source bind mounts or automatic rebuilds: Go code, templates, browser assets and the Caddyfile are included in images.</p>
+<p class="command-label">Repository root · build and start</p>
+<pre><code>docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml build web caddy
+docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml up -d --no-build --wait</code></pre>
+<p>Open <a href="http://localhost:8088">http://localhost:8088</a>. The local site explicitly uses HTTP, so Caddy does not request certificates. After changing packaged files, repeat build and up; a restart alone does not build changed source.</p>
+<details><summary>Local status, logs and shutdown commands</summary>
+<pre><code>docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml ps
+docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml logs --tail 100 web renderer
+docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml exec -T web /app/artctl ready
+# Stop and remove this project's containers and networks; retain volumes.
+docker compose -p art-local --env-file deploy/local.env -f deploy/compose.yaml down</code></pre>
+</details>
+<div class="table-wrap"><table><thead><tr><th>Setting</th><th>Local</th><th>Target VPS</th></tr></thead><tbody>
+<tr><td>Compose definition</td><td colspan="2"><code>deploy/compose.yaml</code>; host uses its retained release copy.</td></tr>
+<tr><td>Project / images</td><td><code>art-local</code>; development image tags, local build platform.</td><td><code>singular-seed</code>; exact Linux amd64 image IDs.</td></tr>
+<tr><td>Environment input</td><td><code>deploy/local.env</code></td><td><code>/etc/art/operator.env</code> plus release <code>images.env</code></td></tr>
+<tr><td>Site / browser origin</td><td><code>http://localhost</code> / <code>http://localhost:8088</code></td><td>Approved hostname / its full <code>https://…</code> origin</td></tr>
+<tr><td>Published addresses</td><td>Loopback IPv4/IPv6; host ports 8088 and 8443.</td><td>Public IPv4/IPv6; host ports 80 and 443, behind firewall rules.</td></tr>
+<tr><td>Container addressing</td><td colspan="2">Proxy network defaults to <code>172.30.80.0/29</code>: Caddy <code>.2</code>, web <code>.3</code>. Renderer has no network.</td></tr>
+</tbody></table></div>
+<p class="source">The env file supplies values for Compose substitution; each service’s <code>environment:</code> block determines what enters that container. <code>ART_TRUSTED_PROXY</code> follows the configured Caddy IP. See <a href="../../../deploy/README.md#local-rehearsal">the local runbook</a>.</p>
+</section>
+
+<section id="build">
+<h2><span class="n">04</span>Image builds and retained releases</h2>
+<figure><div class="diagram" tabindex="0" aria-label="Build diagram; scroll horizontally if needed">
+<svg viewBox="0 0 920 290" role="img" aria-labelledby="build-title build-desc">
+<title id="build-title">Two image builds produce one release archive</title><desc id="build-desc">Go source compiles in the build stage and four binaries are copied into the scratch app image, shared by web and renderer. The Caddy base and Caddyfile produce the edge image. Both images are saved alongside configuration, image IDs and checksums in a commit-named release directory.</desc>
+<defs><marker id="b-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#12695e"/></marker></defs>
+<g><rect class="box" x="10" y="20" width="220" height="70" rx="7"/><text x="26" y="49">Go source + web assets</text><text class="sub" x="26" y="69">cmd/ · internal/ · catalogue</text></g>
+<g><rect class="box" x="290" y="20" width="230" height="70" rx="7"/><text x="306" y="49">Go build stage</text><text class="sub" x="306" y="69">cross-compiled · CGO=0</text></g>
+<g><rect class="box accent" x="590" y="20" width="290" height="70" rx="7"/><text x="606" y="49">app image · scratch</text><text class="sub" x="606" y="69">web + renderer use this image</text></g>
+<path class="arrow" d="M230 55H290" marker-end="url(#b-arrow)"/><path class="arrow" d="M520 55H590" marker-end="url(#b-arrow)"/>
+<g><rect class="box" x="10" y="125" width="510" height="70" rx="7"/><text x="26" y="154">Pinned Caddy base + deploy/caddy/Caddyfile</text><text class="sub" x="26" y="174">separate edge target in the same Dockerfile</text></g>
+<g><rect class="box accent" x="590" y="125" width="290" height="70" rx="7"/><text x="606" y="154">edge image</text><text class="sub" x="606" y="174">Caddy + proxy configuration</text></g>
+<path class="arrow" d="M520 160H590" marker-end="url(#b-arrow)"/>
+<path class="arrow" d="M880 55H902V218H470V235" marker-end="url(#b-arrow)"/><path class="arrow" d="M880 160H902"/>
+<rect class="box" x="10" y="235" width="870" height="45" rx="7"/><text x="26" y="264">Release directory: images + configuration + identities + checksums</text>
+</svg></div><figcaption>The app image contains <code>artweb</code>, <code>artrender</code>, <code>artctl</code> and <code>staticart</code>. The compiler and browser-test dependencies stay out of the final app image.<span class="scroll-hint">Scroll the diagram sideways on small screens.</span></figcaption></figure>
+<p><a href="../../../deploy/Dockerfile">Dockerfile</a> pins Go 1.26.8 and Caddy 2.11.4 by digest. <a href="../../../.dockerignore">.dockerignore</a> limits build inputs. <code>make build</code> only builds the native art CLI; the deployment release is built with:</p>
+<pre><code># Repository root; requires a clean committed checkout and Docker.
+deploy/scripts/build-release.sh</code></pre>
+<p>Output: <code>out/releases/&lt;full-commit&gt;/</code>. The script refuses to overwrite an existing release directory. It always targets <code>linux/amd64</code>; local ARM execution is not a VPS performance measurement.</p>
+<div class="table-wrap"><table><thead><tr><th>Release file</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>images.tar</code></td><td>App and edge images, saved for transport without a registry.</td></tr>
+<tr><td><code>images.env</code></td><td><code>ART_APP_IMAGE</code>, <code>ART_EDGE_IMAGE</code> as exact <code>sha256:…</code> image IDs; <code>ART_REVISION</code> as the source commit.</td></tr>
+<tr><td><code>deploy/</code></td><td>The matching version of Compose, configuration and release scripts.</td></tr>
+<tr><td><code>manifest.txt</code> / <code>catalogue.json</code></td><td>Source/tool/edition metadata and the public catalogue manifest.</td></tr>
+<tr><td><code>SHA256SUMS</code></td><td>Checksums of the retained files. Trusted delivery is still required.</td></tr>
+</tbody></table></div>
+<p class="source">CI runs <code>make check</code>, race and vulnerability checks, browser tests, release builds, activation tests, Terraform validation and real Compose checks. It currently has no archive-upload or host-deployment step. See <a href="../../../.github/workflows/check.yml">check.yml</a>.</p>
+</section>
+
+<section id="infrastructure">
+<h2><span class="n">05</span>VPS provisioning</h2>
+<p>Terraform manages the cloud objects. Application updates use release scripts after the host exists. The current configuration describes one Hetzner <code>cx23</code>, Ubuntu 24.04, location <code>nbg1</code> by default, with backups enabled.</p>
+<div class="table-wrap"><table><thead><tr><th>Configuration</th><th>Current definition and purpose</th></tr></thead><tbody>
+<tr><td>Terraform / provider</td><td><code>main.tf</code> pins Terraform 1.14.9 and hcloud 1.68.0.</td></tr>
+<tr><td>Environment inputs</td><td><code>name</code>, <code>location</code>, <code>environment</code>, <code>admin_cidrs</code>, <code>ssh_public_key</code>. Environment defaults to staging.</td></tr>
+<tr><td>Cloud firewall</td><td>SSH TCP 22 only from administrator CIDRs. TCP 80/443 from all IPv4/IPv6 addresses.</td></tr>
+<tr><td>Primary IPs / protections</td><td>Separate IPv4 and IPv6 resources with automatic deletion disabled. Terraform prevents their destruction; the server also has deletion and rebuild protections.</td></tr>
+<tr><td>Terraform state</td><td>An S3 backend; bucket, key and region supplied separately. Example enables encryption and lockfiles. Bucket creation/versioning is not provisioned by this module.</td></tr>
+<tr><td>First-boot data</td><td>Terraform renders <code>cloud-init/user-data.yaml</code> with the SSH public key. Changing this data can require server replacement.</td></tr>
+</tbody></table></div>
+<h3>Provisioning sequence</h3>
+<ol>
+<li>Choose the budget, staging hostname, administrator IPv4/IPv6 ranges and operator access. Bootstrap an independent encrypted/versioned state store; verify its locking and recovery.</li>
+<li>Prepare private backend and variable files from the examples. Supply cloud/backend credentials from the operator’s environment or credential store, not Git or cloud-init.</li>
+<li>Initialize Terraform, save and review the plan, then apply the approved plan. Terraform returns the server’s IP addresses. DNS records are not managed by this module.</li>
+<li>Cloud-init creates the <code>operator</code> user, disables password/root SSH, configures bounded journald logs, disables automatic reboots and creates <code>/opt/art/releases</code> and <code>/etc/art</code>.</li>
+<li>Run <code>deploy/scripts/bootstrap-host.sh</code> as root on the Ubuntu amd64 host. It installs the pinned Docker stack and enables Docker through host systemd.</li>
+<li>Confirm console recovery; finish the host firewall, DNS and runtime environment before activating the application.</li>
+</ol>
+<details><summary>Terraform command sequence · operator machine</summary>
+<p>Use real private paths in place of these placeholders. <code>apply</code> creates paid resources and follows review of the saved plan.</p>
+<pre><code>terraform -chdir=deploy/terraform init -backend-config=/private/path/backend.hcl
+terraform -chdir=deploy/terraform plan -var-file=/private/path/terraform.tfvars -out=/private/path/art.tfplan
+terraform -chdir=deploy/terraform show /private/path/art.tfplan
+terraform -chdir=deploy/terraform apply /private/path/art.tfplan</code></pre>
+</details>
+<div class="note"><p><strong>Host firewall setup is not complete automation.</strong> Cloud-init installs UFW and prepares HTTP rules, but does not enable it or add SSH administrator rules. Docker-aware forwarding policy and reboot persistence are operator work documented in the runbook. Host INPUT rules alone do not cover all Docker-published traffic.</p></div>
+<p class="source">Details: <a href="../../../deploy/terraform/README.md">state and lifecycle</a>, <a href="../../../deploy/cloud-init/user-data.yaml">first-boot configuration</a>, <a href="../../../deploy/scripts/bootstrap-host.sh">runtime installation</a>, <a href="../../../deploy/README.md#prepare-an-approved-host">host preparation and firewall requirements</a>.</p>
+</section>
+
+<section id="vps">
+<h2><span class="n">06</span>VPS runtime configuration</h2>
+<p>The host keeps its environment in root-owned <code>/etc/art/operator.env</code>, mode <code>0600</code>. Start from <a href="../../../deploy/operator.env.example">operator.env.example</a>; that example is production-oriented, so change both environment and hostname for staging.</p>
+<div class="table-wrap"><table><thead><tr><th>Input</th><th>What it controls</th><th>Production example</th></tr></thead><tbody>
+<tr><td><code>ART_ENVIRONMENT</code></td><td>Which approval record activation requires. This is separate from Terraform’s environment label; keep them consistent.</td><td><code>production</code></td></tr>
+<tr><td><code>ART_DOMAIN</code></td><td>Caddy’s site address and automatic HTTPS behaviour.</td><td><code>singularseed.art</code></td></tr>
+<tr><td><code>ART_ORIGIN</code></td><td>The app’s exact canonical browser origin, including scheme and any nonstandard port.</td><td><code>https://singularseed.art</code></td></tr>
+<tr><td><code>ART_BIND</code> / <code>ART_BIND6</code></td><td>Host interfaces on which Caddy’s ports are published.</td><td><code>0.0.0.0</code> / <code>[::]</code></td></tr>
+<tr><td><code>ART_HTTP_PORT</code> / <code>ART_HTTPS_PORT</code></td><td>Host port mappings; Caddy listens on 80/443 inside its container.</td><td><code>80</code> / <code>443</code></td></tr>
+<tr><td><code>ART_PROXY_NET</code></td><td>Private IPv4 prefix used by both the Compose network and trusted Caddy address.</td><td><code>172.30.80</code></td></tr>
+<tr><td><code>ART_LOG_LEVEL</code></td><td>Application log verbosity. Debug is useful temporarily when diagnosing a request.</td><td><code>info</code></td></tr>
+</tbody></table></div>
+<p><code>compose-release.sh</code> selects the fixed project <code>singular-seed</code>, loads the operator file, then loads the release’s <code>images.env</code>. The latter supplies the exact image IDs. The wrapper removes inherited image/revision environment variables so they cannot silently replace those IDs.</p>
+<h3>Service limits and storage</h3>
+<div class="table-wrap"><table><thead><tr><th>Service</th><th>Memory / CPU ceiling</th><th>Mounts and identity</th></tr></thead><tbody>
+<tr><td>Caddy</td><td>256 MiB / 0.5 CPU</td><td><code>caddy_data:/data</code>, <code>caddy_config:/config</code>; user <code>10003:10003</code>.</td></tr>
+<tr><td>Web</td><td>384 MiB / 0.5 CPU</td><td>Socket directory read-only, image cache writable; user <code>10001:10000</code>.</td></tr>
+<tr><td>Renderer</td><td>2 GiB / 1.5 CPU, including child processes</td><td>Socket directory writable; user <code>10002:10000</code>; no network.</td></tr>
+</tbody></table></div>
+<p class="small">All services have a read-only root filesystem, dropped capabilities, no additional swap budget, 64-task limit, temporary <code>/tmp</code>, bounded local logs and <code>restart: unless-stopped</code>. These are configuration ceilings, not measured VPS capacity. Web and renderer share group access to the Unix socket; a read-only directory mount still permits socket communication.</p>
+<p class="source">The <a href="../../../deploy/caddy/Caddyfile">Caddyfile</a> proxies to <code>web:8080</code>, overwrites <code>X-Art-Client</code>, removes visitor forwarding headers and rejects public admin paths such as <code>/metrics</code> and <code>/ready</code>. TLS account/certificate state is retained in Caddy’s volumes.</p>
+</section>
+
+<section id="deployment">
+<h2><span class="n">07</span>Deployment and rollback</h2>
+<p>The operator builds a committed release and uploads its complete directory over trusted SSH to <code>/opt/art/releases/&lt;full-commit&gt;</code>. The target host loads prebuilt images; it does not compile the application. Release activation runs as root.</p>
+<figure><div class="diagram" tabindex="0" aria-label="Deployment diagram; scroll horizontally if needed">
+<svg viewBox="0 0 920 330" role="img" aria-labelledby="deploy-title deploy-desc">
+<title id="deploy-title">Release delivery and host activation</title><desc id="deploy-desc">Build an archive on the operator machine and upload it to the VPS. Activation verifies the archive and approval, loads images, and runs private smoke. It then pauses and drains the old queue, stops old services and switches current, starts and checks the candidate. Failure after replacement attempts to restore the previous release.</desc>
+<defs><marker id="d-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#12695e"/></marker><marker id="d-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#3757a0"/></marker></defs>
+<text class="sub" x="10" y="24">OPERATOR MACHINE</text><text class="sub" x="335" y="24">TARGET VPS</text>
+<g><rect class="box" x="10" y="43" width="245" height="70" rx="7"/><text x="26" y="72">Build &amp; upload archive</text><text class="sub" x="26" y="92">out/releases/&lt;commit&gt;/</text></g>
+<g><rect class="box" x="335" y="43" width="245" height="70" rx="7"/><text x="351" y="72">Verify &amp; load</text><text class="sub" x="351" y="92">lock · approval · checksums</text></g>
+<g><rect class="box" x="660" y="43" width="245" height="70" rx="7"/><text x="676" y="72">Private smoke</text><text class="sub" x="676" y="92">generation off · isolated project</text></g>
+<path class="arrow" d="M255 78H335" marker-end="url(#d-arrow)"/><path class="arrow" d="M580 78H660" marker-end="url(#d-arrow)"/>
+<g><rect class="box" x="660" y="180" width="245" height="70" rx="7"/><text x="676" y="209">Pause &amp; drain old queue</text><text class="sub" x="676" y="229">running = 0 · queued = 0</text></g>
+<g><rect class="box" x="335" y="180" width="245" height="70" rx="7"/><text x="351" y="209">Stop old &amp; switch current</text><text class="sub" x="351" y="229">/opt/art/current → new release</text></g>
+<g><rect class="box accent" x="10" y="180" width="245" height="70" rx="7"/><text x="26" y="209">Start &amp; check new release</text><text class="sub" x="26" y="229">ready · live · canonical HTTPS</text></g>
+<path class="arrow" d="M782 113V180" marker-end="url(#d-arrow)"/><path class="arrow" d="M660 215H580" marker-end="url(#d-arrow)"/><path class="arrow" d="M335 215H255" marker-end="url(#d-arrow)"/>
+<path class="arrow return" d="M132 250V298H335" marker-end="url(#d-back)"/><text class="label" x="349" y="303">Failure after change: attempt to restore the previous release</text>
+</svg></div><figcaption>The fixed project keeps one admission queue. A private smoke candidate has generation disabled. A normal update briefly restarts the app and loses in-memory workspaces.<span class="scroll-hint">Scroll the diagram sideways on small screens.</span></figcaption></figure>
+<p class="command-label">On the prepared VPS · after upload and approval</p>
+<pre><code>sudo /opt/art/releases/FULL_COMMIT/deploy/scripts/activate-release.sh FULL_COMMIT</code></pre>
+<p>Replace <code>FULL_COMMIT</code> in both places with the same retained 40-character commit ID. Activation requires <code>/etc/art/staging-approved</code> or <code>/etc/art/launch-approved</code> according to <code>ART_ENVIRONMENT</code>. These records reflect the owner’s actual approval; the scripts do not create them.</p>
+<div class="table-wrap"><table><thead><tr><th>Failure point</th><th>Script response</th></tr></thead><tbody>
+<tr><td>Validation or private smoke</td><td>Stops before changing the current application.</td></tr>
+<tr><td>Drain timeout / missing metrics</td><td>Aborts replacement and attempts to reopen old admission.</td></tr>
+<tr><td>Failure after replacement begins</td><td>Attempts to restore the previous current pointer, images and configuration, then checks readiness. Operator verification is still required.</td></tr>
+<tr><td>Failed first installation</td><td>Removes candidate containers and the current pointer while preserving volumes; there is no previous release.</td></tr>
+</tbody></table></div>
+<p><strong>Manual rollback:</strong> activate a retained previous release using the same command and its commit ID. Keep its archives and images available. A rollback restores software/configuration, not visitor state already lost from memory.</p>
+<p class="source">Sequence: <a href="../../../deploy/scripts/activate-release.sh">activate-release.sh</a>. Private validation: <a href="../../../deploy/scripts/smoke-release.sh">smoke-release.sh</a>. Host command configuration: <a href="../../../deploy/scripts/compose-release.sh">compose-release.sh</a>. An incident generation kill switch needs separate handling because failed-drain recovery attempts to enable generation again.</p>
+</section>
+
+<section id="operations">
+<h2><span class="n">08</span>Operations, state and recovery</h2>
+<details><summary>Host status, logs and private administration</summary>
+<p>Use the active release’s wrapper so all commands select the same project and configuration.</p>
+<pre><code>sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current ps
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current logs --tail 100 web renderer
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl live
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl ready
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl metrics
+# Pause new render admission; use generation-on to resume.
+sudo /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current exec -T web /app/artctl generation-off</code></pre>
+</details>
+<p><code>live</code> checks web service availability; <code>ready</code> also requires a compatible renderer. Docker health checks do not render images. An unhealthy status alone does not restart a container. Correlate <code>job=</code> values across web and renderer logs when a render fails.</p>
+<div class="table-wrap"><table><thead><tr><th>Data / location</th><th>Retention and recovery</th></tr></thead><tbody>
+<tr><td>Web memory</td><td>Workspaces, favourites and jobs are temporary and lost when web restarts. No application database or durable-session promise.</td></tr>
+<tr><td><code>singular-seed_cache</code></td><td>Generated-image cache; survives ordinary recreation but is disposable and bounded by the app.</td></tr>
+<tr><td><code>singular-seed_socket</code></td><td>Runtime IPC endpoint; recreated as needed with services stopped.</td></tr>
+<tr><td><code>singular-seed_caddy_data</code> / <code>caddy_config</code></td><td>Retain and independently back up TLS/account/configuration state. Restore with correct ownership while Caddy is stopped.</td></tr>
+<tr><td><code>/etc/art</code>, release archives, Terraform state and credentials</td><td>Independent encrypted recovery copies outside the VPS. Keep the previous working release and images required for retained artwork editions.</td></tr>
+</tbody></table></div>
+<p class="small">Local volumes use the <code>art-local_</code> prefix. A volume surviving container replacement is not a backup against host loss. Production <code>down --volumes</code> deletes that project’s named data volumes.</p>
+<h3>Other operational facts</h3>
+<ul>
+<li><strong>Logs:</strong> Docker’s local driver retains three 10 MiB files per service. Host journald is capped at 256 MiB/seven days. Monitor disk reserve, restart loops and certificate problems.</li>
+<li><strong>Updates:</strong> base images and host packages are pinned. OS automatic reboot is disabled; runtime updates and maintenance reboots need an operator schedule.</li>
+<li><strong>Capacity:</strong> one web queue and one active renderer job. Adding a second web replica creates another independent queue. Scaling needs an application state/admission design.</li>
+<li><strong>Recovery:</strong> recover state access, rebuild the host, restore operator/TLS files, load a retained release and activate it. The proposed two-hour recovery objective is not yet demonstrated.</li>
+<li><strong>Still pending:</strong> target amd64 capacity/OOM, reboot and dual-stack firewall verification, live TLS/renewal, state locking/restore, external alert recipient, and a measured second-machine recovery.</li>
+</ul>
+<p class="source">Full detail: <a href="../../../deploy/README.md#private-operations">operations runbook</a> and <a href="../../web/launch-gates.md">current launch gates</a>. Local implementation and tests do not establish these target-host results.</p>
+</section>
+
+<section id="find">
+<h2><span class="n">09</span>Where to find more information</h2>
+<div class="table-wrap"><table><thead><tr><th>Question</th><th>Start here</th></tr></thead><tbody>
+<tr><td>What is implemented and what is verified?</td><td><a href="../../web/IMPLEMENTATION.md">Web implementation record</a>—read the dated Compose update; earlier systemd/worktree entries are historical.</td></tr>
+<tr><td>What remains before publication?</td><td><a href="../../web/launch-gates.md">Launch gates</a>—host proof, artwork approval, operator details and usage terms.</td></tr>
+<tr><td>What is the intended visitor experience?</td><td><a href="../../web/product-and-ux.md">Product and UX</a>, <a href="../../web/ux-simplification.md">interaction revision</a>.</td></tr>
+<tr><td>Where are security boundaries specified?</td><td><a href="../../web/security-and-operations.md">Security and operations</a>; <a href="../../web/architecture.md">web architecture</a>.</td></tr>
+<tr><td>Where is the queue and child execution code?</td><td><a href="../../../internal/renderjob/manager.go">renderjob/manager.go</a> and <a href="../../../internal/renderjob/protocol.go">renderjob/protocol.go</a>.</td></tr>
+<tr><td>Where are public artwork choices and visitor state?</td><td><a href="../../../internal/publish/catalog.go">publish/catalog.go</a>, <a href="../../../internal/studio/studio.go">studio/studio.go</a>, <a href="../../../internal/artwork/recipe.go">artwork/recipe.go</a>.</td></tr>
+<tr><td>How does the art engine work?</td><td><a href="../../ARCHITECTURE.md">Art architecture</a>, <a href="../../sketches/">per-sketch specifications</a>, <a href="../../../CONTEXT.md">domain vocabulary</a>.</td></tr>
+<tr><td>Why Docker Compose?</td><td><a href="../../adr/0004-compose-runtime.md">ADR 0004</a> records the chosen runtime.</td></tr>
+</tbody></table></div>
+<p class="source">Links refer to files in this checkout. The document itself is standalone HTML with inline diagrams and styling; it requires no build, JavaScript or server. Keep it at <code>docs/learning/infra/index.html</code> for relative source links to resolve.</p>
+</section>
+<footer>Singular Seed system reference · 10 September 2026 · Configuration baseline <code>b3e4a81</code>. Runtime files and the deployment runbook are the source of truth for subsequent changes.</footer>
+</main></div>
+</body>
+</html>
