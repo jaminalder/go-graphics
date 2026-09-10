@@ -2,7 +2,7 @@
 
 Planning baseline: **2026-09-09**, repository `63c622a` on `master`.
 Status: **implemented locally on `exp/public-art-app`; public launch pending**.
-The planning documents describe the design baseline. See the
+The architecture documents retain the planning baseline; the [product brief](product-and-ux.md) and [UX rationale](ux-simplification.md) record the owner’s simpler 2026-09-10 journey. See the
 [implementation record](IMPLEMENTATION.md), [local run and deployment guide](../../deploy/README.md),
 and [remaining launch gates](launch-gates.md) for the completed work and its limits.
 
@@ -16,7 +16,7 @@ and separate the public catalogue from the CLI registry.
 
 Use Go `net/http`, `html/template`, embedded assets, self-hosted htmx, and a
 small amount of ordinary JavaScript. Give visitors a visual path from art form
-to style and colour, then a small batch to favourite and refine. Keep the
+to style and colour, then four images to open or favourite. Keep the
 artwork large and the controls sparse. A normal form-based path must work
 without htmx.
 
@@ -61,7 +61,7 @@ its existing refactor checklist is historical work, not a fresh web backlog.
 | Current task | Local implementation complete; deployment and publication remain separate owner decisions |
 | Launch set | Implemented provisional `pools`, `foam`, and `iris`; owner approves final publication |
 | Sharing | Baseline is image-file sharing; reproducible public links are an optional extension pending owner preference |
-| State | Temporary server-side workspace plus bounded browser recovery; no cross-device sync promise |
+| State | Bounded server-side favourites; no visible recovery or persistence controls |
 | Size | 600 px previews and 1200 px downloads; target-host capacity validation remains a launch gate |
 | Budget | Propose a €15/month operating target for the initial small deployment, excluding tax/domain/optional services; not a user-approved spending limit |
 | Availability | One VPS, recoverable deployment; no high-availability claim |
@@ -79,8 +79,7 @@ These do not prevent the foundational work in the implementation plan:
    sharing. Durable links require an explicit edition-retention commitment.
 3. Source/output licences and provenance clearance, especially for the QQL port.
 4. Actual spending ceiling, expected audience, and desired recovery target.
-5. Review the implemented bounded, local-only favourites recovery copy and its
-   clear/export actions with unfamiliar users.
+5. Review the simplified exploration and favourites journey with unfamiliar users.
 
 Defaults are recommendations, not settled user choices. Implementing this plan
 does not authorise cloud purchases, DNS changes, public launch, or a licence.

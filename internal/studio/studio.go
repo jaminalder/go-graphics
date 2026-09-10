@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -21,7 +22,7 @@ import (
 
 // ErrExpired means transient state is absent or belongs to another workspace.
 var (
-	ErrExpired = errors.New("this exploration has expired; restore favourites or start again")
+	ErrExpired = errors.New("these images are no longer available; choose an art form to begin again")
 	// ErrConflict requires a refreshed page before another mutation.
 	ErrConflict = errors.New("your choices changed in another tab; refresh this page and try again")
 )
@@ -32,6 +33,7 @@ type (
 	// Sample binds an immutable recipe to optional rendition job identities.
 	Sample struct {
 		ID             string
+		Style, Colour  string
 		Recipe         artwork.Recipe
 		Job, Download  string
 		Favourite      bool
@@ -42,6 +44,7 @@ type (
 	// Batch is four independently tracked samples, retained for navigation.
 	Batch struct {
 		ID      string
+		Parent  string
 		Samples []string
 	}
 	// Exploration is an independently revisioned tab's visual choices.
@@ -54,6 +57,13 @@ type (
 		Active                     bool
 	}
 	action      struct{ id, digest, batch string }
+	entryAction struct{ id, artwork, style, colour, exploration string }
+	// Favourite is a kept image with its owning navigation and revision.
+	Favourite struct {
+		Sample                     Sample
+		ExplorationID, ArtworkName string
+		Revision                   int
+	}
 	exploration struct {
 		view    Exploration
 		actions []action
@@ -63,6 +73,7 @@ type (
 		Workspace
 		created, touched time.Time
 		explorations     map[string]*exploration
+		entries          []entryAction
 	}
 	// Store keeps bounded in-memory navigation; it never owns image bytes.
 	Store struct {
@@ -215,6 +226,76 @@ func (s *Store) snapshot(token string, x *exploration) Exploration {
 	return v
 }
 
+// Enter admits the initial four images atomically and reuses an art form's bounded
+// navigation. A repeated form submission returns the same exploration.
+func (s *Store) Enter(token, artworkID, style, colour, actionID string) (string, error) {
+	if _, _, err := publish.Pins(artworkID, style, colour); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w, err := s.workspace(token)
+	if err != nil {
+		return "", err
+	}
+	for _, a := range w.entries {
+		if a.id == actionID {
+			if a.artwork != artworkID || a.style != style || a.colour != colour {
+				return "", ErrConflict
+			}
+			return a.exploration, nil
+		}
+	}
+	var x *exploration
+	for _, existing := range w.explorations {
+		if existing.view.Artwork == artworkID {
+			x = existing
+			break
+		}
+	}
+	fresh := x == nil
+	if fresh {
+		if len(w.explorations) >= 4 {
+			return "", renderjob.ErrBusy
+		}
+		x = &exploration{view: Exploration{ID: Token(), Artwork: artworkID}}
+		w.explorations[x.view.ID] = x
+	}
+	oldStyle, oldColour := x.view.Style, x.view.Colour
+	x.view.Style, x.view.Colour = style, colour
+	if _, err := s.generate(token, x.view.ID, x.view.Revision, actionID, nil, false); err != nil {
+		x.view.Style, x.view.Colour = oldStyle, oldColour
+		if fresh {
+			delete(w.explorations, x.view.ID)
+		}
+		return "", err
+	}
+	w.entries = append(w.entries, entryAction{actionID, artworkID, style, colour, x.view.ID})
+	if len(w.entries) > 8 {
+		w.entries = w.entries[1:]
+	}
+	return x.view.ID, nil
+}
+
+// Favourites returns kept images from every art form, with stable navigation.
+func (s *Store) Favourites(token string) ([]Favourite, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w, err := s.workspace(token)
+	if err != nil {
+		return nil, err
+	}
+	var favourites []Favourite
+	for _, x := range w.explorations {
+		entry, _ := publish.Get(x.view.Artwork)
+		for _, sample := range s.snapshot(token, x).Favourites {
+			favourites = append(favourites, Favourite{sample, x.view.ID, entry.Name, x.view.Revision})
+		}
+	}
+	sort.Slice(favourites, func(i, j int) bool { return favourites[i].Sample.ID < favourites[j].Sample.ID })
+	return favourites, nil
+}
+
 // Choices validates revision and keeps existing favourites immutable.
 func (s *Store) Choices(token, id string, revision int, style, colour string) error {
 	s.mu.Lock()
@@ -237,6 +318,12 @@ func (s *Store) Choices(token, id string, revision int, style, colour string) er
 
 // Generate performs idempotent four-sample admission without holding an HTTP request open.
 func (s *Store) Generate(token, id string, revision int, actionID string, selected []string, different bool) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.generate(token, id, revision, actionID, selected, different)
+}
+
+func (s *Store) generate(token, id string, revision int, actionID string, selected []string, different bool) (string, error) {
 	seenSelected := map[string]bool{}
 	for _, id := range selected {
 		if seenSelected[id] {
@@ -244,14 +331,12 @@ func (s *Store) Generate(token, id string, revision int, actionID string, select
 		}
 		seenSelected[id] = true
 	}
-	if len(actionID) != 48 || len(selected) > 4 {
+	if len(actionID) != 48 || len(selected) > 1 {
 		return "", errors.New("invalid selection")
 	}
 	if _, e := hex.DecodeString(actionID); e != nil {
 		return "", errors.New("invalid action")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	x, e := s.find(token, id)
 	if e != nil {
 		return "", e
@@ -286,7 +371,7 @@ func (s *Store) Generate(token, id string, revision int, actionID string, select
 		for _, sid := range selected {
 			found := false
 			for _, a := range x.view.Samples {
-				if a.ID == sid && a.Favourite {
+				if a.ID == sid {
 					n, _ := strconv.ParseUint(a.Recipe.Seed(), 10, 64)
 					parents = append(parents, explore.Candidate{Seed: n, Traits: a.Recipe.Traits()})
 					palettes[n] = a.Recipe.Palette()
@@ -294,13 +379,24 @@ func (s *Store) Generate(token, id string, revision int, actionID string, select
 				}
 			}
 			if !found {
-				return "", errors.New("select existing favourites")
+				return "", errors.New("choose an existing image")
 			}
 		}
 	}
 	pins, pal, e := publish.Pins(x.view.Artwork, x.view.Style, x.view.Colour)
 	if e != nil {
 		return "", e
+	}
+	// Similarity keeps the chosen image's complete visual family and palette.
+	// Fresh seeds change its composition; no unrelated candidate is mixed in.
+	style, colour := x.view.Style, x.view.Colour
+	if len(selected) == 1 {
+		for _, sample := range x.view.Samples {
+			if sample.ID == selected[0] {
+				pins, pal = sample.Recipe.Traits(), sample.Recipe.Palette()
+				style, colour = sample.Style, sample.Colour
+			}
+		}
 	}
 	space, e := publish.Space(x.view.Artwork)
 	if e != nil {
@@ -345,8 +441,11 @@ func (s *Store) Generate(token, id string, revision int, actionID string, select
 		return "", e
 	}
 	b := Batch{ID: Token()}
+	if len(selected) == 1 {
+		b.Parent = selected[0]
+	}
 	for i, r := range recipes {
-		a := Sample{ID: Token(), Recipe: r, Job: jobs[i]}
+		a := Sample{ID: Token(), Recipe: r, Job: jobs[i], Style: style, Colour: colour}
 		x.view.Samples = append(x.view.Samples, a)
 		b.Samples = append(b.Samples, a.ID)
 	}
@@ -356,6 +455,7 @@ func (s *Store) Generate(token, id string, revision int, actionID string, select
 	}
 	keep := map[string]bool{}
 	for _, b := range x.view.Batches {
+		keep[b.Parent] = true
 		for _, id := range b.Samples {
 			keep[id] = true
 		}
@@ -371,6 +471,7 @@ func (s *Store) Generate(token, id string, revision int, actionID string, select
 	if len(x.actions) > 8 {
 		x.actions = x.actions[1:]
 	}
+	x.view.Style, x.view.Colour = style, colour
 	x.round++
 	x.view.Revision++
 	return b.ID, nil

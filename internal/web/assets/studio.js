@@ -1,18 +1,47 @@
 'use strict';
 (() => {
- const storageKey='art-forms-favourites-v1';
  const notice=message=>{const el=document.querySelector('#notice');if(el)el.textContent=message;};
- function recoveryPage(){const field=document.querySelector('#recovery-data');if(!field)return;try{const data=localStorage.getItem(storageKey);if(data&&data.length<=60000){field.value=data;document.querySelector('#recovery-status').textContent='Your saved recipes are ready to restore.';}else document.querySelector('#recovery-status').textContent='No favourites saved here yet. An exported recipe file can be pasted below.';}catch{document.querySelector('#recovery-status').textContent='Browser storage is unavailable. You can still restore an exported recipe file.';}}
- async function saveChoices(){try{const response=await fetch('/recovery',{headers:{Accept:'application/json'}});if(!response.ok)return;const data=await response.text();if(data.length>60000)throw Error('size');const parsed=JSON.parse(data);if(parsed.version!==1||!Array.isArray(parsed.recipes)||parsed.recipes.length>24)return;localStorage.setItem(storageKey,data);}catch{notice('Browser saving is unavailable. Your active favourites are safe in this session; export recipes to keep a copy.');}}
- document.addEventListener('htmx:beforeRequest',event=>{const trigger=event.detail.elt;if(document.hidden&&trigger&&trigger.id==='main')event.preventDefault();});
+ const files=new Map();
+ let requestedDownload=null;
+ let focusedAction=null;
+ function enhance(){
+  document.querySelectorAll("[data-prepare-download]").forEach(button=>button.textContent="Download image");
+  const main=document.querySelector("main");
+  if(requestedDownload&&main?.dataset.sample===requestedDownload){const link=main.querySelector("a[data-download]");if(link){requestedDownload=null;link.click();}}
+  else if(requestedDownload)requestedDownload=null;
+  document.querySelectorAll('[data-back]').forEach(button=>button.hidden=false);
+  document.querySelectorAll('[data-share]').forEach(button=>{
+   button.hidden=false;
+   const url=button.dataset.share;
+   if(files.has(url)){button.disabled=false;return;}
+   button.disabled=true;
+   fetch(url).then(response=>{if(!response.ok)throw Error('unavailable');return response.blob();}).then(blob=>{
+    // The native share call must happen on a fresh click, after the file is ready.
+    files.set(url,new File([blob],'artwork.png',{type:'image/png'}));
+    if(files.size>4)files.delete(files.keys().next().value);
+    button.disabled=false;
+   }).catch(()=>{button.disabled=false;});
+  });
+ }
+ document.addEventListener('htmx:beforeRequest',event=>{const form=event.detail.elt;if(form?.matches('form[action$="/download"]'))requestedDownload=form.querySelector('[name=sample]').value;if(document.hidden&&event.detail.elt?.id==='main')event.preventDefault();});
  document.addEventListener('htmx:beforeSwap',event=>{if([400,403,409,410,413,429,503].includes(event.detail.xhr.status)){event.detail.shouldSwap=true;event.detail.isError=false;event.detail.target=document.body;}});
- document.addEventListener('htmx:afterRequest',event=>{const config=event.detail.requestConfig;if(config&&config.verb==='post'&&/\/(favourites|restore)$/.test(config.path)&&event.detail.successful)saveChoices();});
- document.addEventListener('htmx:sendError',()=>{const main=document.querySelector('#main');if(main){main.removeAttribute('hx-trigger');if(window.htmx)window.htmx.process(main);}notice('Connection interrupted. Refresh when you are ready; your favourites remain in this session.');});
- let pendingFocus=null;
- document.addEventListener('htmx:beforeSwap',event=>{if(!event.detail.xhr.responseURL.includes('/fragments/'))return;const active=document.activeElement;pendingFocus={details:[...document.querySelectorAll('main details')].map(e=>e.open),fields:[...document.querySelectorAll('main input[type=radio],main input[type=checkbox]')].map(e=>({name:e.name,value:e.value,checked:e.checked})),focus:active&&active.name?{name:active.name,value:active.value}:null};});
- document.addEventListener('htmx:afterSwap',()=>{if(!pendingFocus)return;const state=pendingFocus;pendingFocus=null;document.querySelectorAll('main details').forEach((e,i)=>e.open=state.details[i]||false);for(const f of state.fields){const el=document.querySelector('main input[name="'+CSS.escape(f.name)+'"][value="'+CSS.escape(f.value)+'"]');if(el)el.checked=f.checked;}if(state.focus){const el=document.querySelector('main [name="'+CSS.escape(state.focus.name)+'"][value="'+CSS.escape(state.focus.value)+'"]');if(el)el.focus({preventScroll:true});}});
- document.addEventListener('htmx:afterSettle',recoveryPage);
- document.addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;if(button.hasAttribute('data-back')){history.back();return;}if(button.hasAttribute('data-clear-device')){try{localStorage.removeItem(storageKey);notice('Saved favourites removed from this device.');recoveryPage();}catch{notice('Browser storage is unavailable.');}return;}if(button.dataset.share){try{if(button.shareFile){if(navigator.canShare&&navigator.canShare({files:[button.shareFile]})){await navigator.share({files:[button.shareFile],title:'My artwork'});}else notice('File sharing is unavailable in this browser. Use Download image, then share that file.');return;}const response=await fetch(button.dataset.share);if(!response.ok)throw Error('expired');const blob=await response.blob();const file=new File([blob],'artwork.png',{type:'image/png'});button.shareFile=file;button.textContent='Share image';notice('The image is ready. Press Share image to choose where to send it.');}catch(error){if(error.name!=='AbortError')notice('The image could not be shared. Try the download link.');}}});
- window.addEventListener('storage',event=>{if(event.key===storageKey)notice('Saved favourites changed in another tab. Your current exploration is still here.');});
- recoveryPage();
+ document.addEventListener('htmx:sendError',()=>notice('Connection interrupted. Please reload the page to continue.'));
+ document.addEventListener('htmx:beforeSwap',event=>{
+  if(!event.detail.xhr.responseURL.includes('/fragments/'))return;
+  const active=document.activeElement;
+  focusedAction=active?.closest('main')?active.id:null;
+ });
+ document.addEventListener('htmx:afterSwap',()=>{
+  if(focusedAction){document.getElementById(focusedAction)?.focus({preventScroll:true});focusedAction=null;}
+ });
+ document.addEventListener('htmx:afterSettle',enhance);
+ document.addEventListener('click',async event=>{
+  const button=event.target.closest('button');if(!button)return;
+  if(button.hasAttribute('data-back')){history.back();return;}
+  if(!button.dataset.share)return;
+  const file=files.get(button.dataset.share);
+  if(!file||!navigator.canShare||!navigator.canShare({files:[file]})){notice('Download the image to share it from your photos or files.');return;}
+  try{await navigator.share({files:[file],title:'My artwork'});}catch(error){if(error.name!=='AbortError')notice('Sharing did not open. Download the image to share it.');}
+ });
+ enhance();
 })();

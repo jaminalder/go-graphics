@@ -18,6 +18,51 @@ dedicated sibling worktree. Do not integrate or publish without approval.
 - Test seams agreed in the approved plan: recipes/configuration, exploration,
   HTTP journeys, admission/artifact lifecycle and renderer protocol.
 
+## Current interaction revision (2026-09-10)
+
+The owner's revised brief supersedes the original multi-parent, recovery-heavy
+interface recorded in the historical slices below. Entering from the direction
+chooser now admits four images immediately. The grid retains small illustrated
+direction labels and only Open image / Favourite actions. Global Favourites
+collects images across art forms; one-image view owns download, share and
+Generate similar ones. The latter accepts one unfavourited image and keeps
+its full traits/palette for all four new composition seeds. Repeated entry
+preserves favourites; failed admission restores previous choices.
+
+Removed browser storage/recovery UI and script access; server favourites remain
+bounded. Initial creation shares rendering quotas with detail actions, with a
+burst of three for create → download → similar. Native share uses a prepared
+existing file and a fresh click. Enhanced downloads begin automatically after
+preparation; ordinary forms and automatic no-JavaScript progress work too.
+Poll fragments preserve focused image actions. Desktop sizing keeps the main
+image and its actions together at typical display heights.
+
+Pools/Tide, Foam/After dark and Iris/Earth now provide varied real hero images.
+Regenerated catalogue manifests match their PNG hashes and immutable recipes.
+Style comparison examples and artwork algorithms/goldens remain unchanged.
+The updated product brief and cited `ux-simplification.md` record the rationale.
+
+Verification for this revision:
+
+- `make check` passed: formatting, vet, lint (zero issues), all Go tests.
+- Race tests passed for studio, web, explore and publish.
+- Three Chromium journeys passed: automatic four-image entry, selected direction
+  miniatures, focus through polling, independent favourites, one-image similarity,
+  real 1200 px download, delayed prepared native sharing with active user gesture,
+  blocked localStorage, no-JavaScript progress/download, and mobile cross-artwork
+  favourites with no horizontal overflow.
+- Studio tests defend one-batch admission on replay, one-parent trait/palette
+  preservation, repeated play beyond four entries, retained favourites, ownership,
+  and failed-admission rollback; HTTP tests defend the shared generation quota.
+- Visually inspected loaded desktop gallery/detail and mobile grid screenshots
+  under `out/browser-*.png`; coordinator independently checked the full journey,
+  single-click download, native share activation and no-JavaScript interaction.
+- Browser runner uses isolated configurable ports (8280/8281 by default) and
+  cleans up both owned services on interruption. Manual preview servers are untouched.
+
+Final human usability/accessibility, curation and public launch gates are still
+separate. No human usability study, merge, deployment or publication is claimed.
+
 ## Progress
 
 - [x] Dedicated implementation branch and worktree.

@@ -198,10 +198,10 @@
       "artwork_id": "foam",
       "edition": "1",
       "seed": "42",
-      "palette": "diebenkorn-seawall",
+      "palette": "hopper-night-windows",
       "config": {
         "traits": {
-          "colourway": "diebenkorn-seawall",
+          "colourway": "hopper-night-windows",
           "density": "open",
           "fills": "drawn",
           "line": "fine",
@@ -212,11 +212,11 @@
         }
       }
     },
-    "sha256": "9716ede86a7ae198e1e6cc8a34d3a51800f2f5759be5edda52ce37529288b38d",
+    "sha256": "4309d2d1d6c81231603de495f24c6cdbe9e4fc1ab98e535963ed3613862c36cb",
     "width": 600,
     "height": 600,
     "alt": "A field of inked cells, each carrying a different trace of colour.",
-    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+    "provenance": "go-graphics edition 1; repository ColorLisa palette hopper-night-windows; provisional owner review"
   },
   {
     "file": "foam-ink.png",
@@ -414,7 +414,7 @@
       "artwork_id": "iris",
       "edition": "1",
       "seed": "42",
-      "palette": "diebenkorn-seawall",
+      "palette": "tchelitchew-hide-and-seek",
       "config": {
         "traits": {
           "aperture": "narrow",
@@ -428,11 +428,11 @@
         }
       }
     },
-    "sha256": "7f15aafe3468daa222910329601ab77df2da96c411f2eb15ed906e6f8d1c57a0",
+    "sha256": "f5ea7ff5a02c969c22bb225b62ea614d6916ba4b64891fe85803ec2a2452f826",
     "width": 600,
     "height": 600,
     "alt": "Fine fibres gather around a dark centre, winding out into light.",
-    "provenance": "go-graphics edition 1; repository ColorLisa palette diebenkorn-seawall; provisional owner review"
+    "provenance": "go-graphics edition 1; repository ColorLisa palette tchelitchew-hide-and-seek; provisional owner review"
   },
   {
     "file": "iris-fine.png",

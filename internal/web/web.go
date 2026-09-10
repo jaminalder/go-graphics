@@ -47,17 +47,20 @@ type (
 		limits       limiter
 	}
 	page struct {
-		Title, Kind, Message, CSRF, Action string
-		Entry                              publish.Entry
-		Entries                            []publish.Entry
-		Exploration                        studio.Exploration
-		Samples                            []studio.Sample
-		Sample                             studio.Sample
-		Token                              string
-		Active                             bool
-		Ready                              int
-		Previous                           []studio.Sample
-		BatchID                            string
+		Title, Kind, Message, CSRF, Action             string
+		Entry                                          publish.Entry
+		Entries                                        []publish.Entry
+		Exploration                                    studio.Exploration
+		Samples                                        []studio.Sample
+		Sample                                         studio.Sample
+		Token                                          string
+		Active                                         bool
+		Ready                                          int
+		Previous                                       []studio.Sample
+		BatchID                                        string
+		StyleName, ColourName, StyleImage, ColourImage string
+		Favourites                                     []studio.Favourite
+		Failed                                         bool
 	}
 )
 
@@ -227,9 +230,14 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/recover" {
-		p := page{Title: "Your saved favourites", Kind: "recover"}
-		if sess, e := a.session(r); e == nil {
-			p.CSRF = sess.CSRF
+		http.Redirect(w, r, "/favourites", http.StatusSeeOther)
+		return
+	}
+	if path == "/favourites" {
+		p := page{Title: "Favourites", Kind: "favourites"}
+		if session, err := a.session(r); err == nil {
+			p.CSRF = session.CSRF
+			p.Favourites, _ = a.cfg.Studio.Favourites(session.Token)
 		}
 		a.page(w, r, p)
 		return
@@ -240,7 +248,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		p := page{Title: entry.Name, Kind: "art", Entry: entry}
+		p := page{Title: entry.Name, Kind: "art", Entry: entry, Action: studio.Token()}
 		if s, e := a.session(r); e == nil {
 			p.CSRF = s.CSRF
 		}
@@ -339,6 +347,19 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	p.StyleName, p.ColourName = "Keep it open", "Surprise me"
+	for _, choice := range entry.Styles {
+		if choice.ID == x.Style {
+			p.StyleName, p.StyleImage = choice.Name, entry.ID+"-"+choice.ID+".png"
+		}
+	}
+	for _, choice := range entry.Colours {
+		if choice.ID == x.Colour {
+			p.ColourName, p.ColourImage = choice.Name, entry.ID+"-"+choice.ID+".png"
+		}
+	}
+	p.Failed = !p.Active && p.Ready == 0 && len(p.Samples) > 0
+
 	if fragment {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if e := a.templates.ExecuteTemplate(w, "main", p); e != nil {
@@ -378,7 +399,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, 429, "Please wait a moment before starting another exploration.")
 			return
 		}
-		if path == "/explorations" && !a.allowed(r, "artwork", "style", "colour") {
+		if path == "/explorations" && !a.allowed(r, "artwork", "style", "colour", "action") {
 			a.fail(w, r, 400, "Unknown choice.")
 			return
 		}
@@ -416,16 +437,24 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 			}
 			a.setCookie(w, session.Token)
 		}
+		if path == "/explorations" && !a.allowGeneration(w, r, session.Token) {
+			return
+		}
 		id := ""
 		if path == "/restore" {
 			id, e = a.cfg.Studio.Restore(session.Token, recovered.Recipes)
 		} else {
-			var x studio.Exploration
-			x, e = a.cfg.Studio.Start(session.Token, r.PostForm.Get("artwork"), r.PostForm.Get("style"), r.PostForm.Get("colour"))
-			id = x.ID
+			id, e = a.cfg.Studio.Enter(session.Token, r.PostForm.Get("artwork"), r.PostForm.Get("style"), r.PostForm.Get("colour"), r.PostForm.Get("action"))
 		}
 		if e != nil {
-			a.fail(w, r, 400, e.Error())
+			status := 400
+			if errors.Is(e, renderjob.ErrBusy) {
+				status = 503
+			}
+			if errors.Is(e, studio.ErrConflict) {
+				status = 409
+			}
+			a.fail(w, r, status, e.Error())
 			return
 		}
 		target := "/"
@@ -465,9 +494,11 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	case "choices":
 		allowed = a.allowed(r, "revision", "style", "colour")
 	case "batches":
-		allowed = a.allowed(r, "revision", "action", "selected", "different")
+		allowed = a.allowed(r, "revision", "action")
+	case "similar":
+		allowed = a.allowed(r, "revision", "action", "sample")
 	case "favourites":
-		allowed = a.allowed(r, "revision", "sample", "on")
+		allowed = a.allowed(r, "revision", "sample", "on", "return")
 	case "download":
 		allowed = a.allowed(r, "sample")
 	case "cancel":
@@ -477,9 +508,8 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, 400, "Unknown action field.")
 		return
 	}
-	if operation == "batches" || operation == "download" {
-		if !a.limits.allow("generate-ip:"+a.client(r), 12, 2) || !a.limits.allow("generate-workspace:"+session.Token, 6, 2) {
-			a.fail(w, r, 429, "Give these images a moment, then try again.")
+	if operation == "batches" || operation == "similar" || operation == "download" {
+		if !a.allowGeneration(w, r, session.Token) {
 			return
 		}
 	}
@@ -488,8 +518,21 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	case "choices":
 		e = a.cfg.Studio.Choices(session.Token, id, revision, r.PostForm.Get("style"), r.PostForm.Get("colour"))
 	case "batches":
-		_, e = a.cfg.Studio.Generate(session.Token, id, revision, r.PostForm.Get("action"), r.PostForm["selected"], r.PostForm.Get("different") == "yes")
+		_, e = a.cfg.Studio.Generate(session.Token, id, revision, r.PostForm.Get("action"), nil, false)
+	case "similar":
+		_, e = a.cfg.Studio.Generate(session.Token, id, revision, r.PostForm.Get("action"), []string{r.PostForm.Get("sample")}, false)
 	case "favourites":
+		destination := r.PostForm.Get("return")
+		if destination != "" && destination != "sample" && destination != "favourites" {
+			a.fail(w, r, 400, "Unknown destination.")
+			return
+		}
+		if destination == "sample" {
+			target += "/samples/" + r.PostForm.Get("sample")
+		}
+		if destination == "favourites" {
+			target = "/favourites"
+		}
 		e = a.cfg.Studio.Favourite(session.Token, id, r.PostForm.Get("sample"), revision, r.PostForm.Get("on") == "yes")
 	case "cancel":
 		e = a.cfg.Studio.Cancel(session.Token, id, revision, r.PostForm.Get("batch"))
@@ -515,6 +558,16 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// A burst of three admits create, download, and similar as one natural visit.
+// Sustained quotas and the independent queue/worker bounds still cap rendering.
+func (a *app) allowGeneration(w http.ResponseWriter, r *http.Request, token string) bool {
+	if !a.limits.allow("generate-ip:"+a.client(r), 12, 3) || !a.limits.allow("generate-workspace:"+token, 6, 3) {
+		a.fail(w, r, 429, "Give these images a moment, then try again.")
+		return false
+	}
+	return true
 }
 
 func (a *app) image(w http.ResponseWriter, r *http.Request) {

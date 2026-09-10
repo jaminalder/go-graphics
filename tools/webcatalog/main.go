@@ -43,7 +43,8 @@ func run() error {
 			return err
 		}
 		type choice struct{ name, style, colour string }
-		choices := []choice{{"hero", entry.Styles[0].ID, entry.Colours[0].ID}}
+		heroColour := map[string]string{"pools": "diebenkorn-seawall", "foam": "hopper-night-windows", "iris": "tchelitchew-hide-and-seek"}[entry.ID]
+		choices := []choice{{"hero", entry.Styles[0].ID, heroColour}}
 		for _, s := range entry.Styles {
 			choices = append(choices, choice{s.ID, s.ID, entry.Colours[0].ID})
 		}

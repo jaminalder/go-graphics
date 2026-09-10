@@ -88,3 +88,37 @@ func TestReadOnlyMethodsCannotAdmitRendersOrExposeAnotherWorkspace(t *testing.T)
 		}
 	}
 }
+
+// TestInitialCreationSharesTheRenderingQuotaWithDetailActions prevents entry
+// from bypassing the generation bound merely because it also starts navigation.
+func TestInitialCreationSharesTheRenderingQuotaWithDetailActions(t *testing.T) {
+	store := studio.New(nil, "test")
+	session, _ := store.Create()
+	x, _ := store.Start(session.Token, "iris", "fine", "")
+	handler, err := web.New(web.Config{Origin: "http://example.test", Studio: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		path := "/explorations/" + x.ID + "/download"
+		body := "csrf=" + session.CSRF + "&sample=unknown"
+		expected := 410
+		if i == 0 {
+			path = "/explorations"
+			body = "csrf=" + session.CSRF + "&artwork=iris&style=fine&colour=&action=" + studio.Token()
+			expected = 503
+		}
+		if i == 3 {
+			expected = 429
+		}
+		request := httptest.NewRequest("POST", "http://example.test"+path, strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("Origin", "http://example.test")
+		request.AddCookie(&http.Cookie{Name: "art-studio", Value: session.Token})
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != expected {
+			t.Fatalf("action %d: got %d, want %d: %s", i, response.Code, expected, response.Body.String())
+		}
+	}
+}

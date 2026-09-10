@@ -1,3 +1,7 @@
+> Interaction revision, 2026-09-10: the owner’s simpler [current product brief](product-and-ux.md)
+> supersedes the multi-parent refinement and visible browser-recovery UI below.
+> Implementation and verification are recorded in [IMPLEMENTATION.md](IMPLEMENTATION.md).
+
 # Implementation plan and future-session handoff
 
 Status: implemented locally on `exp/public-art-app`, with external launch gates

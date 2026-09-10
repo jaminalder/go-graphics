@@ -542,3 +542,17 @@ vulnerability results to preserve the workstation's older toolchain. Keep
 artistic edition compatibility guarded by fixed-pixel and existing golden tests.
 Source: https://go.dev/dl/ and the Go vulnerability database, including
 https://pkg.go.dev/vuln/GO-2026-6091 .
+
+### 63. One image guides public similarity (2026-09-10)
+
+The owner simplified the public journey to direction choice, four images, and
+one image with download/share/similarity actions. The chosen sample supplies
+its complete permitted traits and palette to all four fresh composition seeds.
+Favouriting is independent; there is no multi-parent selection or unrelated
+base candidate in this action. This makes “Generate similar ones” predictable
+while preserving the CLI flock policy and shared planner's existing defaults.
+Samples retain their original direction labels. Re-entering an art form reuses
+bounded navigation and preserves favourites; initial admission is atomic and
+idempotent, and failures leave prior directions unchanged. The interface uses
+server-side favourites without browser recovery controls. Full rationale:
+[web/ux-simplification.md](web/ux-simplification.md).
