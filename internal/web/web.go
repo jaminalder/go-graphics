@@ -222,7 +222,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/" {
-		a.page(w, r, page{Title: "Find an image of your own", Kind: "gallery", Entries: publish.All()})
+		a.page(w, r, page{Title: "Explore art. Find your favourite.", Kind: "gallery", Entries: publish.All()})
 		return
 	}
 	if path == "/about" {
