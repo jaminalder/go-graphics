@@ -467,24 +467,19 @@ body[data-variant=C] .reference-content {
   }
 }
 
-/* The source's short status list stays a normal list on GitHub. */
-#how-singular-seed-is-set-up > ul:first-of-type {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  list-style: none;
-  padding: 0;
-  margin: 22px 0;
-}
-#how-singular-seed-is-set-up > ul:first-of-type > li {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 5px 10px;
-  margin: 0;
-  font: 12px/1.6 system-ui, sans-serif;
-  background: var(--paper);
-}
-#how-singular-seed-is-set-up > ul:first-of-type > li:first-child {
-  color: var(--green);
-  background: var(--pale);
+
+/* Site navigation is shared across pages; page contents remain a separate index. */
+.site-nav { margin-top: 24px; }
+.site-nav > a, .site-nav li > a { display: block; }
+.site-nav details { margin: 8px 0; }
+.site-nav summary { cursor: pointer; font-size: 13px; font-weight: 650; padding: 5px 0; }
+.site-nav a { padding: 4px 0 4px 10px; }
+.site-nav [aria-current=page] { color: var(--green); font-weight: 700; border-left: 3px solid var(--green); }
+.page-nav { border-top: 1px solid var(--line); padding-top: 12px; }
+main img { display: block; max-width: 100%; height: auto; }
+@media (max-width:720px) {
+  .site-nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .site-nav > a { flex-basis: 100%; }
+  .site-nav details { max-width: 100%; }
+  .site-nav details ul { max-height: 230px; overflow: auto; }
 }

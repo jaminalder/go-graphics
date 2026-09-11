@@ -4,7 +4,7 @@ The chosen public domain is `singularseed.art`. The runtime is one Ubuntu VPS
 on a CX23 in Nuremberg (`nbg1`), with three Compose services: Caddy, `web`
 (`artweb`), and `renderer` (`artrender`). The owner selected Compose and a CX23
 x86-64 target on 2026-09-10; see
-[ADR 0004](../docs/adr/0004-compose-runtime.md). Cloud provisioning, DNS and
+[deployment architecture](../docs/architecture/deployment.md). Cloud provisioning, DNS and
 public launch remain operator actions. The current host serves HTTP at its
 assigned IPv4; a full rebuild rehearsal and domain/TLS setup are next.
 

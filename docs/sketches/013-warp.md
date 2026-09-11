@@ -1,134 +1,67 @@
-# 013 - Folded Nested fBM Warp
+# Warp
 
-## Purpose
+## Implemented algorithm
 
-`warp` is a point-sampled field artwork whose nested domain warps form a folded
-material. Its default keeps turbulent detail sharp across the canvas; an
-explicit varied mode restores broad calm passages beside concentrated folds.
-Rotated octaves add narrow nested filaments, while one coherent light turns the
-same visible height into dark cavities and pale raised ridges.
+A point-sampled fBm field is evaluated as plain, single-domain-warp or nested-domain-warp. Independent displacement fields bend coordinates before color mapping. Uniform detail uses one activity level; varied detail uses a broad activity field to create quiet and concentrated passages. Folded coloring maps field behavior differently from a continuous gradient.
 
-The sketch deliberately has no explicit lines, contours, marks, particles,
-cells, or post-processing layers. Its fine veins emerge continuously from the
-nested field itself.
+## Controls and output space
 
-## Field
+Local controls select warp mode, gradient/folded mapping, uniform/varied detail and field/color parameters. There is no weighted trait schema.
 
-Canvas coordinates are normalized by the rasterizer: `v` spans `[0,1]` and `u`
-spans `[0,aspect]`. For `p = scale * (u,v)`, each independently seeded Perlin
-field is evaluated as normalized fBM. After every octave, the running domain is
-rotated by a fixed sketch-local angle and scaled by `lacunarity`; amplitude is
-multiplied by `gain`. Rotation prevents every scale from accumulating along the
-same axes without adding randomness or another field type.
+## Rendering and review
 
-The detail policy supplies activity `a(p)`. Default `uniform` returns one fixed
-high value at every coordinate, so displacement and ridge emphasis remain
-fully active across the sheet. `varied` uses a low-frequency Perlin envelope
-that suppresses both mechanisms in quiet passages while active regions carry
-stronger folds. The nested field roles use fixed internal scale ratios:
+Sampler; honors raster AA/deep. Compare the same seed across modes/details to isolate coordinate deformation from palette changes.
 
-- `q` stays broad and bends the large composition;
-- `r` evaluates the q-warped coordinate at a somewhat finer scale;
-- the final field evaluates the selected folded coordinate at the finest role
-  scale, retaining its top two octave contributions as a fine residual.
-
-The `warp` mode chooses how far field development proceeds:
-
-- `plain`: final fBM at the unwarped coordinate;
-- `single`: final fBM displaced by `q * warp-strength * activity`;
-- `nested`: final fBM displaced by q-warped `r * nested-strength * activity`.
-
-Shallower modes do not evaluate unused deeper fields. Each field has its own
-deterministic seed and is built once in the private immutable plan.
-
-## Material
-
-The final raw scalar is shaped continuously into a material height in `[0,1]`.
-An asymmetric smooth curve opens low values into cavities while preserving a
-broad middle-value body. A narrow smooth ridge response comes from the final
-field's high-octave residual and is multiplied by an eased activity gate before
-being added to the body. The gate is `Smoothstep(0.28,1.08,activity)`, not raw
-activity: uniform detail fully enables it everywhere, while varied detail eases
-it with the envelope. It is not quantized, terraced, or sampled as an explicit
-contour, so finite differences remain stable and fine ridges belong to the same
-surface as the broad forms.
-
-## Appearance
-
-Both mappings require at least three palette colors and order them by
-luminance.
-
-- `gradient` is an unlit diagnostic. It contrast-shapes the raw final scalar
-  through a dark-middle-light HSL ramp.
-- `folded` is the default artwork. Material height maps darkest palette color
-  to cavities, a middle color to the body, and the lightest suitable color to
-  raised ridges. Low height continuously attenuates cavity color in linear
-  light, while ridge color is mixed sparingly, so value structure leads hue.
-
-`structure` was an unintegrated experiment name and is removed rather than kept
-as an alias.
-
-## Surface Light
-
-Folded appearance derives its normal from central differences of the exact
-material height:
-
-```text
-dx = h(u + eps, v) - h(u - eps, v)
-dy = h(u, v + eps) - h(u, v - eps)
-normal = normalize(-depth*dx, -depth*dy, 2*eps)
+```sh
+go run ./cmd/staticart render warp --seed 42 --profile preview --out out
 ```
 
-`eps` and depth are fixed sketch-local canvas values, never pixel dimensions.
-One fixed oblique light combines ambient fill with bounded diffuse response.
-The palette color is converted channel-by-channel from sRGB to linear light,
-multiplied by the light factor, and converted back to sRGB. The same visible
-height therefore controls both color role and illumination.
+## Implementation and tests
 
-Folded rendering evaluates nearby material samples for each output sample, so
-it is intentionally several times more expensive than the diagnostic gradient.
-Both paths remain pure and allocation-free in ordinary point sampling.
+[Artwork implementation](../../internal/sketch/warp/warp.go) owns the mechanism and defaults. [Option declarations](../../internal/sketch/warp/options.go) own local knobs. [Tests](../../internal/sketch/warp/warp_test.go) defend deterministic behavior and algorithm-specific claims. See [materials](../reference/materials.md) for shared rendering behavior and [CLI guide](../guides/cli.md) for profiles, metadata and batch review.
 
-## Controls
+## Current command help
 
-- `--scale` in `[0.25,12]`: base field cycles per canvas unit.
-- `--octaves` in `[1,8]`: number of fBM components.
-- `--gain` in `[0.2,0.85]`: amplitude multiplier per octave.
-- `--lacunarity` in `[1.2,3.5]`: frequency multiplier per octave.
-- `--warp-strength` in `[0,8]`: first domain displacement.
-- `--nested-strength` in `[0,8]`: second domain displacement.
-- `--warp plain|single|nested`: field development mode.
-- `--appearance gradient|folded`: palette mapping and material treatment.
-- `--detail uniform|varied`: constant high detail or the preserved spatial activity envelope.
+This block is generated from the checked-in application with `make docs-sketch-help`. It includes global flags because their interaction with each sketch matters.
 
-The defaults target nested folded material with a low base scale, five octaves,
-and uniformly high displacement/ridge activity. `--detail varied` reproduces
-the preceding folded implementation byte-for-byte for the same recipe. Uniform
-changes the field policy itself; it is not post-process sharpening. Rotation,
-role scales, activity values, material shaping, normal step, depth, and light
-remain internal constants rather than public calibration controls.
-
-## Determinism And Resolution
-
-All Perlin seeds derive from `Context.Seed` and fixed unique transforms. The
-immutable plan contains no pixel dimensions. Frequencies, displacement, ridge
-shaping, and the normal step are in normalized canvas units, so equal-aspect
-renders sample the same field, height, normal, and color at identical `(u,v)`
-coordinates regardless of output resolution.
-
-The mechanisms and constants are independently designed for this repository.
-No source expression, constant sequence, color sequence, or formula is copied
-from the restrictive-license shader that motivated the follow-up study.
-
-## Acceptance checklist
-
-- Preferred seeds 1, 2, 5, and 8 retain recognizable broad directional composition.
-- Dark cavities, middle-value bodies, and pale ridges read as folded material rather than embossed contours.
-- Uniform detail carries fine folds across the entire frame without a locally blurred region.
-- Varied detail retains recognizable calm and turbulent passages exactly.
-- Fine filaments remain organized rather than becoming pixel-scale noise or uniform embossing.
-- Highlights and shadows agree under one fixed light direction.
-- Depth remains legible when desaturated; hue does not carry the illusion.
-- Plain, single, and nested remain useful and visibly distinct diagnostics.
-- Fixed seeds vary meaningfully while retaining one visual identity.
-- The hot path is pure, deterministic, resolution-independent, and allocation-free in normal sampling.
+<!-- sketch-help:start -->
+```text
+Usage of render:
+  -aa int
+        anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget (default 2)
+  -appearance string
+        colour mapping: gradient|folded (default "folded")
+  -deep
+        render a 16-bit PNG master (archival/print; png only)
+  -detail string
+        distribution of nested field detail: uniform|varied (default "uniform")
+  -format string
+        output format: png|jpg (default "png")
+  -gain float
+        amplitude multiplier per octave (default 0.5)
+  -height int
+        override height in px (requires --width)
+  -lacunarity float
+        frequency multiplier per octave (default 2)
+  -nested-strength float
+        second domain displacement (default 4)
+  -octaves int
+        number of fBM components (default 5)
+  -out string
+        output directory (default "out")
+  -palette string
+        palette slug (see: staticart palettes) (default "kandinsky-soft-pressure")
+  -profile string
+        size profile: preview|preview-tall|print|print-tall|web|web-tall (default "preview")
+  -scale float
+        base field cycles per canvas unit (default 1.65)
+  -seed uint
+        random seed (same seed → same image) (default 42)
+  -warp string
+        field development mode: plain|single|nested (default "nested")
+  -warp-strength float
+        first domain displacement (default 3)
+  -width int
+        override width in px (requires --height)
+```
+<!-- sketch-help:end -->

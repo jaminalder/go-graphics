@@ -24,7 +24,8 @@
 Generative static 2D art in Go. Deterministic sketches → PNG/JPEG at preview,
 web, and print resolution. Stdlib raster now; `tdewolff/canvas` later for
 vector work. Zero third-party dependencies at the moment — keep it that way
-unless a documented decision says otherwise.
+unless a documented decision says otherwise. The public studio and its
+deployment/tooling are documented in `docs/README.md`.
 
 ## Commands
 
@@ -95,8 +96,8 @@ mosaic wants and this does not).
 over a depth field, a velocity field and an upstream walk. `--reach` is the
 energy of the stretch, `--channel` its plan form, `--water` its turbidity;
 `--medium overlay` reduces it to a translucent all-over water layer with no
-bed or banks. See `docs/sketches/011-riffle.md`, and the "What did not read
-as water" section there before changing any of its textures.
+bed or banks. See `docs/sketches/011-riffle.md`, and its implemented
+algorithm before changing textures.
 
 `shallows` combines 010's planned faceted stone bed with 011's point-sampled
 surface in one raster function. Ripple shadows, highlights and refraction act
@@ -113,10 +114,10 @@ remap of the plane — `P = direction * (ringBase + stretch*s)` — which makes 
 ordinary 2D Perlin field run as fibres from pupil to limbus *and* be seamless
 around the disc by construction; warping then happens in the local
 tangential/radial frame, so a strong warp bends fibres instead of dissolving
-them. There is no lighting model at all: value is the field. Seven trait
+them. There is no lighting model at all: value is the field. Eight trait
 dimensions (`structure`, `weave`, `grain`, `reach`, `aperture`, `tint`,
-`ground`) carry the output space — see `docs/sketches/014-iris.md`, and read
-the radial remap section there before touching any coordinate.
+`rim`, `ground`) carry the output space — see `docs/sketches/014-iris.md`, and read
+the implemented algorithm there before touching any coordinate.
 
 `glaze` lays a *painted* water over the same faceted stone bed: a translucent
 veil whose entire structure is a nested fBM domain warp rather than a physical
@@ -130,7 +131,7 @@ hold broad dry stone against flooded passages; `--opacity` and `--body` say
 how dense the water is where it covers, and `--density` and `--gather` how
 many threads the filament draws and how tightly they pack. See
 `docs/sketches/015-glaze.md`, and
-its "What did not work" section before retuning any field constant — the veil
+its implemented algorithm before retuning any field constant — the veil
 wants forms much broader than 013's defaults, the drift needs its own finer
 frequency or it translates the bed instead of smearing it, and neither
 coverage nor density is the global multiplier it first looks like.
@@ -147,7 +148,7 @@ Rendered files land in `out/` (gitignored), named
 Tests prove determinism, not beauty. After changing any sketch or color code:
 render a preview (`make preview` or the render command) and **Read the output
 PNG** to look at it. For sketch 001 compare against the target image at
-`docs/reference/target-sketch7.jpg` using its spec's acceptance checklist.
+`docs/reference/target-sketch7.jpg` using its current sketch reference.
 
 ## Judge the space, not the render
 
@@ -172,11 +173,12 @@ you.
 
 - `docs/WORKTREE-WORKFLOW.md` — container layout (`master/` + `worktrees/`),
   native Git commands, skills, review, integration, and cleanup.
-- `docs/ARCHITECTURE.md` — package layout, dependency rules, **core
-  invariants**, testing strategy, decision log. Update the decision log when
-  making a non-obvious choice.
-- `docs/sketches/NNN-<name>.md` — one spec per sketch: algorithm, tunables,
-  acceptance checklist. Write the spec before implementing a new sketch.
+- `docs/ARCHITECTURE.md` — C4 architecture index and core invariants;
+  follow its links to components, deployment, packages and testing. Update the
+  relevant current-state view when responsibilities change.
+- `docs/sketches/NNN-<name>.md` — implemented algorithms, tunables,
+  rendering behavior and generated CLI help for every sketch. Write the spec
+  before implementing a new sketch.
 - `docs/reference/colorlisa-palettes.md` — full ColorLisa palette dataset
   (source data for `internal/palette`; don't re-fetch the website).
 - `docs/reference/qql-colordata.json` — QQL's 153 HSB swatches and 7 city
@@ -184,8 +186,8 @@ you.
   `go run ./tools/genqqlpalettes`; don't hand-edit either file).
 - `docs/hatching.md` — the hatch package: structures, parameter vocabulary,
   API, and its known weaknesses. Read before filling anything with marks.
-- `docs/IDEAS.md` — backlog of brainstormed effects (per-terrace effects
-  etc.); check it before proposing new effect work.
+- `docs/README.md` — full current documentation, including studio, API,
+  deployment and operator procedures.
 
 ## Invariants (breaking these is a bug even if output looks fine)
 
@@ -218,7 +220,7 @@ internal/hatch/         filling a region with repeated marks: structures,
                         parameters and coverage functions (mathx + noise)
 internal/flame/         fractal-flame IFS: variations, xaos, chaos game,
                         log-density, density estimation, oversample
-internal/scheme/        colour arrangement over a set of regions: 15 strategies,
+internal/scheme/        colour arrangement over a set of regions: 16 strategies,
                         each answering hue *and* value (leaf)
 internal/trait/         weighted output-space dimensions, seed → traits, CLI overrides (leaf)
 internal/palette/       Color type + ops, HSB Swatch (clamp box + walk), ColorLisa data
@@ -345,7 +347,7 @@ Test the earliest meaningful boundary:
 
 Benchmark planning separately from sampling or painting for expensive work.
 Direct `At` methods should remain allocation-free. See `docs/performance.md`
-for representative commands, results and the print-memory cost of
+for measurement commands and the print-memory cost of
 `paint.Canvas`.
 
 ## Engineering standards

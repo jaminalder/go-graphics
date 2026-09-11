@@ -1,178 +1,27 @@
-# Branch And Worktree Workflow
+# Branch and worktree workflow
 
-Use ordinary Git branches and sibling worktrees for isolated experiments and
-parallel development. Git is the lifecycle mechanism; the optional files in
-`experiments/templates/` are working notes, not a state database.
+The project container holds `master/` (the repository and coordinator checkout) and sibling `worktrees/`. The container itself is not a Git repository. Keep the coordinator in `master/` on branch `master`; give every writing worker its own branch and checkout.
 
-## Layout
+## Create and inspect
 
-One container folder holds the coordinator checkout and every worker
-worktree. The container itself is not a Git repository.
-
-```text
-go-graphics/                 container (not a clone)
-  master/                    coordinator: ordinary clone, branch master
-  worktrees/<name>/          one worktree per experiment, branch exp/<name>
-```
-
-Open Cursor on `master/`. That is the workspace root: Go tooling, `AGENTS.md`,
-and project skills all live there. A worker's *working directory* is its
-worktree; do not open a worktree as its own Cursor workspace.
-
-A bare (headless) clone is unnecessary. The coordinator is a privileged
-`master` checkout, so clone into `master/` and add worktrees beside it.
-
-## Roles
-
-The coordinator stays in `master/` on `master`. It creates and removes
-worktrees, reviews branches, and integrates approved work.
-
-A writing worker gets one branch and one worktree. It edits only there, does
-not switch branches, and does not merge, rebase, or remove worktrees. A
-read-only reviewer may inspect commits, diffs, tests, renders, and reports but
-does not modify the branch.
-
-Two concurrent rendering workers is a practical default limit for CPU and
-memory use. This is guidance, not an enforced lock.
-
-## Skills
-
-Project agent skills live on `master` only, under `.claude/skills/` (and
-`.cursor/skills/` if a Cursor-native copy is added). Edit and install them
-from the coordinator checkout. Because Cursor is opened on `master/`, every
-worker in that window sees those skills even when its cwd is a worktree.
-
-Do not copy or symlink skills into experiment worktrees. Do not commit skill
-edits on `exp/*` branches.
-
-Install a published skill into this repo from `master/`:
+From the master repository:
 
 ```sh
-npx skills add <owner/repo@skill> -y
+git status --short --branch
+git worktree list
+git worktree add -b docs/example ../worktrees/example master
 ```
 
-Install a personal skill that should follow you across all projects:
+A worker operates only in its assigned worktree, does not switch its branch and does not merge/remove worktrees. Project skills remain on master; open the editor there to discover them rather than copying skills into each experiment. Output belongs in the assigned worktree's ignored `out/`.
 
-```sh
-npx skills add <owner/repo@skill> -g -y
-```
+## Prepare review
 
-Personal skills land in `~/.cursor/skills/` (or `~/.claude/skills/`). Never
-install into `~/.cursor/skills-cursor/` — that directory is Cursor's own.
+In the writing worktree, complete the change, run `make check`, inspect generated artwork when applicable, and commit a coherent result. Review the commit against its base with ordinary `git diff`/`git log`. One seed or passing tests does not establish artistic approval; use fixed-seed previews and contact sheets for artwork changes.
 
-## Create
+## Integrate or discard
 
-Choose a short lower-case `<name>` such as `foam-depth-hatching`. From the
-coordinator checkout on a clean `master`:
+The coordinator integrates or discards only after explicit user approval. Inspect both checkout status and commit graph before integrating. A fast-forward integration from master can use `git merge --ff-only <worker-branch>` when the graph permits it; otherwise choose the appropriate reviewed merge strategy instead of forcing it.
 
-```sh
-mkdir -p ../worktrees
-git worktree add ../worktrees/<name> -b exp/<name> master
-git -C ../worktrees/<name> status --short --branch
-```
+After approved integration and a clean inspected worker checkout, the coordinator can remove it with `git worktree remove ../worktrees/example` and delete a merged branch with `git branch -d docs/example`. If Git reports uncommitted or unmerged work, inspect and resolve it. Hard resets, cleans and forced deletion/removal are not routine cleanup steps.
 
-Give the worker the absolute worktree path, branch name, scope, relevant sketch
-specification, and any fixed comparison seeds. Copy
-`experiments/templates/brief.md` into the worktree when a written experiment
-brief is useful.
-
-For a dependent experiment, name the parent branch explicitly instead of
-`master`. For independent comparisons, start every branch from the same
-`master` commit.
-
-## Work
-
-Run every worker command in its assigned worktree. Keep generated baseline and
-candidate images under that worktree's ignored `out/` directory so concurrent
-workers cannot overwrite each other's output.
-
-For artwork changes:
-
-1. Render the baseline before editing.
-2. Implement only the assigned scope.
-3. Run focused tests and `make check`.
-4. Render the candidate with the same profile and fixed seeds.
-5. Inspect the contact sheet and individual strongest and weakest seeds.
-6. Commit coherent changes and complete a result report if one was requested.
-7. Stop without integrating or removing the worktree.
-
-Passing tests does not approve the visual result.
-
-## Review
-
-From the coordinator checkout:
-
-```sh
-git log --oneline master..exp/<name>
-git diff --stat master...exp/<name>
-git diff master...exp/<name>
-git -C ../worktrees/<name> status --short --branch
-```
-
-Review the hypothesis, commits, test results, fixed-seed comparison, visible
-gains and regressions, strongest and weakest seeds, and the worker's
-recommendation. Integration or discard requires explicit user approval.
-
-## Integrate
-
-Use the operation that matches the review decision.
-
-To integrate the complete branch, run from a clean coordinator checkout:
-
-```sh
-git merge --no-ff exp/<name>
-```
-
-To integrate selected self-contained commits:
-
-```sh
-git cherry-pick <commit>
-```
-
-If wanted behavior is entangled with rejected changes, do not merge the whole
-branch for convenience. Create a fresh integration branch/worktree from the
-current `master` and reimplement the selected behavior there. Use the same
-approach to combine selected behavior from multiple experiments.
-
-After integration, run `make check` and repeat the relevant fixed-seed visual
-comparison before considering the work complete.
-
-## Conflicts
-
-Git reports merge and cherry-pick conflicts. Inspect them normally:
-
-```sh
-git status
-git diff --name-only --diff-filter=U
-```
-
-Resolve each file, stage it, then continue with `git merge --continue` or
-`git cherry-pick --continue`. To abandon the attempted integration without
-discarding branch work:
-
-```sh
-git merge --abort
-git cherry-pick --abort
-```
-
-Do not hide conflicts with hard resets or force operations.
-
-## Cleanup
-
-After approved work has been integrated or deliberately discarded, ensure the
-worker worktree is clean:
-
-```sh
-git -C ../worktrees/<name> status --short --branch
-git worktree remove ../worktrees/<name>
-git branch -d exp/<name>
-```
-
-If removal reports a dirty worktree, inspect and commit or preserve the files
-before retrying. If branch deletion reports that the branch is not merged,
-confirm whether commits still need integration or preservation. Do not make
-`--force` or `git branch -D` the routine answer to either condition.
-
-Use `git worktree list` to inspect registered worktrees. If a directory was
-removed outside Git, inspect `git worktree prune --dry-run` before deciding
-whether to run `git worktree prune`.
+These rules are also recorded in [AGENTS.md](../AGENTS.md). The [development workflow](development/workflow.md) covers source/test/documentation boundaries within a worktree.

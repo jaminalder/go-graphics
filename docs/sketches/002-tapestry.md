@@ -1,128 +1,65 @@
-# Sketch 002 — `tapestry` (striped, grained contour layers)
+# Tapestry
 
-A richer composition built on the contour system of sketch 001, inspired by
-woven-carpet-like generative pieces: contour noise overlaid with vertical
-stripes, large tinted regions, and grain texture.
+## Implemented algorithm
 
-## Layers (applied per pixel, in order)
+A seeded fBm terrain chooses five color bands, with HSL gradients, shuffled/terraced mappings and terrain-owned coloring. Vertical stripes modify the mapped color after the terrain band is selected. Optional relief shades height gradients and band edges; crackle and grain add material variation. A per-seed plan resolves stripe placement and gradients before sampling.
 
-1. **Contour base with terrain-owned colorways (v4)** — one fBm field,
-   its value range split into **five bands**: deep-basin / basin / cloud /
-   peak / high-peak. Each band has its own colorway gradient (outer four
-   shuffled, cloud smooth), so every hill or basin is uniformly one
-   coloring and all color-area boundaries are contour lines of the terrain
-   itself. History: v1 multiply-tint region read as "shadows over the
-   image"; v3's independent zone field cut across hills and still read as
-   overlay (user feedback 2026-07-22: "one hill area one coloring"). The
-   reference works exactly this way — its color areas are the field's own
-   basins and peaks. Deliberately chunky rings (few bands, moderate
-   frequency) per the earlier scale-hierarchy feedback.
-2. **Coloring** — every gradient endpoint is an actual palette color
-   (chosen by luminance role: darkest two, mid, lightest two), and
-   interpolation happens in **HSL space** (`gradient.HSLBetween`,
-   `palette.LerpHSL`, shortest hue arc) so blends stay saturated instead
-   of graying out as RGB interpolation does. Note: distant-hue pairs pass
-   through intermediate hues (e.g. red→navy passes violet) — harmonious,
-   but constrain pairs to nearby hues if stricter palette fidelity is
-   wanted.
-3. **Vertical stripes** — full-height stripes of random width covering the
-   canvas: a mix of wide bands and thin lines. Colored stripes multiply with
-   a lightened palette color (warp-thread dye); others nudge toward white or
-   black or pass through. Each stripe carries its own grain multiplier and
-   grain style.
-3b. **Relief (optional, `--relief` / `Sketch.Relief`)** — 3D shading pass
-   over the assembled surface, treating the contour noise as a height
-   field: Lambertian hillshade from finite-difference normals, a paper-cut
-   shadow just below every band edge with a lit rim just above it, and a
-   subtle Blinn-Phong specular. A pure shading pass (composition identical
-   to the unshaded seed); also reveals terracing inside the smooth middle
-   gradient, giving cloud areas a carved-lacquer look. Constants are in
-   tapestry.go (`relief*`, `edge*`, `spec*`); promote to fields when they
-   need per-image variation.
-3c. **Crackle (optional, `--crackle` / `Sketch.TerraceCrackle`)** — a
-   Voronoi crack network (noise.Worley cell borders, 150–250 cells per
-   canvas unit) darkens ~50% of the *really wide* terraces (≥5× minimum
-   width — cracks must be clearly smaller than the level they sit on):
-   ceramic crazing / dried-mud finish. Each terrace gets its own network
-   (seed salted per level), so cracks never continue across a terrace
-   boundary. Seeded like terrace grain (`--grain-seed`); composition
-   unchanged when off; combinable with --grain. More per-terrace effect
-   ideas: docs/IDEAS.md.
-4. **Grain** — deterministic white-noise displacement of the final color,
-   sampled on a fixed lattice in normalized coordinates (resolution
-   independent). Two styles per stripe: `speckle` (square cells) and
-   `streak` (tall thin cells → vertical fiber look).
-   **Terrace grain (optional, `--grain` / `Sketch.TerraceGrain`)** — a
-   random ~45% of the *wide* terraces (width ≥ 2.5× the minimum) get the
-   grain boosted 2.5–5.5×; narrow terraces never grain. The boost belongs
-   to the terrace level, so the same stratum is rough wherever it appears
-   in the image, filling exactly to its contour boundary. Evolution:
-   spatial-region grain → height-window grain → per-terrace grain (user
-   feedback 2026-07-22). Assignment is seeded by `GrainSeed` /
-   `--grain-seed` (default = terrace seed) so grain layouts can vary on a
-   fixed image; draws live on a dedicated RNG stream so the composition
-   is pixel-identical with the flag off.
+## Controls and output space
 
-## Per-seed randomization ("art director" draws)
+Local flags control relief on/off and presets, terraces, stripes, crackle and grain. Relief numeric parameters are internal; `--smooth` controls fBm persistence. It uses handwritten configuration rather than a weighted trait schema. The exact help below is generated from its implementation.
 
-All draws come from Context.RNG streams within bounded ranges chosen for
-aesthetics; the tunable struct fields hold the *ranges*, not the values:
+## Rendering and review
 
-| Draw | Range | Purpose |
-|---|---|---|
-| Contour frequency | 4.0 – 6.0 | feature scale variation |
-| Bands per gradient | 20 – 40 | narrowest-terrace width (1/bands of the band range) |
-| Terrace widths | 1/bands × (1 + Exp·spread), spread 1.5 – 4.0 | irregular level spacing: narrowest ≈ old uniform width, many levels much wider (v6, user feedback 2026-07-22). Seeded by `TerraceSeed`/`--terrace-seed` (default = main seed) so layouts can vary on a fixed composition |
-| Band thresholds ±T | 0.10 – 0.18 | ring-area vs cloud-area balance |
-| Noise mapping range | ±0.55 – ±0.70 | how much of each gradient shows |
-| Region frequency | 2.2 – 3.2, 2 fBm octaves | size and edge complexity of tinted areas |
-| Band cuts ±t1 / ±t2 | t1 0.08 – 0.14, t2 0.28 – 0.38 | cloud width and deep-band coverage |
-| Cloud partner color | mid or second-lightest (50/50) | cloud tint variation |
-| Stripe widths | thin 0.003 – 0.010 (45%), wide 0.02 – 0.09 | warp rhythm |
-| Stripe effect | tint 60% / lighten 12% / darken 13% / none 15%, amount 0.05 – 0.30 | color variety without mud |
-| Stripe grain | multiplier 0.3 – 1.4, streak style 20% | woven texture |
-| Grain amount | 0.03 – 0.06 | overall texture strength |
+Sampler; honors raster AA/deep. Relief comparison should preserve seed/palette so shading changes can be distinguished from composition.
 
-**Palette roles are assigned by luminance**, not position, so any ColorLisa
-palette works: the two darkest colors anchor the two hill families (each
-paired with its nearest-hue light partner), the lightest colors carry the
-cloud band. This is the main aesthetic guardrail.
+```sh
+go run ./cmd/staticart render tapestry --seed 42 --profile preview --out out
+```
 
-## Line quality
+## Implementation and tests
 
-Two independent controls (2026-07-23, after review that terrace lines
-should be smoother):
+[Artwork implementation](../../internal/sketch/tapestry/tapestry.go) owns the mechanism and defaults. [Option declarations](../../internal/sketch/tapestry/options.go) own local knobs. [Tests](../../internal/sketch/tapestry/tapestry_test.go) defend deterministic behavior and algorithm-specific claims. See [materials](../reference/materials.md) for shared rendering behavior and [CLI guide](../guides/cli.md) for profiles, metadata and batch review.
 
-- **Anti-aliasing** — `Context.AA` supersampling (CLI `--aa`, default 2):
-  removes the pixel staircase on every boundary. Pure quality setting,
-  composition-identical; golden tests render at AA 1.
-- **Persistence** — `Sketch.Persistence` (CLI `--smooth`, default 0.5):
-  damps the high-frequency fBm octaves. Lower values (≈0.35) remove the
-  small-scale crinkle from the contour *geometry* — hills stay in place,
-  coastlines calm down. Note this changes band membership slightly, so it
-  is an opt-in look variation, not a pure quality setting.
+## Current command help
 
-## Determinism & resolution notes
+This block is generated from the checked-in application with `make docs-sketch-help`. It includes global flags because their interaction with each sketch matters.
 
-- RNG streams: 3 stripe layout, 4 parameter draws, 7 grain assignment,
-  8 terrace layout (seeded by TerraceSeed), 9 crackle assignment (seeded
-  by GrainSeed). Dedicated streams keep every optional effect
-  composition-neutral.
-- Stripes are generated to cover [0, aspect]; a non-square canvas draws more
-  (or fewer) stripes but the same seed at the same aspect is identical.
-- Grain lattices are fixed-resolution in normalized coordinates, so grain is
-  the *same pattern* at every output size (invariant 2 holds fully). At
-  print size one grain cell spans a few pixels — intentional, matches the
-  chunky stipple of the reference.
-
-## Acceptance checklist (visual)
-
-- [ ] Every hill/basin reads as one two-color family; color boundaries are
-      contour lines (nothing reads as an overlay).
-- [ ] Irregular terracing: tight ring clusters between wide flat levels;
-      no flat single-color caps on summits (fold).
-- [ ] With --relief: sculpted, materially convincing; with --crackle /
-      --grain: effects confined to single wide terraces.
-- [ ] With stripes on: mixed widths, thin lines present but not dominant.
-- [ ] 10 different seeds → clearly different but consistently presentable
-      images across several palettes.
+<!-- sketch-help:start -->
+```text
+Usage of render:
+  -aa int
+        anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget (default 2)
+  -crackle
+        crack network on some of the wide terraces
+  -deep
+        render a 16-bit PNG master (archival/print; png only)
+  -format string
+        output format: png|jpg (default "png")
+  -grain
+        boost grain strongly on some of the wide terraces
+  -grain-seed uint
+        seed for the grain/crackle assignment (0 = terrace seed, implies --grain); vary for different effect layouts on the same image
+  -height int
+        override height in px (requires --width)
+  -no-stripes
+        render without the vertical stripe layer
+  -out string
+        output directory (default "out")
+  -palette string
+        palette slug (see: staticart palettes) (default "kandinsky-soft-pressure")
+  -profile string
+        size profile: preview|preview-tall|print|print-tall|web|web-tall (default "preview")
+  -relief
+        3D relief shading (hillshade + paper-cut edges)
+  -relief-preset string
+        named relief look (implies --relief): baseline|low-sun-west|noon-soft|southeast-light|deep-carve|gentle-emboss|papercut-max|smooth-marble|glossy-enamel|hard-metallic
+  -seed uint
+        random seed (same seed → same image) (default 42)
+  -smooth float
+        fBm persistence override, e.g. 0.35 for smoother terrace lines (0 = default 0.5)
+  -terrace-seed uint
+        seed for the terrace layout (0 = main seed); vary for different terracings of the same composition
+  -width int
+        override width in px (requires --height)
+```
+<!-- sketch-help:end -->

@@ -1,285 +1,185 @@
-# 015 — glaze
+# Glaze
 
-A bed of worn, faceted stones seen through water that is not simulated but
-*painted*: a translucent blue veil whose whole structure comes from a nested
-fBM domain warp. Where the veil thins the stones come up sharp; where it
-thickens they sink into colour. It is a glaze, a marbling, a stack of flat
-washes or a net of bright filaments depending on the manner asked for.
+## Implemented algorithm
 
-## Why a new sketch and not a `--medium` on 012
+A painted nested-fBm veil absorbs light over Scree's faceted bed. Pigment hue normalizes extinction so pale swatches still act as colored water. Coverage is a spatial envelope allowing dry and flooded passages in one image. Sampling applies the veil before final rasterization.
 
-`shallows` has one identity and it is *clear river water*: a riffle surface
-with a flow direction, a Froude number, ripple crests that cast paired shadow
-and light, and refraction restrained so hard stone joints do not fold into
-moire. Every one of its knobs is a fact about that model. The water here is a
-different material with a different theory — it has no flow, no crests and no
-physical slope; its light and dark come from a warped scalar field and its
-"refraction" is a domain displacement large enough to smear a stone, which
-012's spec explicitly rejects. Bolting it on as a second medium would give
-`shallows` two mutually exclusive water models, two disjoint halves of its
-control surface, and an acceptance checklist that contradicts itself.
+## Controls and output space
 
-The *bed*, on the other hand, is exactly the same object, so it is reused
-rather than reinvented: `scree.Bed` is the documented pre-raster model the
-architecture already blesses a second consumer for (decision 51). All of
-scree's traits and material knobs come through untouched, so a bed found with
-`shallows` renders identically under `glaze`.
+Inherits Scree traits/flags. `--veil` selects glaze, marble, terrace, filament or silk; these named materials resolve coordinated water settings while individual water flags remain overrides. Cast chooses pigment role; coverage, opacity/body and filament density/gather have distinct meanings.
 
-Like `shallows`, the output-space identity stays the bed's: `Schema()`,
-`Traits()` and `TraitSuffix()` delegate to scree. The water is a deliberate
-choice of material, not a dimension a seed samples — the same argument
-decision 21 makes for QQL's wash medium.
+## Rendering and review
 
-## The veil
+Sampler; honors raster AA/deep. Review dry/flooded contrast and broad veil forms against visible facets; fixed-seed comparisons separate coverage from local density.
 
-One field, evaluated per pixel, pure and allocation-free:
-
-```text
-p  = scale * (u, v)
-q  = (fbm(qx, p),            fbm(qy, p))
-a  = p + warp * q
-r  = (fbm(rx, a·rRole),      fbm(ry, a·rRole))
-b  = (ax + nest*rx, ay + nest*ry) stretched anisotropically
-raw, fine = fbm(body, b), its top two octaves
+```sh
+go run ./cmd/staticart render glaze --seed 42 --profile preview --palette hokusai-great-wave --out out
 ```
 
-Each field is an independently seeded Perlin, and the running domain is
-rotated by a fixed angle and scaled by the lacunarity after every octave so
-that no two scales accumulate along the same axes. This is 013's vocabulary,
-re-stated here rather than imported: `warp` exports an artwork, not a field,
-and the constants here are this sketch's aesthetic policy (its role scales,
-its shaping curves, its anisotropy) rather than 013's.
+## Implementation and tests
 
-The sample the water hands back is small on purpose:
+[Artwork implementation](../../internal/sketch/glaze/glaze.go) owns the mechanism and defaults. [Option declarations](../../internal/sketch/glaze/options.go) own local knobs. [Tests](../../internal/sketch/glaze/glaze_test.go) defend deterministic behavior and algorithm-specific claims. See [materials](../reference/materials.md) for shared rendering behavior and [CLI guide](../guides/cli.md) for profiles, metadata and batch review.
 
-- `load` — how much pigment is over this point, in `[0,1]`;
-- `filament` — a narrow response to the top-octave residual, `[0,1]`;
-- `dx, dy` — the nested displacement as a unit-ish vector, so the caller can
-  displace the bed lookup by a distance measured in canvas units.
+## Current command help
 
-`stretch` is applied to the *base* coordinate, before either warp, so every
-later stage inherits it; the frame is also turned 22 degrees off the axes
-first, because bands running exactly across the picture read as a machine's
-output however good the ripple on them is. At 1 the veil is isotropic; above
-1 its forms draw out into long parallel bands with the nested warp rippling
-across them, which is what watered silk looks like.
+This block is generated from the checked-in application with `make docs-sketch-help`. It includes global flags because their interaction with each sketch matters.
 
-The drift vector is read at its **own** frequency (`--drift-scale`, a
-multiple of the veil scale) rather than from the warp fields that shape the
-load. A displacement that varies only over the whole canvas *translates* the
-bed instead of stretching it: at four times the drift the marbling was the
-same picture, moved. Smearing a stone needs the offset to change appreciably
-across one stone.
-
-## Painting the water
-
-The water is a **coloured medium**, not a sheet of tinted acetate. A straight
-`Lerp` toward blue at alpha `load` averages the bed away; absorption in
-linear light takes the bed's own colour *through* the water, so a thin
-passage keeps its stone hue and its facets while a thick one loses the red
-end first and sinks toward the water's colour. It also means the bed is never
-fully hidden at `--body 0` however dense the veil gets, which is the
-difference between a glaze and a lid. This is the pigment model of `paint`'s
-washes (decision 39) with the layer count handed to it analytically.
-
-The one deliberate untruth is where the extinction comes from. Taken straight
-from the pigment, a pale swatch absorbs almost nothing and the veil vanishes
-— the water would be as strong as the palette happened to be *dark*, which
-has nothing to do with what colour the water is. So the pigment's strongest
-channel is normalised to pass freely and only the ratios between its channels
-carry hue; how much light the water takes overall is a separate neutral term
-every channel pays alike, scaled by `--opacity`. `--body` then adds what the
-medium scatters back toward the eye, which is what turns a deep glaze milky.
-
-The load also carries a fine multiplicative speckle (`--grain-water`) at a
-wavelength in canvas units. It multiplies rather than adds, so it disappears
-where the water does instead of dusting the dry passages.
-
-Order per sample:
-
-1. read the veil at `(u, v)`;
-2. sample the bed at `(u − drift·dx, v − drift·dy)`;
-3. glaze the water colour over it at the veil's load;
-4. mix the glint colour in where the filament response is high.
-
-There is no intermediate image and no alpha channel; bed and water become one
-colour before the pixel is written.
-
-## The five manners
-
-`--veil` is one knob because these are not five independent numbers, they are
-five materials. Each resolves the field scale, both warp strengths, the
-anisotropy, the opacity, the drift, the terrace count and the glint together;
-every individual flag remains available as an override on what the manner
-chose (`opt.Set.WasSet`).
-
-- **`glaze`** — a smooth ramp from the warped field to pigment density. The
-  water thins to nothing over some stones and banks up over others; drift is
-  small, so the bed stays legible and the veil is pure value and hue. The
-  default.
-- **`marble`** — the same field, but a much finer displacement is taken up to
-  several stone widths and applied to the *bed lookup*. Stone shapes stretch, swim
-  and fold; joints become currents. Opacity drops, because the drawing is
-  already doing the work. This is refraction as domain warp, deliberately far
-  past what 012 permits.
-- **`terrace`** — the density is quantised into a handful of plateaus with
-  antialiased risers, so the water reads as flat overlapping sheets of blue,
-  like layered glass or a screen print. The bed shows through each sheet at
-  its own fixed strength.
-- **`filament`** — a broad, thin body of blue with the top-octave ridged
-  residual drawn over it as bright threads. The bed stays sharp between them;
-  the glints are narrow and mostly absent, which is the only way a highlight
-  reads as a highlight.
-- **`silk`** — the anisotropic case: long drawn-out bands with the nested
-  warp rippling across them. Watered silk rather than water.
-
-## How much water, and how dense
-
-Three separate questions, and it matters that they stay separate:
-
-**How much of the sheet is under water at all** is a *place*, not a dial.
-Scaling the load globally only makes a thin veil out of a thick one — the same
-picture, paler. `--coverage` is therefore a low-frequency envelope multiplied
-into the load: one broad two-octave field, read at `--cover-scale` cycles per
-canvas unit and dragged about by the veil's own first displacement so that a
-shoreline follows the currents instead of lying under them as an unrelated
-blob. One threshold sweeps across the whole field, so `--coverage 1` is
-edge-to-edge water (exactly the veil the manner was tuned on, at no cost in
-the sampler) and `--coverage 0` is a dry bed. In between, one sheet holds
-broad passages of dry stone against concentrated water — which is the
-composition this sketch is actually for, and something no global dial reaches.
-
-The threads go with it. Left on the dry stone they would be a net drawn over
-nothing, so the envelope multiplies the filament response as well as the body.
-
-**How opaque the water is where it does cover** needs no new knob: `--opacity`
-already runs from a glass-clear film that barely tints the stone to a deep,
-light-absorbing blue, and `--body` decides whether that depth is a clear glaze
-(0, the joints stay black and the blue is rich) or a milky one (high, the
-medium scatters light back into the joints and the sheet goes hazy).
-
-**How many threads there are** is `--density`. The residual is folded into a
-triangle wave rather than taken as a single ridge off zero: both give the same
-line where the field crosses zero, but the wave repeats, so more density draws
-*more lines* — the way a contour map gets busier at a finer interval — instead
-of widening the one line there is. Widening it was the first thing tried and it
-turns filaments into slugs. At density 1 the first fold has exactly the slope
-the single ridge had, so the manner's own picture is unchanged.
-
-**How tightly they gather** is `--gather`, which moves the window on the
-water's own depth that the threads are already gated by. Low, they spread over
-everything the water touches; high, they pack into the deepest passages and
-leave long calm stretches of plain water between.
-
-## Colour
-
-`--cast` picks the pigment out of the palette rather than inventing it
-(decision 39). The base is the member with the most chroma around a marine
-hue; `deep` mixes it toward the palette's darkest member, `pale` lightens it,
-and `smoke` desaturates it *and* darkens it — desaturating alone all but
-switches the water off, since the extinction lives in the channel ratios and
-a neutral has none, so smoke gives up in hue what it takes back in depth. The
-glint is the cast lightened, so highlight and body agree about the colour of
-the water.
-
-012 scores this on the raw channels, which is right for a clear film that
-only has to be cool and bright, and wrong here: a near-white with a faint
-blue bias scored well and then filtered nothing. Hokusai's cream beat its own
-navy and *The Great Wave* came out bone dry.
-
-## Controls
-
-Every scree trait and knob (`--bed`, `--stones`, `--facets`, `--light`,
-`--wet`, `--scheme`, `--gold`, …) plus:
-
-- `--veil glaze|marble|terrace|filament|silk` — the material.
-- `--cast cool|deep|pale|smoke` — which pigment the palette supplies.
-- `--water-seed` — the veil's fields, independent of the bed.
-- `--water-scale` in `[0.2,10]` — veil cycles per canvas unit.
-- `--veil-warp`, `--veil-nest` in `[0,8]` — the two displacements.
-- `--stretch` in `[0.25,6]` — anisotropy of the veil's forms.
-- `--opacity` in `[0,1.2]` — the densest the water gets.
-- `--body` in `[0,1]` — pigment opacity; 0 is a pure glaze.
-- `--drift` in `[0,0.25]` — bed displacement by the veil, canvas units.
-- `--drift-scale` in `[0.5,24]` — how finely that displacement varies,
-  as a multiple of the veil scale.
-- `--terraces` in `[2,12]` — plateaus when the manner terraces.
-- `--glint` in `[0,1.2]` — strength of the filament highlight.
-- `--grain-water` in `[0,0.5]` — paper tooth in the veil.
-- `--coverage` in `[0,1]` — how much of the sheet the water reaches at all;
-  1 is edge to edge. Useful from about 0.25 to 0.8; past 0.8 the dry passages
-  are too small to compose with.
-- `--cover-scale` in `[0.15,6]` — the size of those wet and dry passages, in
-  cycles per canvas unit. Around 0.5 gives one great flooded region and one
-  dry one; 3 and up gives scattered pools and drying patches.
-- `--density` in `[0,4]` — how many threads. 1 is the manner's own; 2 to 2.5
-  is a fine engraved reticulation that needs `--profile web` to resolve; past
-  3 the lines are below a pixel at 2000px and grey out.
-- `--gather` in `[0,1]` — how tightly they pack into the deep water. 0.35 is
-  the manner's own; past 0.8 there is almost nothing left to see.
-
-Big stone under filament is worth naming as a recipe: `--bed boulders` or
-`--bed cobbles`, or `--base` past what `boulders` draws (0.14 to 0.18 puts
-three or four stones in the frame). The threads then read as intricate detail
-inside a very plain structure, which is what the manner is best at. A hand-set
-`--base` scales the joint with it, so a very large stone also gets a very
-heavy black joint; `--ink` pulls that back.
-
-## Determinism and resolution
-
-Every Perlin seed derives from `--water-seed` and a fixed transform, so the
-bed and the veil are independently re-dealable and neither disturbs the
-other. Scale, drift, stretch and the wash's tooth are all in canvas units;
-the plan holds no pixel dimensions, so a preview and a print of one recipe
-sample the same field.
-
-## What did not work
-
-**Taking the veil's structure straight from 013's defaults.** A base scale of
-1.7 with warp strengths of 3 and 4 puts almost all of the field's energy at a
-fraction of a stone, so the water came out as an even teal cast with a fine
-swirl inside every stone and no composition at all. The water wants *large*
-forms — scale below 1, displacements under 2.5 — and only then does the sheet
-divide into deep passages and dry ones.
-
-**Terracing a five-octave field.** The fine octaves cross every riser, so the
-plateaus break back up into the gradient they were quantised out of. The
-terrace manner runs three octaves; that one number is what makes it read as
-flat sheets of glass.
-
-**An ungated ridge for the filaments.** The residual is everywhere, so drawn
-everywhere it covers the whole frame in an even reticulation and reads as
-etched glass or frost — the same failure 011 records for its caustic net.
-The threads are gated by the water's own depth so they gather in the deep
-passages and leave the shallows alone.
-
-**Coverage as a global multiplier on the load.** It is the obvious reading of
-"less water" and it produces the same picture with the colour turned down.
-What the eye reads as *less water* is dry ground next to wet, which needs the
-amount to vary over the sheet — hence the envelope. The same argument says the
-envelope must stay at two octaves: given fine detail it stops being a
-composition and becomes a second texture arguing with the threads.
-
-**Density as a wider ridge window.** More thread was taken to mean more of the
-residual qualifying, which widens the single line rather than adding lines.
-The filaments went from drawn to bloated with no more of them in the frame.
-
-**Refraction from the warp fields that shape the load.** Those are broad by
-construction, and a broad displacement translates the bed rather than
-stretching it. Four times the drift gave the same picture in a slightly
-different place.
-
-## Acceptance checklist
-
-- [ ] The first read is stone under coloured water, not a stone image with a
-      blue rectangle over it.
-- [ ] The veil has visible *structure* — currents, folds, bands — rather than
-      an even tint.
-- [ ] Stones, joints and facets stay identifiable where the veil is thin.
-- [ ] The five manners are different materials at thumbnail size, not five
-      settings of one.
-- [ ] At a middling `--coverage` one sheet holds broad dry stone and open
-      water, and the threads stop where the water does.
-- [ ] `--density` adds threads rather than fattening the ones there are.
-- [ ] `--water-seed` moves only the water; `--seed` re-plans the bed.
-- [ ] Preview and print of one recipe show the same composition.
+<!-- sketch-help:start -->
+```text
+Usage of render:
+  -aa int
+        anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget (default 2)
+  -accent float
+        share of stones taking a colour from outside their passage (default 0.2)
+  -ambient float
+        how much light reaches a face turned away (default 0.4)
+  -base float
+        smallest stone radius, canvas units (default 0.04118962144220252)
+  -bearing float
+        the lamp's bearing in degrees; 90 is from the top (default 135)
+  -bed string
+        how coarse the bed is: boulders|cobbles|shingle|gravel|grit (default: from seed)
+  -body float
+        pigment opacity; 0 is a pure glaze (default 0.14)
+  -cast string
+        which pigment the palette supplies: cool|deep|pale|smoke (default "cool")
+  -colourway string
+        which palette the bed is drawn from: tchelitchew-hide-and-seek|kandinsky-apple-tree|cezanne-bathers|seurat-grande-jatte|gauguin-siesta|monet-water-lilies|sargent-carnation-lily|diebenkorn-seawall|redon-green-vase|matisse-collioure|hopper-night-windows|bruegel-icarus|klee-fire-evening|vangogh-arles|avery-bicycle-rider|varo-harmony|delaunay-bleriot|chagall-mariee|from-flag (default: from seed)
+  -coolness float
+        how far the shadowed side leans toward the sky's (default 0.34)
+  -count int
+        stones the pack aims for (default 110)
+  -cover-scale float
+        size of the wet and dry passages, cycles per canvas unit (default 1.1)
+  -coverage float
+        share of the sheet the water reaches at all; 1 is edge to edge (default 1)
+  -crease float
+        how far a face darkens toward its own edge (default 0.14410641829733997)
+  -cut float
+        random tilt on each face; 1 is 45 degrees (default 0.09177422348798718)
+  -deep
+        render a 16-bit PNG master (archival/print; png only)
+  -density float
+        how many threads the veil draws (default 1)
+  -depth float
+        how far a stone's colour goes toward the water's own (default 0.12)
+  -drift float
+        bed displacement by the veil, canvas units (default 0.014)
+  -drift-scale float
+        how fine that displacement varies, x the veil scale (default 3)
+  -elevation float
+        how high the lamp stands; low is dramatic (default 0.62)
+  -facet float
+        facet size, x the smallest stone (default 0.2961091206959952)
+  -facet-scale float
+        how far the grain follows the stone; 0 is one fineness for the bed
+  -faceted float
+        share of stones cut into facets (default 1)
+  -facets string
+        how finely each stone is cut into facets: plates|cut|crazed|shattered|smooth (default: from seed)
+  -flake float
+        random scaling on each face's shade (default 0.04646902410326698)
+  -format string
+        output format: png|jpg (default "png")
+  -gap float
+        clearance between stones, x radius (default 0.06940014480940054)
+  -gather float
+        how tightly the threads pack into the deep water (default 0.35)
+  -glint float
+        strength of the filament highlight (default 0.1)
+  -gloss float
+        strength of the specular (default 0.16)
+  -gold
+        reserve yellow for two or three rare gold nuggets
+  -grain float
+        paper tooth (default 0.05)
+  -grain-water float
+        paper tooth in the veil (default 0.14)
+  -height int
+        override height in px (requires --width)
+  -ink float
+        the joint's thickness, canvas units (default 0.004191069917110888)
+  -joint string
+        the weight of the water between the stones: fine|drawn|bold (default: from seed)
+  -light string
+        how the bed is lit: raking|morning|noon|overcast (default: from seed)
+  -load float
+        pigment in a stone at full tone (default 0.95)
+  -max-lobe int
+        most sites one lobe may absorb (default 2)
+  -merge float
+        share of stones merged into a neighbouring lobe (default 0.2348122564901623)
+  -node float
+        distance over which a third stone counts as near (default 0.010953345210541253)
+  -opacity float
+        the densest the water gets (default 0.95)
+  -out string
+        output directory (default "out")
+  -over float
+        how far the pack reaches past the frame, canvas units (default 0.07772266222614387)
+  -palette string
+        palette slug (see: staticart palettes) (default "kandinsky-soft-pressure")
+  -passage float
+        wavelength of the colour field, canvas units (default 0.8)
+  -pool float
+        wavelength of the pigment's pooling, canvas units (default 0.09)
+  -profile string
+        size profile: preview|preview-tall|print|print-tall|web|web-tall (default "preview")
+  -ratio float
+        size ladder step ratio (default 1.5174691227179813)
+  -rise float
+        how proud a stone stands, x its own inradius (default 0.58)
+  -round float
+        radius a stone's corner is worn over, canvas units (default 0.010001597763217377)
+  -rungs int
+        steps on the stone size ladder (default 5)
+  -saturate float
+        lift on every pigment's saturation
+  -scheme string
+        how colour is organised over the bed: dominance|passage|quiet|analogous|notan|anchor|inherit|by-size|weather|complement|by-darkness|duet|triad|sequence|gradient|terrace (default: from seed)
+  -seed uint
+        random seed (same seed → same image) (default 42)
+  -shades float
+        how far a stone wanders from its palette swatch (default 0.75)
+  -sharp float
+        how tight the specular is (default 26)
+  -sheen float
+        how much the water polishes it, x gloss (default 1)
+  -soak float
+        how much the water darkens a stone (default 0.5)
+  -stones string
+        how worn the stones are: worn|rolled|broken|jumbled (default: from seed)
+  -stretch float
+        anisotropy of the veil's forms; 1 is isotropic (default 1)
+  -swell float
+        extra thickness where three stones meet, x ink (default 1.5471810748789447)
+  -swirl float
+        wavelength of that bending, x smallest stone (default 25.064750692464862)
+  -terraces int
+        plateaus when the veil terraces (default 5)
+  -uneven float
+        how strongly the pigment pools (default 0.6)
+  -veil string
+        the material the water is made of: glaze|marble|terrace|filament|silk (default "glaze")
+  -veil-nest float
+        second domain displacement of the veil (default 2)
+  -veil-warp float
+        first domain displacement of the veil (default 1.5)
+  -warmth float
+        how far the lit side leans toward the lamp's colour (default 0.3)
+  -warp float
+        how far the whole bed is bent, x smallest stone (default 0.9159488057063172)
+  -water-scale float
+        veil cycles per canvas unit (default 0.85)
+  -water-seed uint
+        seed of the veil's fields (default 42)
+  -weight float
+        how strongly a stone's size bends its walls; 0 is straight (default 1.05)
+  -wet string
+        how much water is standing over the bed: dry|damp|wet|sunk (default: from seed)
+  -width int
+        override width in px (requires --height)
+  -wobble float
+        hand wander of the joint, x its width (default 0.24)
+```
+<!-- sketch-help:end -->
