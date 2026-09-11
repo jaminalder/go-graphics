@@ -18,14 +18,6 @@ provider "hcloud" {
 }
 variable "name" { default = "singular-seed" }
 variable "location" { default = "nbg1" }
-variable "environment" {
-  type    = string
-  default = "staging"
-  validation {
-    condition     = contains(["staging", "production"], var.environment)
-    error_message = "Environment must be staging or production."
-  }
-}
 variable "admin_cidrs" {
   type = list(string)
   validation {
@@ -48,7 +40,7 @@ variable "release_directory" {
   type        = string
 }
 variable "hostname" {
-  description = "Optional DNS hostname for HTTPS. Empty uses HTTP at the assigned IPv4 for staging."
+  description = "Optional DNS hostname for HTTPS. Empty uses HTTP at the assigned IPv4."
   type        = string
   default     = ""
   validation {
@@ -57,7 +49,7 @@ variable "hostname" {
   }
 }
 variable "protect_server" {
-  description = "Hetzner delete/rebuild protection. False permits repeatable staging destruction."
+  description = "Hetzner delete/rebuild protection. False permits an explicit destroy/rebuild."
   type        = bool
   default     = false
 }
@@ -126,7 +118,7 @@ resource "hcloud_server" "web" {
     ipv4         = hcloud_primary_ip.v4.id
     ipv6         = hcloud_primary_ip.v6.id
   }
-  labels = { service = "singular-seed", environment = var.environment }
+  labels = { service = "singular-seed", environment = "production" }
 }
 output "ipv4" { value = hcloud_primary_ip.v4.ip_address }
 output "ipv6" { value = hcloud_server.web.ipv6_address }
@@ -138,13 +130,12 @@ resource "terraform_data" "application" {
     server_id      = hcloud_server.web.id
     release_digest = local.release_digest
     origin         = local.site_origin
-    environment    = var.environment
     deploy_script  = filesha256("${path.module}/../scripts/provision-app.py")
   }
   lifecycle {
     precondition {
-      condition     = var.environment != "production" || var.hostname != ""
-      error_message = "Production needs a hostname with DNS pointing at the server."
+      condition     = startswith(local.site_origin, "https://") || local.site_origin == "http://${hcloud_primary_ip.v4.ip_address}"
+      error_message = "Use HTTPS with a hostname or HTTP at the assigned IPv4."
     }
   }
   provisioner "local-exec" {
@@ -157,7 +148,6 @@ resource "terraform_data" "application" {
       ART_RELEASE_PATH   = local.release_path
       ART_RELEASE_DIGEST = local.release_digest
       ART_SITE_ORIGIN    = local.site_origin
-      ART_ENVIRONMENT    = var.environment
     }
   }
 }

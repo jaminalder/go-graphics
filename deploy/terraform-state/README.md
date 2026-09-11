@@ -65,8 +65,10 @@ terraform -chdir=deploy/terraform init -backend-config=backend.hcl
 
 If real VPS state already exists locally, back it up first and use
 `init -migrate-state -backend-config=backend.hcl` to migrate it. Do not create a
-fresh empty state over resources that already exist. For production, use a
-separate backend file with `key = "singular-seed/production.tfstate"`.
+fresh empty state over resources that already exist. There is one production
+environment: preserve the existing backend file and exact key, including the
+legacy `singular-seed/staging.tfstate` name. Do not create a second state object
+or bucket to rename the environment.
 
 Continue with [VPS access and lifecycle](../terraform/README.md). Keep the local
 bootstrap state separate; running the VPS configuration cannot delete the

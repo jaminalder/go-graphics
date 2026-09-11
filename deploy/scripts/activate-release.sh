@@ -7,12 +7,8 @@ release=${1:?usage: activate-release.sh COMMIT}
 exec 9>/run/lock/art-deploy.lock
 flock -n 9 || { echo 'Another activation is running' >&2; exit 1; }
 next="/opt/art/releases/$release"
-case "$(sed -n 's/^ART_ENVIRONMENT=//p' /etc/art/operator.env)" in
- production) approval=/etc/art/launch-approved ;;
- staging) approval=/etc/art/staging-approved ;;
- *) echo 'Set ART_ENVIRONMENT=staging or production' >&2; exit 1 ;;
-esac
-[[ -f "$approval" ]] || { echo "Record owner approval in $approval first" >&2; exit 1; }
+approval=/etc/art/deployment-approved
+[[ -f "$approval" ]] || { echo "Record owner deployment approval in $approval first" >&2; exit 1; }
 (cd "$next"; sha256sum -c SHA256SUMS)
 # Only IDs from the checked archive may be activated, even if a tag has moved.
 [[ $(grep -Ec '^ART_(APP|EDGE)_IMAGE=sha256:[0-9a-f]{64}$' "$next/images.env") == 2 ]]

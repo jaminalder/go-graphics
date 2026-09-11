@@ -5,7 +5,8 @@ on a CX23 in Nuremberg (`nbg1`), with three Compose services: Caddy, `web`
 (`artweb`), and `renderer` (`artrender`). The owner selected Compose and a CX23
 x86-64 target on 2026-09-10; see
 [ADR 0004](../docs/adr/0004-compose-runtime.md). Cloud provisioning, DNS and
-public launch remain separate owner actions. No live host is claimed here.
+public launch remain operator actions. The current host serves HTTP at its
+assigned IPv4; a full rebuild rehearsal and domain/TLS setup are next.
 
 ## Local rehearsal
 
@@ -47,7 +48,7 @@ Internet :80/:443 -> Hetzner firewall + Docker-aware host filtering
 | Processes, cgroups, networks, mounts, logging | `compose.yaml` |
 | Edge HTTP/TLS behavior | `caddy/Caddyfile`, baked into the edge image |
 | Release identity and rollback | `scripts/build-release.sh`, `activate-release.sh` |
-| Host environment and approval | Root-owned `/etc/art/*`, outside Git |
+| Host configuration and deployment record | Root-owned `/etc/art/*`, outside Git |
 
 The web process owns the only queue, temporary workspaces and image cache.
 The renderer accepts one active job, starts a fixed child executable without a
@@ -76,14 +77,16 @@ a restart. There is no startup dependency that prevents browsing when rendering
 is unavailable. Container shutdown kills remaining children. Prove OOM behavior
 on the target: a healthy laptop rehearsal cannot establish VPS capacity.
 
-## Prepare an approved host
+## Prepare the production host
 
 Follow [the Terraform provisioning workflow](terraform/README.md). It now creates
-and deploys usable staging in one apply, using a retained release built locally.
+and deploys the single production environment in one apply, using a retained
+release built locally.
 Cloud-init installs Docker and enables UFW; Terraform uploads and activates the
-release over SSH. Staging defaults to HTTP at the server IP, without DNS.
-`install-release.sh` writes the runtime environment and staging approval record
-selected by that apply. Production still requires separate launch approval.
+release over SSH. Production initially uses HTTP at the server IP, without DNS.
+`install-release.sh` writes the runtime configuration and `deployment-approved`
+record selected by that apply; no manual launch-approval file is required.
+Adding the domain later changes the origin to HTTPS on this same server.
 
 The Hetzner firewall is the public perimeter for both host and Docker traffic.
 UFW controls host INPUT; Docker-published ports can bypass those rules. Compose
@@ -113,15 +116,17 @@ required: upload the complete directory over the operator's SSH connection to
 editions, including at least the previous working release. The archive checksum
 is meaningful only when delivered through that trusted operator channel.
 
-On the host, run its `deploy/scripts/activate-release.sh <full-commit>` as root.
-It takes an exclusive deployment lock, checks the environment's approval and
+Terraform apply runs installation and activation automatically. For a manual
+update on an initialized host, run the uploaded release’s
+`deploy/scripts/activate-release.sh <full-commit>` as root.
+It takes an exclusive deployment lock, checks the deployment record and
 archive checksums, loads images, validates Compose/Caddy, then rehearses a private
 candidate with generation disabled. The smoke project uses its own network and
 volumes and no published ports. It cannot add a second active rendering queue.
 After smoke passes, activation pauses admission and requires a confirmed empty
 queue; missing metrics or a drain timeout aborts the change. It stops old web
 and renderer, switches `/opt/art/current`, recreates services from verified image
-IDs, checks readiness/liveness, and checks the canonical HTTPS URL.
+IDs, checks readiness/liveness, and checks the canonical HTTP(S) URL.
 
 Failure restores the previous release's images/configuration and verifies its
 renderer readiness. First-install failure removes the candidate containers and

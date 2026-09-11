@@ -43,10 +43,19 @@ class Provision(unittest.TestCase):
             provision.wait_for_ssh(["ssh", "fixture"])
             self.assertEqual(run.call_count, 2)
 
-    def test_bad_artifact_never_connects_to_host(self):
-        settings = dict(ART_SERVER_IP="192.0.2.1", ART_SERVER_ID="123", ART_SITE_ORIGIN="http://192.0.2.1", ART_ENVIRONMENT="staging", ART_RELEASE_PATH="missing", ART_RELEASE_DIGEST="x")
-        with patch.object(provision, "verify_release", side_effect=ValueError("corrupt")), patch.object(provision.subprocess, "run") as run:
-            with self.assertRaisesRegex(ValueError, "corrupt"):
+    def test_http_ip_and_https_reach_artifact_verification_without_environment(self):
+        for origin in ("http://192.0.2.1", "https://example.test"):
+            settings = dict(ART_SERVER_IP="192.0.2.1", ART_SERVER_ID="123", ART_SITE_ORIGIN=origin, ART_RELEASE_PATH="missing", ART_RELEASE_DIGEST="x")
+            with self.subTest(origin=origin), patch.object(provision, "verify_release", side_effect=ValueError("corrupt")) as verify, patch.object(provision.subprocess, "run") as run:
+                with self.assertRaisesRegex(ValueError, "corrupt"):
+                    provision.provision(settings)
+                verify.assert_called_once()
+                run.assert_not_called()
+
+    def test_http_hostname_is_rejected_before_connecting(self):
+        settings = dict(ART_SERVER_IP="192.0.2.1", ART_SERVER_ID="123", ART_SITE_ORIGIN="http://example.test")
+        with patch.object(provision.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "assigned server IPv4"):
                 provision.provision(settings)
             run.assert_not_called()
 

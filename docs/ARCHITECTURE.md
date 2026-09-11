@@ -617,3 +617,13 @@ Hetzner's firewall covers public Docker traffic; UFW covers host INPUT only.
 Automatic staging deployment records the user's apply selection, while public
 production launch approval remains separate. The existing protected server
 needs a one-time protection change before this configuration can replace it.
+
+### Production environment clarification (2026-09-11)
+
+Decision 67's staging/production distinction is superseded by the owner's
+single production environment. One CX23 runs the existing stop-and-replace
+Compose deployment, initially over HTTP at its assigned IP and later HTTPS at
+the domain. The installer records the apply-selected deployment in one approval
+record. The existing Terraform backend object remains unchanged despite its
+legacy staging name; the state bucket is still managed separately. A full
+server-root destroy/apply rehearsal precedes DNS setup.

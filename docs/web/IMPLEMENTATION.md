@@ -284,10 +284,10 @@ Docker socket. Native loopback development remains available.
 
 Release artifacts now contain a checksummed Linux amd64 image archive, exact
 image IDs, Compose configuration and source/edition metadata. Activation has a
-deploy lock, separate staging/public approval records, generation-disabled smoke,
+deploy lock, generation-disabled smoke,
 confirmed queue drain, replacement and rollback. First-install failure removes
 the candidate pointer without deleting volumes. Added pinned Docker host
-bootstrap and Terraform environment selection; OS automatic reboot is disabled.
+bootstrap and Terraform configuration; OS automatic reboot is disabled.
 CI runs real Compose checks and activation failure-path tests. The learning
 track now starts with local images, networking, volumes and resource failure,
 then state/host/TLS/recovery before later scaling and Kubernetes experiments.
@@ -311,3 +311,13 @@ renderer readiness) in Colima under amd64 emulation. This is packaging/protocol
 evidence, not native VPS performance or TLS evidence. The pinned Go vulnerability
 checker reported no vulnerabilities. The `art-local` Compose project remains
 available at http://localhost:8088 for the first learning exercise.
+
+### Production environment clarification (2026-09-11)
+
+There is one production VPS, initially accessible over HTTP at its assigned IP.
+Terraform and scripts no longer select staging versus production; installation
+records one operator-selected deployment. The current site responds over HTTP;
+full destroy/apply verification of this cleanup precedes domain/DNS setup.
+The older staging/public-approval descriptions above are historical. See
+`deploy/terraform/README.md` for preserving the existing backend state key and
+updating ignored inputs before the rebuild.

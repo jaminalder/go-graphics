@@ -12,16 +12,16 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
 class Activation(unittest.TestCase):
-    def scenario(self, previous=False, failure="", environment="production", approved=True):
+    def scenario(self, previous=False, failure="", origin="http://192.0.2.1", approved=True):
         with tempfile.TemporaryDirectory(prefix="art-activation-") as directory:
             root = Path(directory).resolve()
             art, etc, commands = root / "opt/art", root / "etc", root / "commands"
             commands.mkdir()
             (etc / "art").mkdir(parents=True)
             (root / "run/lock").mkdir(parents=True)
-            (etc / "art/operator.env").write_text(f"ART_ENVIRONMENT={environment}\nART_ORIGIN=https://example.test\n")
+            (etc / "art/operator.env").write_text(f"ART_ORIGIN={origin}\n")
             if approved:
-                (etc / ("art/staging-approved" if environment == "staging" else "art/launch-approved")).touch()
+                (etc / "art/deployment-approved").touch()
             for revision in ("a" * 40, "b" * 40):
                 release = art / "releases" / revision
                 (release / "deploy/scripts").mkdir(parents=True)
@@ -109,9 +109,11 @@ exit 0
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn("docker", events)
 
-    def test_staging_approval_is_separate_from_publication(self):
-        result, _, _, _ = self.scenario(environment="staging")
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_single_deployment_approval_covers_http_and_https(self):
+        for origin in ("http://192.0.2.1", "https://example.test"):
+            result, events, _, _ = self.scenario(origin=origin)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(origin + "/", events)
         result, events, _, _ = self.scenario(approved=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("docker", events)

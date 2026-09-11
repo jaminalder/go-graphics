@@ -5,15 +5,9 @@ archive=${1:?archive path}
 digest=${2:?archive SHA256}
 revision=${3:?release commit}
 origin=${4:?site origin}
-environment=${5:?environment}
 [[ $EUID -eq 0 ]]
 [[ "$digest" =~ ^[0-9a-f]{64}$ && "$revision" =~ ^[0-9a-f]{40}$ ]]
 [[ "$origin" =~ ^https?://[a-z0-9.-]+$ ]]
-case "$environment" in
- staging) approval=staging-approved ;;
- production) [[ "$origin" == https://* && -f /etc/art/launch-approved ]]; approval=launch-approved ;;
- *) exit 1 ;;
-esac
 exec 8>/run/lock/art-install.lock
 flock -n 8 || { echo 'Another release installation is running' >&2; exit 1; }
 printf '%s  %s\n' "$digest" "$archive" | sha256sum -c -
@@ -40,7 +34,6 @@ else
 fi
 operator_env=$(mktemp /etc/art/.operator-env.XXXXXXXX)
 cat > "$operator_env" <<EOF
-ART_ENVIRONMENT=$environment
 ART_DOMAIN=$origin
 ART_ORIGIN=$origin
 ART_BIND=0.0.0.0
@@ -52,10 +45,9 @@ ART_LOG_LEVEL=info
 EOF
 chmod 0600 "$operator_env"
 mv "$operator_env" /etc/art/operator.env
-if [[ "$environment" == staging ]]; then
- printf 'Terraform apply selected %s at %s with release %s\n' "$environment" "$origin" "$revision" > "/etc/art/$approval"
- chmod 0600 "/etc/art/$approval"
-fi
+# The explicit installation records the operator's selected deployment.
+printf 'Installation selected %s with release %s\n' "$origin" "$revision" > /etc/art/deployment-approved
+chmod 0600 /etc/art/deployment-approved
 if "$next/deploy/scripts/activate-release.sh" "$revision"; then
  printf 'Application ready at %s\n' "$origin"
 else
