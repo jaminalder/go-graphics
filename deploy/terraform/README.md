@@ -50,3 +50,24 @@ after this configuration change; do not reuse the partially applied plan. See [t
 
 The 2026-09-10 staging run proceeds at the owner’s request without the extra
 lock-contention and restore exercises. These remain unverified, not passed.
+
+## First-boot SSH failure (2026-09-11)
+
+The CX23 was created, but both operator and root SSH logins were rejected.
+The supplied public key matches the key offered by SSH and the fingerprint
+shown in Hetzner. Local reproduction with Ubuntu 24.04 and real cloud-init
+found that the existing `operator` group makes `useradd operator` fail unless
+the primary group is explicit. The template now sets `primary_group: operator`.
+The regression runs cloud-init's user/file modules and authenticates over SSH
+inside a disposable Ubuntu container: `deploy/scripts/verify-cloud-init.sh`.
+
+This fixes future provisioning; it does not repair the running server.
+Use Hetzner's rescue system with `macbook-key` to access the installed disk
+over SSH and inspect its cloud-init logs. Root SSH being disabled in the
+installed OS does not disable root SSH in the separate rescue OS. The browser
+console and new SSH keys are not required for this route.
+
+Changing user_data triggers server replacement in this configuration. Keep
+destruction protections in place while diagnosing; do not apply a replacement
+plan merely to repair login. If rebuilding is chosen, replace only the server
+through a deliberate protection/plan workflow, preserving the IPs and bucket.

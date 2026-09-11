@@ -5,6 +5,8 @@ ssh_pwauth: false
 disable_root: true
 users:
   - name: operator
+    # Ubuntu already has this group; avoid useradd trying to create it again.
+    primary_group: operator
     groups: [sudo]
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL

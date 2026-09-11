@@ -37,7 +37,7 @@
 <header>
 <h1>How Singular Seed is set up.</h1>
 <p class="lede">The application, its local Docker stack, and the intended VPS deployment—what each configuration file defines and how the pieces connect.</p>
-<div class="status"><span class="badge good">Local: 3 healthy containers · HTTP 200</span><span class="badge">Runtime: Docker Compose</span><span class="badge pending">VPS provisioning &amp; public launch pending</span></div>
+<div class="status"><span class="badge good">Local: 3 healthy containers · HTTP 200</span><span class="badge">Runtime: Docker Compose</span><span class="badge pending">VPS created · SSH recovery pending</span></div>
 <p class="small">Local status was checked on 10 September 2026 at <a href="http://localhost:8088">localhost:8088</a>. This page is a snapshot, not a live status display. The chosen public domain is <code>singularseed.art</code>.</p>
 </header>
 
@@ -160,7 +160,7 @@ deploy/scripts/build-release.sh</code></pre>
 <tr><td>Terraform state</td><td>A separate <a href="../../../deploy/terraform-state/README.md">Terraform bootstrap</a> creates the private, versioned bucket. Its output supplies this module’s S3 backend settings. State encryption requires the saved <code>AWS_SSE_CUSTOMER_KEY</code>; S3 credentials are separate from the cloud API token. Terraform lockfiles prevent concurrent writes. The owner reports bucket creation complete and a successful plan after supplying the SSE-C key. Extra lock/recovery exercises were deferred for staging.</td></tr>
 <tr><td>First-boot data</td><td>Terraform renders <code>cloud-init/user-data.yaml</code> with the same public key read from the configured file. Changing this data can require server replacement.</td></tr>
 </tbody></table></div>
-<p class="small">Current provisioning status: the SSH key, cloud firewall and primary IPs were created. Hetzner rejected CAX11 server creation; the configuration now selects CX23. Generate a fresh plan to create the remaining server. The state bucket stays in nbg1.</p>
+<p class="small">Current provisioning status (11 September): CX23, SSH key, firewall and primary IPs are created. Operator login failed because Ubuntu already has an operator group and the template omitted its primary-group setting; this failure was reproduced locally with cloud-init. The template now sets <code>primary_group: operator</code>, and a local SSH regression passes. The existing VPS still needs recovery or deliberate replacement. See <a href="../../../deploy/terraform/README.md#first-boot-ssh-failure-2026-09-11">recovery notes</a>.</p>
 <h3>Provisioning sequence</h3>
 <ol>
 <li>Choose the budget, staging hostname, administrator IPv4/IPv6 ranges and operator access. Run <code>deploy/terraform-state</code> to create the state bucket. Back up its local state independently, supply the saved SSE-C key, and verify remote locking and recovery.</li>
