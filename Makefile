@@ -78,3 +78,7 @@ sweep: ## Sweep 12 seeds of a sketch into a contact sheet (S=pools)
 .PHONY: check-compose
 check-compose: ## Rehearse the container runtime locally (Docker + Compose required)
 	deploy/scripts/verify-compose.sh
+
+.PHONY: docs-prototype
+docs-prototype: ## Build the Markdown/Mermaid browser format prototype in out/
+	python3 tools/docs-prototype/build.py

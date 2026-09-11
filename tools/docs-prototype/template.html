@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$pagetitle$</title>
+<link rel="stylesheet" href="@ASSETS@/style.css">
+<script src="@ASSETS@/@MERMAID@" defer></script>
+<script src="@ASSETS@/app.js" defer></script>
+</head>
+<body data-variant="A">
+<a class="skip" href="#main">Skip to content</a>
+<div class="layout">
+<aside>
+<a class="brand" href="@HOME@">Singular Seed</a>
+<nav aria-label="On this page">$toc$</nav>
+<p class="aside-note">DOCUMENTATION PROTOTYPE<br>Markdown + Mermaid<br><br><a href="@SOURCE@">View Markdown source</a><br><a href="@ORIGINAL@">Compare original HTML</a></p>
+</aside>
+<main id="main">
+<div class="topline"><span>System &amp; operations</span><span>Markdown source · browser edition</span></div>
+$body$
+<footer>Format experiment · <a href="@SOURCE@">Edit the Markdown</a> and rebuild with <code>make docs-prototype</code>. Infrastructure status is the dated source snapshot.</footer>
+</main>
+</div>
+<div class="switcher" aria-label="Prototype layout switcher">
+<button type="button" id="previous" aria-label="Previous layout">←</button>
+<span id="variant-label" aria-live="polite">A · Editorial</span>
+<button type="button" id="next" aria-label="Next layout">→</button>
+</div>
+<noscript><p class="no-script">JavaScript is disabled. Documentation remains readable; diagrams appear as Mermaid source.</p></noscript>
+</body>
+</html>
