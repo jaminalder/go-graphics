@@ -1,96 +1,165 @@
-# 012 — shallows
+# Shallows
 
-A clear small river seen from directly above: broad, broken ripple crests cast
-alternating light and shadow over a bed of worn, faceted stones. The stones,
-their joints and rare gold remain visible through the water.
+## Implemented algorithm
 
-## Why this is a sketch, not a composite
+The artwork constructs Scree's bed and Riffle's water surface, then combines their samples before rasterization. Refraction changes the bed coordinate, while ripple shadows and highlights act on the bed color. No pair of rendered full frames is composited.
 
-The source studies are 010's convincing stone bed and 011's moving surface.
-Rendering each to a PNG and laying one over the other loses the important
-interaction: water does not merely tint a stone. Its sloping surface changes
-which point on the bed is visible, shadows one side of a ripple and focuses
-light on the other.
+## Controls and output space
 
-`shallows` therefore plans both fields and evaluates them in one pixel
-function. No intermediate raster exists. For every output sample it:
+Inherits Scree's complete trait vocabulary and flags, plus explicit water/surface overrides declared by Shallows. The concrete bed/surface interfaces own reusable source behavior.
 
-1. reads the riffle surface's flow direction, slope, signed ripple and broad
-   dapple;
-2. offsets the lookup coordinate of the generated scree bed by the surface
-   slope, producing restrained refraction;
-3. borrows the coolest swatch from the selected ColorLisa palette and mixes
-   a value-matched share into the bed;
-4. multiplies the visible stone colour by the ripple's shadow face, then
-   mixes its light face toward a pale version of that same cool swatch.
+## Rendering and review
 
-The shadow and highlight change the *bed colour itself*. That is what makes
-the ripples survive over the bed's already strong facet structure.
-
-## The surface
-
-The reusable part of 011 remains its all-water pool/bend/field flow plan and
-per-pixel upstream walk. Fine chop and the line-integral current texture are
-retained as subordinate irregularity. A longer standing-wave field is added
-for 012 because the original fine facets disappear against 010's many stone
-facets.
-
-The standing crests cross the downstream direction, wander through broad
-flow noise and fade through a second broad field, so they form interrupted
-river ripples instead of uninterrupted parallel rules. Their wavelength is
-in canvas units and is independent of output resolution.
-
-Refraction is intentionally small. Large displacement repeats and tears the
-high-contrast stone edges into contour-like lines; at the default it shifts
-the bed by roughly one or two preview pixels, leaving shadow and light to do
-most of the surface work.
-
-## Controls
-
-All of scree's trait dimensions and material controls remain available,
-including `--bed`, `--stones`, `--facets`, `--light`, `--wet`, `--scheme` and
-`--gold`. Water adds:
-
-- `--water-seed` — independent current and surface composition;
-- `--water-depth` and `--water-tint` — optical depth and cool colour share;
-- `--refraction` — maximum bed displacement response;
-- `--ripple-strength`, `--ripple-shadow`, `--ripple-light` — definition and
-  contrast of the surface facets;
-- `--dapple-shadow` — broad shade over the complete water surface.
-
-The Avery calibration requested for this sketch is:
+Sampler; honors raster AA/deep. Compare fixed bed seeds to see water change light/refraction without replacing the stone composition.
 
 ```sh
-staticart render shallows --profile preview --aa 2 \
-  --seed 12 --water-seed 42 --palette kandinsky-soft-pressure \
-  --colourway avery-bicycle-rider --bed gravel --stones worn \
-  --facets cut --light noon --wet wet --scheme passage \
-  --count 340 --base 0.017 --facet 0.34 --gold
+go run ./cmd/staticart render shallows --seed 42 --profile preview --out out
 ```
 
-## Acceptance checklist
+## Implementation and tests
 
-- [ ] The first read is clear water over stones, not a translucent graphic
-      layer and not dry scree with texture on top.
-- [ ] Ripple crests and their darker trough faces are visible at thumbnail
-      size, broken and gently curved rather than fine parallel hatching.
-- [ ] Stones, joints, flat facet steps and gold remain identifiable below the
-      surface.
-- [ ] No bank, shore line, foam or second set of boulders enters the frame.
-- [ ] Changing `--water-seed` moves only the surface; changing `--seed` plans
-      a different bed and its corresponding surface context.
-- [ ] Preview, web and print preserve the same composition and wavelengths.
+[Artwork implementation](../../internal/sketch/shallows/shallows.go) owns the mechanism and defaults. [Tests](../../internal/sketch/shallows/shallows_test.go) defend deterministic behavior and algorithm-specific claims. See [materials](../reference/materials.md) for shared rendering behavior and [CLI guide](../guides/cli.md) for profiles, metadata and batch review.
 
-## What did not work
+## Current command help
 
-**A separately rendered alpha overlay.** It could tint an existing image but
-could not refract or cast light and shadow into the stone material. Strong
-enough to read, it looked pasted on; weak enough to integrate, it disappeared.
+This block is generated from the checked-in application with `make docs-sketch-help`. It includes global flags because their interaction with each sketch matters.
 
-**Promoting 011's fine chop directly.** The detailed scree bed overwhelmed it
-at normal strength. Raising it produced dense horizontal engraving rather
-than water.
-
-**Large refraction.** A several-stone displacement folded every hard joint
-many times and turned the image into moire. Refraction is now restrained and
-the legibility comes primarily from paired shadow and light.
+<!-- sketch-help:start -->
+```text
+Usage of render:
+  -aa int
+        anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget (default 2)
+  -accent float
+        share of stones taking a colour from outside their passage (default 0.2)
+  -ambient float
+        how much light reaches a face turned away (default 0.4)
+  -base float
+        smallest stone radius, canvas units (default 0.04118962144220252)
+  -bearing float
+        the lamp's bearing in degrees; 90 is from the top (default 135)
+  -bed string
+        how coarse the bed is: boulders|cobbles|shingle|gravel|grit (default: from seed)
+  -colourway string
+        which palette the bed is drawn from: tchelitchew-hide-and-seek|kandinsky-apple-tree|cezanne-bathers|seurat-grande-jatte|gauguin-siesta|monet-water-lilies|sargent-carnation-lily|diebenkorn-seawall|redon-green-vase|matisse-collioure|hopper-night-windows|bruegel-icarus|klee-fire-evening|vangogh-arles|avery-bicycle-rider|varo-harmony|delaunay-bleriot|chagall-mariee|from-flag (default: from seed)
+  -coolness float
+        how far the shadowed side leans toward the sky's (default 0.34)
+  -count int
+        stones the pack aims for (default 110)
+  -crease float
+        how far a face darkens toward its own edge (default 0.14410641829733997)
+  -cut float
+        random tilt on each face; 1 is 45 degrees (default 0.09177422348798718)
+  -dapple-shadow float
+        broad tree shade over the water (default 0.03)
+  -deep
+        render a 16-bit PNG master (archival/print; png only)
+  -depth float
+        how far a stone's colour goes toward the water's own (default 0.12)
+  -elevation float
+        how high the lamp stands; low is dramatic (default 0.62)
+  -facet float
+        facet size, x the smallest stone (default 0.2961091206959952)
+  -facet-scale float
+        how far the grain follows the stone; 0 is one fineness for the bed
+  -faceted float
+        share of stones cut into facets (default 1)
+  -facets string
+        how finely each stone is cut into facets: plates|cut|crazed|shattered|smooth (default: from seed)
+  -flake float
+        random scaling on each face's shade (default 0.04646902410326698)
+  -format string
+        output format: png|jpg (default "png")
+  -gap float
+        clearance between stones, x radius (default 0.06940014480940054)
+  -gloss float
+        strength of the specular (default 0.16)
+  -gold
+        reserve yellow for two or three rare gold nuggets
+  -grain float
+        paper tooth (default 0.05)
+  -height int
+        override height in px (requires --width)
+  -ink float
+        the joint's thickness, canvas units (default 0.004191069917110888)
+  -joint string
+        the weight of the water between the stones: fine|drawn|bold (default: from seed)
+  -light string
+        how the bed is lit: raking|morning|noon|overcast (default: from seed)
+  -load float
+        pigment in a stone at full tone (default 0.95)
+  -max-lobe int
+        most sites one lobe may absorb (default 2)
+  -merge float
+        share of stones merged into a neighbouring lobe (default 0.2348122564901623)
+  -node float
+        distance over which a third stone counts as near (default 0.010953345210541253)
+  -out string
+        output directory (default "out")
+  -over float
+        how far the pack reaches past the frame, canvas units (default 0.07772266222614387)
+  -palette string
+        palette slug (see: staticart palettes) (default "kandinsky-soft-pressure")
+  -passage float
+        wavelength of the colour field, canvas units (default 0.8)
+  -pool float
+        wavelength of the pigment's pooling, canvas units (default 0.09)
+  -profile string
+        size profile: preview|preview-tall|print|print-tall|web|web-tall (default "preview")
+  -ratio float
+        size ladder step ratio (default 1.5174691227179813)
+  -refraction float
+        surface displacement of the bed, canvas units (default 0.01)
+  -ripple-light float
+        lit side of each ripple facet (default 0.45)
+  -ripple-shadow float
+        dark side of each ripple facet (default 0.7)
+  -ripple-strength float
+        contrast and definition of surface ripples (default 2.5)
+  -rise float
+        how proud a stone stands, x its own inradius (default 0.58)
+  -round float
+        radius a stone's corner is worn over, canvas units (default 0.010001597763217377)
+  -rungs int
+        steps on the stone size ladder (default 5)
+  -saturate float
+        lift on every pigment's saturation
+  -scheme string
+        how colour is organised over the bed: dominance|passage|quiet|analogous|notan|anchor|inherit|by-size|weather|complement|by-darkness|duet|triad|sequence|gradient|terrace (default: from seed)
+  -seed uint
+        random seed (same seed → same image) (default 42)
+  -shades float
+        how far a stone wanders from its palette swatch (default 0.75)
+  -sharp float
+        how tight the specular is (default 26)
+  -sheen float
+        how much the water polishes it, x gloss (default 1)
+  -soak float
+        how much the water darkens a stone (default 0.5)
+  -stones string
+        how worn the stones are: worn|rolled|broken|jumbled (default: from seed)
+  -swell float
+        extra thickness where three stones meet, x ink (default 1.5471810748789447)
+  -swirl float
+        wavelength of that bending, x smallest stone (default 25.064750692464862)
+  -uneven float
+        how strongly the pigment pools (default 0.6)
+  -warmth float
+        how far the lit side leans toward the lamp's colour (default 0.3)
+  -warp float
+        how far the whole bed is bent, x smallest stone (default 0.9159488057063172)
+  -water-depth float
+        depth of clear water over the stones (default 0.68)
+  -water-seed uint
+        seed of the current and surface (default 42)
+  -water-tint float
+        share of cool water colour in the bed (default 0.28)
+  -weight float
+        how strongly a stone's size bends its walls; 0 is straight (default 1.05)
+  -wet string
+        how much water is standing over the bed: dry|damp|wet|sunk (default: from seed)
+  -width int
+        override width in px (requires --height)
+  -wobble float
+        hand wander of the joint, x its width (default 0.24)
+```
+<!-- sketch-help:end -->

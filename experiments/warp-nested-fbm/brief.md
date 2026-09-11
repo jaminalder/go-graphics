@@ -40,8 +40,6 @@ rendering. Existing sketches and shared noise behavior remain unchanged.
 ## Scope
 
 - `docs/sketches/013-warp.md`
-- `docs/superpowers/specs/2026-08-05-warp-nested-fbm-design.md`
-- `docs/superpowers/plans/2026-08-05-warp-nested-fbm.md`
 - `AGENTS.md` and `docs/ARCHITECTURE.md` sketch inventory updates.
 - `internal/sketch/warp/` implementation, options, focused tests, and golden.
 - `cmd/staticart/main.go` registry wiring and its affected tests.

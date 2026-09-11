@@ -13,19 +13,20 @@
 <div class="layout">
 <aside>
 <a class="brand" href="@HOME@">Singular Seed</a>
-<nav aria-label="On this page">$toc$</nav>
-<p class="aside-note">DOCUMENTATION PROTOTYPE<br>Markdown + Mermaid<br><br><a href="@SOURCE@">View Markdown source</a><br><a href="@ORIGINAL@">Compare original HTML</a></p>
+@NAVIGATION@
+<nav class="page-nav" aria-label="On this page">$toc$</nav>
+<p class="aside-note">PROJECT DOCUMENTATION<br><a href="@SOURCE@">View Markdown source</a></p>
 </aside>
 <main id="main">
-<div class="topline"><span>System &amp; operations</span><span>Markdown source · browser edition</span></div>
+<div class="topline"><a href="@HOME@">Documentation</a><span>Current implementation</span></div>
 $body$
-<footer>Format experiment · <a href="@SOURCE@">Edit the Markdown</a> and rebuild with <code>make docs-prototype</code>. Infrastructure status is the dated source snapshot.</footer>
+<footer><a href="@SOURCE@">Markdown source</a> · Generated with <code>make docs</code>.</footer>
 </main>
 </div>
-<div class="switcher" aria-label="Prototype layout switcher">
-<button type="button" id="previous" aria-label="Previous layout">←</button>
+<div class="switcher" aria-label="Reading layout">
+<button type="button" id="previous" aria-label="Previous reading layout">←</button>
 <span id="variant-label" aria-live="polite">A · Editorial</span>
-<button type="button" id="next" aria-label="Next layout">→</button>
+<button type="button" id="next" aria-label="Next reading layout">→</button>
 </div>
 <noscript><p class="no-script">JavaScript is disabled. Documentation remains readable; diagrams appear as Mermaid source.</p></noscript>
 </body>

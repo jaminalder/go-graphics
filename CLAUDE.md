@@ -12,12 +12,12 @@ explicit working directory.
 
 ### Issue tracker
 
-Issues and specs live as markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues and specs live as markdown under `.scratch/<feature>/`.
 
 ### Triage labels
 
-Default role names: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+Default role names: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`.
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root, created when a term or decision lands. See `docs/agents/domain.md`.
+Current project terminology and architecture are documented in `docs/reference/data.md` and `docs/ARCHITECTURE.md`.

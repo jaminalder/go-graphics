@@ -1,61 +1,51 @@
-# Sketch 004 — `drift` (painted dots along a flow field)
+# Drift
 
-Inspired by Tyler Hobbs' spiral dot arrangements, but the dots follow the
-streamlines of a Perlin flow field instead of a spiral. Every dot is
-*painted* with a human-like brush mark rather than filled analytically —
-this sketch introduces the `internal/paint` package.
+## Implemented algorithm
 
-## The paint model (new, reusable)
+Dots are planned along streamlines of a Perlin flow field and interpreted through the stamp-based paint canvas. Layout and mark style are separate decisions; fixed placement budgets and named random streams make a repeatable composition.
 
-`paint.Canvas` is a float-RGBA buffer painted by **stamping**: soft-edged
-dabs blended source-over, strokes as dab trains along paths. This is a
-second rendering model beside `render.Raster`'s pure per-pixel functions —
-painting is sequential and order-dependent, anti-aliasing comes from the
-soft dab edges (Context.AA is ignored), and the final buffer is quantized
-with the same dithering as the raster path. Composition stays
-resolution-independent (paths and sizes in canvas units); exact stroke
-texture varies subtly with resolution, which is part of the medium.
+## Controls and output space
 
-Humanity comes from three ingredients, all seeded: **wobble** (radial
-harmonics with random amplitude/phase on every path), **drift** (slow
-center wander along a stroke), and **misregistration** (under-layers offset
-from the strokes above them).
+`--style` chooses mix, rings, scribble or gouache; it is the only sketch-owned CLI flag. Other structural settings are Go fields. There is no weighted trait schema.
 
-## Disc styles (paint package marks)
+## Rendering and review
 
-- `RingsDisc` — a solid under-disc, slightly offset, under a hand-drawn
-  spiral of concentric ink rings plus a center dot (the classic Hobbs
-  ringed dot).
-- `ScribbleDisc` — an under-disc under many overlapping wobbly loops at
-  random radii; translucent strokes build up where they cross (the
-  sequin/crayon look).
-- `GouacheDisc` — an opaque blob with an irregular wobbled edge over an
-  offset shadow blob (flat hand-painted dot).
+Sequential paint path; ignores Context.AA/Deep and writes 8-bit canvas output. Inspect the marks at useful scale, not just the placement geometry.
 
-## Layout
+```sh
+go run ./cmd/staticart render drift --seed 42 --profile preview --out out
+```
 
-1. **Paper** — lightest palette color, lightened and desaturated, plus a
-   sparse speckle of tiny ink dots.
-2. **Flow field** — angle = k·fBm; streamlines start on a jittered grid
-   and step along the field, placing dots of locally-coherent size (a
-   second low-frequency size field) wherever they fit (geom collision
-   index, small gap). Fixed streamline/step/miss budgets keep the loop
-   deterministic.
-3. **Painting** — dots painted in placement order. Per dot: main color
-   from a low-frequency color field (coherent patches) with jitter; ink =
-   darkest palette color (or lightest when the main is the darkest);
-   style per dot (mix of the three, weighted) or forced via `--style`.
+## Implementation and tests
 
-## CLI
+[Artwork implementation](../../internal/sketch/drift/drift.go) owns the mechanism and defaults. [Option declarations](../../internal/sketch/drift/options.go) own local knobs. [Tests](../../internal/sketch/drift/drift_test.go) defend deterministic behavior and algorithm-specific claims. See [materials](../reference/materials.md) for shared rendering behavior and [CLI guide](../guides/cli.md) for profiles, metadata and batch review.
 
-`--style rings|scribble|gouache|mix` (default mix) — same composition,
-different painting; the style is part of the filename suffix.
+## Current command help
 
-## Acceptance checklist (visual)
+This block is generated from the checked-in application with `make docs-sketch-help`. It includes global flags because their interaction with each sketch matters.
 
-- [ ] Dots visibly follow flowing currents; sizes cluster regionally.
-- [ ] Marks read as hand-made: wobbly rings, misregistered under-discs,
-      scribble buildup — no two dots identical.
-- [ ] The three forced styles give clearly different moods on the same
-      composition.
-- [ ] Paper + speckle reads as a quiet ground; palette cohesive.
+<!-- sketch-help:start -->
+```text
+Usage of render:
+  -aa int
+        anti-aliasing samples (1 = off; use 3 for print); point samplers supersample per axis, flame multiplies the orbit budget (default 2)
+  -deep
+        render a 16-bit PNG master (archival/print; png only)
+  -format string
+        output format: png|jpg (default "png")
+  -height int
+        override height in px (requires --width)
+  -out string
+        output directory (default "out")
+  -palette string
+        palette slug (see: staticart palettes) (default "kandinsky-soft-pressure")
+  -profile string
+        size profile: preview|preview-tall|print|print-tall|web|web-tall (default "preview")
+  -seed uint
+        random seed (same seed → same image) (default 42)
+  -style string
+        painting style: mix|rings|scribble|gouache (default "mix")
+  -width int
+        override width in px (requires --height)
+```
+<!-- sketch-help:end -->

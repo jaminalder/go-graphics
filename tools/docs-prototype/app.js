@@ -1,6 +1,6 @@
-// Three layouts of the same generated document. Throwaway UI; no saved state.
+// Three reading layouts shared by every generated documentation page.
 const variants = ['A', 'B', 'C'];
-const names = { A: 'Editorial · sidebar + full guide', B: 'Reading · continuous chapter', C: 'Reference · expandable sections' };
+const names = { A: 'Editorial', B: 'Reading', C: 'Reference' };
 const label = document.querySelector('#variant-label');
 const chapters = [...document.querySelectorAll('main section.level2')];
 let variant;
@@ -32,6 +32,13 @@ function showVariant(next, updateURL = true) {
   variant = variants.includes(next) ? next : 'A';
   document.body.dataset.variant = variant;
   label.textContent = `${variant} · ${names[variant]}`;
+  for (const link of document.querySelectorAll('a[href]')) {
+    const url = new URL(link.href, location.href);
+    if (url.origin === location.origin && url.pathname.endsWith('.html')) {
+      url.searchParams.set('variant', variant);
+      link.href = url.href;
+    }
+  }
   for (const section of chapters) {
     const details = section.querySelector(':scope > details');
     if (details) details.open = variant !== 'C';
@@ -51,13 +58,6 @@ function cycle(direction) {
 
 document.querySelector('#previous').addEventListener('click', () => cycle(-1));
 document.querySelector('#next').addEventListener('click', () => cycle(1));
-document.addEventListener('keydown', event => {
-  if (event.target.closest('input, textarea, select, [contenteditable], .diagram')) return;
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    event.preventDefault();
-    cycle(event.key === 'ArrowLeft' ? -1 : 1);
-  }
-});
 window.addEventListener('hashchange', revealAnchor);
 window.addEventListener('popstate', () => showVariant(new URLSearchParams(location.search).get('variant'), false));
 
@@ -68,7 +68,9 @@ if (window.mermaid) {
     themeVariables: { fontFamily: 'system-ui, sans-serif', fontSize: '16px', primaryColor: '#e7efea',
       primaryTextColor: '#23343b', primaryBorderColor: '#12695e', lineColor: '#12695e',
       secondaryColor: '#fffefa', tertiaryColor: '#f7f6f1' },
-    flowchart: { htmlLabels: false, useMaxWidth: false, wrappingWidth: 200 } });
+    flowchart: { htmlLabels: false, useMaxWidth: false, wrappingWidth: 200 },
+    sequence: { useMaxWidth: false },
+    class: { useMaxWidth: false } });
   mermaid.run({ querySelector: '.mermaid' }).then(() => {
     showVariant(new URLSearchParams(location.search).get('variant'), false);
   }).catch(error => {

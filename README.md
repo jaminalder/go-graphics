@@ -1,71 +1,16 @@
-# go-graphics
+# go-graphics / Singular Seed
 
-Generative static 2D art in Go — deterministic sketches rendered as
-high-resolution images for print, plus web and preview sizes, from the same
-seed.
-
-Successor in spirit to [staticart](https://github.com/jaminalder/staticart)
-(Clojure/quil). Raster work uses the Go standard `image` library; future
-vector work will use [tdewolff/canvas](https://github.com/tdewolff/canvas).
-Color palettes are grounded in artist palettes from
-[ColorLisa](https://colorlisa.com/).
-
-**Status:** sixteen artwork sketches plus the `hatchbook` specimen generator,
-from contour fields and watercolour to faceted stones, warped materials,
-abstract irises, and fractal flames. The project remains a local art laboratory;
-**Singular Seed**, a curated Go SSR + htmx studio, is
-[implemented locally](docs/web/README.md) alongside it. The chosen public domain
-is `singularseed.art`; deployment and publication remain pending.
-See the [Docker Compose run and deployment guide](deploy/README.md) and
-[container-first infrastructure learning track](docs/learning/infra/README.md).
-All 133 ColorLisa palettes are built in (`staticart palettes`; `staticart
-list` shows the complete set).
-
-## Quick start
-
-Requires Go ≥ 1.26.8 and, for `make fmt`/`make lint`, golangci-lint ≥ 2.12.
+Deterministic static artwork in Go, with a local renderer and a curated public browser studio. The local registry contains sixteen artworks and a hatch specimen book; the studio publishes Pools, Foam and Iris. The repository includes isolated rendering, deployment tooling and a complete C4 architecture reference.
 
 ```sh
-make help                 # list targets
-make check                # fmt + vet + lint + test
-make preview              # render the contour sketch at preview size → out/
-
-# General form:
-go run ./cmd/staticart render contour --profile print --seed 42 \
-    --palette hokusai-great-wave --out out
+go run ./cmd/staticart render contour --seed 42 --profile preview --out out
 ```
 
-| Profile | Size | Use |
-|---|---|---|
-| `preview` | 600² px | fast iteration |
-| `web` | 2000² px | web/social |
-| `print` | 6000² px | ≈ 50×50 cm at 300 DPI |
+[Getting started](docs/guides/getting-started.md) covers local image generation and the studio. [Documentation home](docs/README.md) links user guides, the [C4 architecture](docs/ARCHITECTURE.md), all sketches, API/data references, operations and development checks.
 
-Same seed ⇒ same composition at every size. **For final print renders use
-`--aa 3`** (9× supersampling; ~2–3× render time) and optionally `--deep`
-for a 16-bit PNG master. All files embed sRGB + 300 DPI metadata and the
-full render recipe (view with `strings file.png | grep staticart`).
-
-## Project layout
-
-```
-cmd/staticart/     CLI
-internal/          mathx, rnd, opt, palette, gradient, noise, geom,
-                   trait, paint, render, sketch packages
-docs/              ARCHITECTURE.md, per-sketch specs, ColorLisa reference data
-out/               rendered images (gitignored)
+```sh
+make check   # Required before commits
+make docs    # Complete browser edition at out/docs/index.html
 ```
 
-- **Design & invariants:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **Singular Seed web application:** [docs/web/README.md](docs/web/README.md)
-- **Domain vocabulary:** [CONTEXT.md](CONTEXT.md)
-- **First sketch spec:** [docs/sketches/001-contour-noise.md](docs/sketches/001-contour-noise.md)
-- **Agent/contributor guide:** [AGENTS.md](AGENTS.md)
-- **Branch/worktree workflow:** [docs/WORKTREE-WORKFLOW.md](docs/WORKTREE-WORKFLOW.md)
-
-## Credits & inspiration
-
-- [jaminalder/staticart](https://github.com/jaminalder/staticart) — reference
-  artwork and algorithms
-- [ColorLisa](https://colorlisa.com/) — artist color palettes
-- Iñigo Quílez — [cosine gradient palettes](https://iquilezles.org/articles/palettes/)
+Go version and application dependencies are declared in [go.mod](go.mod); the Go application currently uses only the standard library. Documentation uses Python, Pandoc and pinned Mermaid. [Development workflow](docs/development/workflow.md) and [worktree rules](docs/WORKTREE-WORKFLOW.md) explain contribution and review.

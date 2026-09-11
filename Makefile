@@ -79,6 +79,15 @@ sweep: ## Sweep 12 seeds of a sketch into a contact sheet (S=pools)
 check-compose: ## Rehearse the container runtime locally (Docker + Compose required)
 	deploy/scripts/verify-compose.sh
 
-.PHONY: docs-prototype
-docs-prototype: ## Build the Markdown/Mermaid browser format prototype in out/
+.PHONY: docs docs-check docs-sketch-help docs-prototype
+docs: ## Build all Markdown documentation into out/docs/
 	python3 tools/docs-prototype/build.py
+
+docs-check: ## Validate documentation links and builder behavior
+	python3 -B -m unittest discover -s tools/docs-prototype -p 'test_*.py'
+	python3 tools/docs-prototype/build.py --check
+
+docs-sketch-help: ## Refresh generated sketch CLI help from application source
+	python3 tools/docs-prototype/sketch-help.py
+
+docs-prototype: docs ## Alias for the complete documentation browser edition
