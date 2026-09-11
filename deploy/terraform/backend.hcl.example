@@ -1,3 +1,4 @@
+# Preserve this existing state object key; its legacy name is not an environment.
 bucket       = "BUCKET-NAME-FROM-BOOTSTRAP"
 key          = "singular-seed/staging.tfstate"
 region       = "nbg1"

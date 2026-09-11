@@ -4,4 +4,4 @@ RUN apt-get update -qq && \
       cloud-init openssh-server sudo && \
     rm -rf /var/lib/apt/lists/*
 ENV ART_CLOUD_INIT_TEST_CONTAINER=1
-CMD ["python3", "/repo/deploy/tests/test_cloud_init.py"]
+CMD ["sh", "-ec", "python3 /repo/deploy/tests/test_cloud_init.py && python3 /repo/deploy/tests/test_install_release.py"]

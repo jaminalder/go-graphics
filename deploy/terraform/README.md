@@ -1,8 +1,9 @@
-# Provision a usable staging server
+# Provision the production server
 
 This root manages a CX23 (x86-64), Ubuntu 24.04, in nbg1, its IPs,
-firewall and SSH key, then deploys a retained Linux amd64 release. Staging
-opens over **HTTP at the assigned IPv4**, without DNS. Keep Terraform running:
+firewall and SSH key, then deploys a retained Linux amd64 release. There is
+one production environment and one VPS. It initially opens over **HTTP at the
+assigned IPv4**, without DNS. Keep Terraform running:
 its local deployment task waits for cloud-init, uploads over SSH and activates
 Compose. A successful apply includes a working site check from your machine.
 
@@ -54,7 +55,8 @@ login or Git checkout. `site_url` is the resulting address.
 4. `terraform_data.application` runs `provision-app.py` locally. It verifies
    the release, waits for SSH and cloud-init, then uploads a temporary archive.
 5. The cloud-init-installed `install-release.sh` writes `/etc/art/operator.env`
-   and records the staging deployment selected by this apply. It invokes the
+   and records the deployment selected by this apply in `deployment-approved`.
+   No separate manual approval file is needed. It invokes the
    release's existing smoke/drain/activate/rollback scripts and checks the site.
 
 SSH uses trust on first connection with a host alias per Hetzner server ID,
@@ -66,9 +68,10 @@ If upload or activation fails, make a **fresh plan**, then apply it. The failed
 application task retries against the existing server. Cloud-init changes
 replace the server; selecting a different release only redeploys the app.
 A failed cloud-init bootstrap needs diagnosis or explicit server replacement;
-retrying an upload does not rerun first boot. The complete remote rebuild has
-not yet been verified; local tests cover SSH account creation and deployment
-failure handling.
+retrying an upload does not rerun first boot. The current host serves the
+application over HTTP at its assigned IPv4.
+A complete destroy/apply rehearsal of this production-only configuration is
+still pending; local tests cover SSH account creation and deployment failures.
 
 ## Replace or destroy
 
@@ -83,32 +86,50 @@ terraform -chdir=deploy/terraform apply infra.tfplan
 To remove all resources in **this root**, then recreate them:
 
 ```sh
-terraform -chdir=deploy/terraform destroy
-terraform -chdir=deploy/terraform apply
+terraform -chdir=deploy/terraform plan -destroy -out=destroy.tfplan
+terraform -chdir=deploy/terraform apply destroy.tfplan
+terraform -chdir=deploy/terraform plan -out=infra.tfplan
+terraform -chdir=deploy/terraform apply infra.tfplan
 ```
 
 Keep `release_directory` and the credentials available for these commands.
 Full destruction removes the server, IPs, firewall and SSH-key resource. New
 IPs may differ. The separately managed state bucket remains. Server replacement
 and destruction lose local Docker volumes: cached artwork and Caddy data.
-Visitor state is already in memory. This is disposable staging, not persistent
-data recovery; retain required artwork/release archives outside the VPS.
+Visitor state is already in memory. This rebuild does not recover server-local
+data; retain required artwork/release archives outside the VPS.
 
-### Existing protected server: one-time transition
+### Existing installation: transition before the rebuild
 
-The current server (165431120) was created with deletion/rebuild protection.
-Disable both protections in Hetzner before applying its replacement (with the
-CLI: `hcloud server disable-protection 165431120 delete rebuild`); setting
-new defaults cannot remove protection from an old server being deleted.
-The original SSH failure was reproduced locally: Ubuntu already has the
-`operator` group, so cloud-init needs `primary_group: operator`. That fix is
-included. Replacing this server preserves its current IP resources.
+Keep the existing ignored `backend.hcl` and its exact bucket and key. The
+existing key may be `singular-seed/staging.tfstate`: this is only an object
+name, not a second environment. **Do not rename it or initialize an empty
+production state.** Keep the same credentials and saved SSE-C encryption key.
+The backend example retains the legacy key for this reason.
 
-## Optional HTTPS and production
+Remove `environment` from your ignored `terraform.tfvars`. During the planned
+full rebuild, set `name = "singular-seed"`; the old `singular-seed-staging` name
+was a resource label, not another environment. Leave `hostname = ""` until DNS
+is ready. Build a fresh release from the committed production-only changes and
+select it with `release_directory` before planning destruction or creation.
+Keep that artifact available through both operations.
 
-Set `hostname` to a DNS hostname to use HTTPS; point its DNS at the assigned
-server addresses yourself. DNS is not managed here. Production requires a
-hostname and a separately supplied `/etc/art/launch-approved` record; this
-staging automation does not authorize or automate public launch approval.
-The extra state lock/recovery exercises were deferred by the owner for staging
-and remain unverified.
+Use the full destroy/apply sequence above for this transition. The host's
+cloud-init-installed installer and release activation scripts change together;
+old release archives expect the previous environment/approval contract. Do not
+mix the new provisioner with the old host installer or treat pre-cleanup
+archives as compatible manual rollback releases. After the rebuild, retain the
+first working production-only release for subsequent rollback.
+
+The current server has delete/rebuild protection disabled. If a later server
+has protection enabled, disable it deliberately before a planned destruction;
+changing a default does not remove protection on a server being deleted.
+
+## Add the domain and HTTPS later
+
+After the IP-only rebuild passes, point the domain's A record at the assigned
+IPv4. Publish AAAA only after IPv6 access is verified. Set `hostname` to the
+domain and make a fresh plan/apply. The same production server is redeployed
+with an HTTPS origin; Caddy manages certificates. DNS is not managed here.
+There is no environment switch or separate public-launch approval file.
+State lock contention and recovery exercises remain unverified.

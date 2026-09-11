@@ -1,11 +1,10 @@
-environment = "staging"
-name = "singular-seed-staging"
+name = "singular-seed"
 location = "nbg1"
 admin_cidrs = ["192.0.2.10/32", "2001:db8::10/128"]
 ssh_public_key_path = "~/.ssh/id_ed25519.pub"
 # Supply the sensitive API token through TF_VAR_hcloud_token, not this file.
 ssh_identity_path = "~/.ssh/id_ed25519"
-hostname = "" # HTTP at the assigned IPv4 for staging; optional hostname for HTTPS.
+hostname = "" # HTTP at the assigned IPv4; optional hostname for HTTPS.
 protect_server = false
 # Set this to a retained release, or supply TF_VAR_release_directory.
 release_directory = "../../out/releases/REPLACE_WITH_FULL_COMMIT"

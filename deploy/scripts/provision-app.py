@@ -84,9 +84,8 @@ def provision(settings):
     site = urlsplit(origin)
     if site.scheme not in {"http", "https"} or not re.fullmatch("[a-z0-9.-]+", site.netloc) or site.path or site.query or site.fragment:
         raise ValueError("Expected an HTTP(S) origin without port, credentials or path")
-    environment = settings["ART_ENVIRONMENT"]
-    if environment not in {"staging", "production"} or (environment == "production" and site.scheme != "https"):
-        raise ValueError("Invalid environment or insecure production origin")
+    if site.scheme == "http" and site.netloc != address:
+        raise ValueError("HTTP origin must use the assigned server IPv4")
     release = Path(settings["ART_RELEASE_PATH"]).resolve()
     revision = verify_release(release, settings["ART_RELEASE_DIGEST"])
     known_hosts = Path("out/provision/known_hosts").resolve()
@@ -112,7 +111,7 @@ def provision(settings):
             digest = checksum(archive)
             print(f"Uploading release {revision}...", flush=True)
             subprocess.run(["scp", *options, str(archive), f"{destination}:{remote}/release.tar"], check=True, timeout=1200)
-            command = shlex.join(["sudo", "/usr/local/sbin/art-install-release", f"{remote}/release.tar", digest, revision, origin, environment])
+            command = shlex.join(["sudo", "/usr/local/sbin/art-install-release", f"{remote}/release.tar", digest, revision, origin])
             subprocess.run(ssh + [command], check=True, timeout=1200)
     finally:
         try:

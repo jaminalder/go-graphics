@@ -242,7 +242,8 @@ Use a fixed production Compose project and stop old application containers
 before replacement. Caddy configuration belongs to its versioned image; its
 certificate volumes survive recreation. Production uses immutable image IDs
 loaded from the checksummed archive, with no registry required. A host deploy
-lock serializes activation. Separate staging approval from public-launch approval. Restore previous
+lock serializes activation. The installer records the operator-selected deployment in one
+`deployment-approved` file; IP-only HTTP and domain HTTPS use the same production environment. Restore previous
 pointers/configuration on failure. Web and renderer must reject incompatible
 protocol/build identities; do not cache an image under the wrong release key.
 

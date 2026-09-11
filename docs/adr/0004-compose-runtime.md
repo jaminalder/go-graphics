@@ -28,3 +28,8 @@ A brief restart remains acceptable and destroys in-memory explorations. Compose
 adds neither shared admission nor host failover. Kubernetes remains a later
 learning lab. Actual host OOM, reboot, TLS, firewall and restore evidence is
 required before launch; successful container startup is not that evidence.
+
+Update (2026-09-11): the staging/public approval distinction above is superseded
+by one production environment. Installation automatically records the selected
+deployment; IP-only HTTP precedes domain HTTPS on the same VPS. See
+[the current deployment workflow](../../deploy/terraform/README.md).

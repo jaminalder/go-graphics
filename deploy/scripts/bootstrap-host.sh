@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ubuntu 24.04 amd64 only. Run as root on an owner-approved staging/production host.
+# Ubuntu 24.04 amd64 only. Run as root on an owner-approved production host.
 # Run by cloud-init. Installs Docker and configures host INPUT filtering.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Run as root on the target host' >&2; exit 1; }

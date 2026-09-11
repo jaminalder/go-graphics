@@ -129,7 +129,7 @@ cache-full and quota states are visible; GET/HEAD never enqueue work; maps and
 temporary files stay bounded. Test actual subprocess failure as well as fast
 deterministic test adapters.
 
-## Phase 5 — infrastructure, CI and staging
+## Phase 5 — infrastructure, CI and production deployment
 
 Scope: `deploy/`, CI configuration, operational documentation.
 

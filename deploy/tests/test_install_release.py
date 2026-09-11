@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class InstallRelease(unittest.TestCase):
-    def scenario(self, fail=False, corrupt=False):
+    def scenario(self, fail=False, corrupt=False, origin="http://192.0.2.1"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             release = root / "fixture"
@@ -22,7 +22,7 @@ class InstallRelease(unittest.TestCase):
             scripts.mkdir(parents=True)
             etc = root / "etc/art"
             etc.mkdir(parents=True)
-            old_env = "ART_ENVIRONMENT=staging\nART_ORIGIN=http://192.0.2.9\n"
+            old_env = "ART_ORIGIN=http://192.0.2.9\n"
             (etc / "operator.env").write_text(old_env)
             activate = scripts / "activate-release.sh"
             activate.write_text("#!/bin/sh\nexit " + ("17" if fail else "0") + "\n")
@@ -42,19 +42,23 @@ class InstallRelease(unittest.TestCase):
                 script = script.replace(path, str(target))
             installer = root / "install.sh"
             installer.write_text(script)
-            result = subprocess.run(["bash", str(installer), str(archive), digest, revision, "http://192.0.2.1", "staging"], capture_output=True, text=True)
+            result = subprocess.run(["bash", str(installer), str(archive), digest, revision, origin], capture_output=True, text=True)
             env = (etc / "operator.env").read_text()
             if fail or corrupt:
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertEqual(env, old_env)
             else:
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("ART_ORIGIN=http://192.0.2.1\n", env)
+                self.assertIn(f"ART_ORIGIN={origin}\n", env)
+                self.assertIn(f"ART_DOMAIN={origin}\n", env)
                 self.assertEqual((etc / "operator.env").stat().st_mode & 0o777, 0o600)
-                self.assertTrue((etc / "staging-approved").exists())
+                self.assertTrue((etc / "deployment-approved").exists())
 
-    def test_staging_install_sets_runtime_origin(self):
+    def test_http_install_records_selected_deployment_without_manual_approval(self):
         self.scenario()
+
+    def test_https_install_records_selected_deployment_without_manual_approval(self):
+        self.scenario(origin="https://example.test")
 
     def test_activation_failure_restores_previous_environment(self):
         self.scenario(fail=True)
