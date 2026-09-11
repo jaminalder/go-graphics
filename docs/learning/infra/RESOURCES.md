@@ -24,9 +24,8 @@ repository's `deploy/` files.
 - [Terraform post-apply operations](https://developer.hashicorp.com/terraform/language/post-apply-operations)
   Cloud-init and images as the supported path. Use for: the Layer 1 / Layer 2
   split in [PLAN.md](PLAN.md).
-- [Terraform S3 backend](https://developer.hashicorp.com/terraform/language/backend/s3)
-  Lockfile, versioning, and the Amazon-S3 compatibility warning. Use for:
-  proving remote state before the first real apply.
+- [Terraform local backend](https://developer.hashicorp.com/terraform/language/backend/local)
+  Local state and locking. Use for: the single-operator setup and state path.
 - [Terraform sensitive data](https://developer.hashicorp.com/terraform/language/manage-sensitive-data)
   `sensitive` hides UI output, not state bytes. Use for: what must never enter
   `user_data` or tfvars.
@@ -93,9 +92,6 @@ repository's `deploy/` files.
 
 ## Gaps
 
-- No first-party, current comparison of Hetzner Object Storage versus Amazon S3
-  for Terraform `use_lockfile`. The lock/recovery proof in stage 1 has to be
-  an experiment you run, not a citation.
 - Hetzner has no AWS-style autoscaling group. Stage 2 autoscaling resources
   are therefore scripts-plus-metrics, or a later scheduler — there is no
   official “Hetzner ASG” document to follow.

@@ -134,8 +134,8 @@ deterministic test adapters.
 Scope: `deploy/`, CI configuration, operational documentation.
 
 - Select/pin a supported Linux image, architecture, Go and tool versions.
-- Implement Terraform for server/firewall/IP/key resources; select/bootstrap
-  remote state, then prove locking/version recovery from two clients.
+- Implement Terraform for server/firewall/IP/key resources with local state
+  retained and backed up by one operator; no object-storage dependency.
 - Add nonsecret cloud-init, separate Compose web/renderer cgroups, Caddy config,
   private endpoints and restricted administrative access.
 - Add pinned image builds, immutable image archives, private candidate smoke,
@@ -145,8 +145,8 @@ Scope: `deploy/`, CI configuration, operational documentation.
 - Add external uptime alerting, bounded logs, resource dashboards or simple
   private metrics, and backup/restore runbooks.
 
-Exit: staged deploy, rollback, reboot, hard renderer OOM isolation, state-lock
-failure and clean-host restore are demonstrated. Cloud creation, DNS changes
+Exit: staged deploy, rollback, reboot, hard renderer OOM isolation and clean-host
+restore are demonstrated. Cloud creation, DNS changes
 and credentials require owner action/authorisation; this plan is not an apply.
 Use `wizard` only for genuinely human-only credential/dashboard steps later.
 

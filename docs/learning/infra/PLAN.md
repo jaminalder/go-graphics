@@ -73,20 +73,16 @@ before launch, together with gallery responsiveness and resource recovery.
 Learn how namespaces and cgroups differ, which limits include children, and
 why one container per rendering request or a mounted Docker socket is unnecessary.
 
-### 4. Remote state before cloud resources
+### 4. Local state for one production environment
 
-Answer questions 1–5, including DNS ownership, total cost ceiling and operator
-machine. `singularseed.art` is chosen; DNS ownership/access and a staging hostname
-still need confirmation. Existing tooling uses Terraform; a switch to OpenTofu
-would be a separate decision.
+Use one operator checkout with local Terraform state, retained while resources
+exist and independently backed up. No object-storage bootstrap or two-client
+remote-lock exercise is needed. `singularseed.art` is chosen; DNS access remains
+to be confirmed after the IP-only destroy/apply rehearsal.
 
-Bootstrap an independent encrypted/versioned backend. Use a disposable state
-key to prove two-client lock contention, interrupted operation recovery and
-restoration of a prior state version. Never disable locking for a backend.
-
-Learn Terraform's resource mapping, plan vs apply, state vs configuration,
-locking vs object retention, and why the managed VPS cannot hold the only copy
-of its own recovery state.
+Learn Terraform's resource mapping, plan vs apply and state vs configuration.
+A fresh empty state is appropriate after complete managed destruction, not as
+another way to manage an existing server. Follow `deploy/terraform/README.md`.
 
 ### 5. Host bootstrap and firewall
 
@@ -133,7 +129,7 @@ gallery HTTPS check to a named recipient with a short runbook. Bound Docker logs
 and journald, monitor disk and restart loops, schedule security-update reboots.
 
 **Stage-1 exit:** staging deployment, rollback, OOM isolation, reboot, dual-stack
-firewall, state locking and clean-host restore have recorded evidence; questions
+firewall, local-state recovery and clean-host restore have recorded evidence; questions
 1–15 have answers. You can explain the path and recover it without undocumented
 laptop files. Production launch still requires its own gates and owner approval.
 

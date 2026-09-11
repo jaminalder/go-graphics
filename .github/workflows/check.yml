@@ -47,8 +47,5 @@ jobs:
           terraform -chdir=deploy/terraform fmt -check
           terraform -chdir=deploy/terraform init -backend=false -input=false
           terraform -chdir=deploy/terraform validate
-          terraform -chdir=deploy/terraform-state fmt -check
-          terraform -chdir=deploy/terraform-state init -backend=false -input=false
-          terraform -chdir=deploy/terraform-state validate
       - name: Verify Compose isolation and real rendering
         run: deploy/scripts/verify-compose.sh

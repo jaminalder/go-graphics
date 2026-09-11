@@ -185,7 +185,7 @@ assume UFW alone protects a published port or disable Docker firewall management
 Terraform owns the Hetzner project resources: server, firewall, labels, public
 SSH keys and explicit IP lifecycle. It can manage DNS once the domain/provider
 is selected. Pin Terraform/provider versions and commit `.terraform.lock.hcl`.
-Keep variable examples and a backend bootstrap README. Ignore state, plan
+Keep variable examples and the local-state instructions in `deploy/terraform/README.md`. Ignore state, plan
 files, `.terraform`, secret tfvars and crash logs when implementation begins.
 
 Cloud-init bootstraps packages, users, directories and service installation
@@ -200,21 +200,14 @@ image archives and validated Compose configuration. Avoid `remote-exec` provisio
 as the normal deploy loop. Terraform's own guidance treats provisioners as a
 last resort. [Provisioner guidance](https://developer.hashicorp.com/terraform/language/provisioners).
 
-Remote Terraform state is necessary for safe operation from other machines.
-Bootstrap it independently of the application VPS and document access/recovery
-in the repository without credentials. Recommendation: use a private encrypted,
-versioned S3 backend that passes lock tests; if choosing Hetzner Object Storage,
-verify its compatibility explicitly. Terraform supports S3 lockfiles via
-`use_lockfile`; S3-compatible storage is not a guarantee of correct concurrent
-locking. Object retention lock is a different feature.
-[S3 backend contract](https://developer.hashicorp.com/terraform/language/backend/s3).
-
-Test two simultaneous lock acquisitions, interrupted apply recovery and state
-version restoration before production. If the candidate backend fails, choose
-a supported remote-state service; never silently disable locking. HCP Terraform
-with local execution is an alternative, with its account/pricing decision
-separate from the VPS. Keeping only local state or the only state copy on the
-managed VPS fails the cross-machine/recovery requirement.
+Terraform uses local state for one operator and one production VPS. Its ignored
+`deploy/terraform/terraform.tfstate` records resource IDs; it is not application
+data. Keep it while resources exist and back it up outside the checkout and VPS.
+Use one operator checkout, with no concurrent independent states. A machine
+change requires transferring the latest state, not starting an empty inventory.
+After a complete managed destroy, the repository, credentials, SSH key and release
+are sufficient for a fresh apply. No object storage or remote-lock exercise is
+required. See [the setup instructions](../../deploy/terraform/README.md).
 
 Terraform `sensitive` hides presentation, not state contents. Use environment
 or credential mechanisms for backend/provider tokens; restrict state and plan

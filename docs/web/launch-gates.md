@@ -20,7 +20,7 @@ Local image checks do not constitute verification of the target host.
 | Security | Host/Origin/CSRF/body/form bounds, strict recipe allowlist, no GET rendering; adversarial HTTP/runtime tests recorded in implementation log |
 | Capacity | Named 600px preview/1200px download tiers; target-host 100-seed/configuration-class CPU/p50/p95/p99/RSS/bytes and saturation results pending |
 | Infrastructure | One CX23 and its key/firewall/IPs are deployed; HTTP at the assigned IPv4 responds successfully. Production-only destroy/apply rehearsal and domain/TLS verification remain pending |
-| State protection | Owner reports bucket setup complete; plan succeeds after loading the SSE-C key. Lock contention and restore exercises deferred by owner; recovery proof remains pending |
+| State protection | Local state for one operator; retain and independently back up `deploy/terraform/terraform.tfstate` while resources exist. Remote bucket/locking requirements retired; fresh destroy/apply rehearsal pending |
 | Release operations | Immutable image archives/checksums, candidate smoke, activation/rollback scripts and seven local failure-path tests; target staged deployment/rollback/reboot proof pending |
 | Clean-host recovery | Runbook supplied; second-machine restore and measured two-hour objective pending |
 | Monitoring | Private metrics/logs and runbook; external alert service/recipient pending |

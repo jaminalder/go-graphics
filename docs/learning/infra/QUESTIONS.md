@@ -25,13 +25,12 @@ Infrastructure cannot invent them.
    state storage, and monitoring?**
    Status: unanswered
    Why it matters: CX23 + IPv4 + backups is already a known subtotal in
-   research.md. Object storage for Terraform state can dominate if you pick a
-   product with a high minimum.
+   research.md. Local Terraform state adds no object-storage service fee.
 
 3. **Which machine is allowed to run Terraform against production?**
    Status: unanswered
-   Why it matters: remote state is how a second laptop does not fork the
-   infrastructure. “My laptop and also CI” is two identities, two secrets.
+   Why it matters: transferring the latest local state prevents a second laptop
+   from forking the infrastructure. “My laptop and also CI” is two identities, two secrets.
 
 4. **What is the restore time you will tell yourself in public?**
    Status: unanswered
@@ -49,12 +48,11 @@ Infrastructure cannot invent them.
 
 ## Stage 1 — single server
 
-6. **Where does Terraform state live, and did locking actually work from two
-   clients?**
-   Status: unanswered
-   Why it matters: Hetzner Object Storage might be fine; “S3 compatible” is
-   not a proof. Write the experiment: two `apply`s, one waits, pull an old
-   version, restore it.
+6. **Where is the local Terraform state and its independent backup?**
+
+   Use one operator checkout. Keep the ignored state while cloud resources
+   exist; transfer the latest copy securely before moving machines. Starting
+   with empty state is only appropriate after complete managed destruction.
 
 7. **If cloud-init changes, do you replace the server or ignore `user_data`
    after first boot?**

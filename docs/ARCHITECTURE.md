@@ -624,6 +624,17 @@ Decision 67's staging/production distinction is superseded by the owner's
 single production environment. One CX23 runs the existing stop-and-replace
 Compose deployment, initially over HTTP at its assigned IP and later HTTPS at
 the domain. The installer records the apply-selected deployment in one approval
-record. The existing Terraform backend object remains unchanged despite its
-legacy staging name; the state bucket is still managed separately. A full
-server-root destroy/apply rehearsal precedes DNS setup.
+record. A full destroy/apply rehearsal precedes DNS setup. The state simplification
+below supersedes the separately managed bucket mentioned in decision 67.
+
+### Local Terraform state for one operator (2026-09-11)
+
+The owner chose a complete destroy followed by a fresh setup, with no state
+migration. Use the local backend and remove the separate bucket configuration,
+S3 credentials and remote-lock launch gates. The bucket stored Terraform's
+resource inventory, not application data; it is unnecessary for one operator.
+Keep the ignored local state while infrastructure exists, back it up outside the
+VPS and checkout, and use one operator checkout. A fresh independent state must
+not manage already-existing resources. After a complete managed destruction,
+rebuild from the repo, credentials, SSH key and retained application release.
+This configuration change does not destroy existing cloud resources.
