@@ -2,8 +2,9 @@
 
 This root manages a CX23 (x86-64), Ubuntu 24.04, in nbg1, its IPs,
 firewall and SSH key, then deploys a retained Linux amd64 release. There is
-one production environment and one VPS. It initially opens over **HTTP at the
-assigned IPv4**, without DNS. Keep Terraform running:
+one production environment and one VPS. An empty `hostname` uses **HTTP at the
+assigned IPv4**; a configured hostname uses HTTPS and requires external DNS.
+Keep Terraform running:
 its local deployment task waits for cloud-init, uploads over SSH and activates
 Compose. A successful apply includes a working site check from your machine.
 
@@ -73,8 +74,7 @@ If upload or activation fails, make a **fresh plan**, then apply it. The failed
 application task retries against the existing server. Cloud-init changes
 replace the server; selecting a different release only redeploys the app.
 A failed cloud-init bootstrap needs diagnosis or explicit server replacement;
-retrying an upload does not rerun first boot. The current host serves the
-application over HTTP at its assigned IPv4.
+retrying an upload does not rerun first boot.
 A complete destroy/apply rehearsal of this production-only configuration is
 still pending; local tests cover SSH account creation and deployment failures.
 
@@ -103,6 +103,13 @@ IPs may differ. There is no state bucket in this configuration. Server replaceme
 and destruction lose local Docker volumes: cached artwork and Caddy data.
 Visitor state is already in memory. This rebuild does not recover server-local
 data; retain required artwork/release archives outside the VPS.
+
+For the complete [destroy/recreate and Porkbun DNS procedure](../../docs/operations/provisioning.md#destroy-and-recreate-the-deployment),
+including retained release inputs, backup loss and deployment retries, see the
+operations guide. With `hostname = "singularseed.art"`, a new IP requires a
+manual update to the domain's A record (and AAAA record if present) in Porkbun.
+Terraform does not change DNS. A stale record can cause HTTPS setup or the final
+website check to fail; correct DNS, let caches expire, then run a fresh apply.
 
 ### Existing installation: transition before the rebuild
 
