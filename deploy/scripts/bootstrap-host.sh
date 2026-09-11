@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ubuntu 24.04 amd64 only. Run as root on an owner-approved staging/production host.
-# Installs the runtime; does not launch the app, write credentials, DNS, or enable UFW.
+# Run by cloud-init. Installs Docker and configures host INPUT filtering.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Run as root on the target host' >&2; exit 1; }
 . /etc/os-release
@@ -28,4 +28,24 @@ apt-get install -y \
 systemctl enable --now docker
 docker version
 docker compose version
-echo 'Runtime installed. Configure operator.env, firewall recovery, and staging approval next.'
+# Hetzner's cloud firewall is the public perimeter for Docker-published ports.
+# UFW protects host INPUT; Docker forwarding does not pass through those rules.
+python3 - <<'PY'
+import ipaddress
+import json
+import subprocess
+from pathlib import Path
+
+cidrs = json.loads(Path('/etc/art/admin-cidrs.json').read_text())
+if not cidrs:
+    raise SystemExit('At least one administrator CIDR is required')
+for cidr in cidrs:
+    ipaddress.ip_network(cidr, strict=False)
+subprocess.run(['ufw', 'default', 'deny', 'incoming'], check=True)
+for cidr in cidrs:
+    subprocess.run(['ufw', 'allow', 'from', cidr, 'to', 'any', 'port', '22', 'proto', 'tcp'], check=True)
+for port in ('80/tcp', '443/tcp'):
+    subprocess.run(['ufw', 'allow', port], check=True)
+subprocess.run(['ufw', '--force', 'enable'], check=True)
+PY
+echo 'Docker and host firewall ready. Terraform can now upload the application.'

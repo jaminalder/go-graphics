@@ -1,73 +1,114 @@
-# Cloud objects and state
+# Provision a usable staging server
 
-Terraform owns the server, primary IPs, firewall and SSH public key. Docker
-Compose owns application processes; release scripts never run through a
-Terraform provisioner. `environment` is staging by default. The selected server is **CX23 (x86-64)**
-in **nbg1 (Nuremberg)**; release images and host bootstrap target Linux x86-64.
+This root manages a CX23 (x86-64), Ubuntu 24.04, in nbg1, its IPs,
+firewall and SSH key, then deploys a retained Linux amd64 release. Staging
+opens over **HTTP at the assigned IPv4**, without DNS. Keep Terraform running:
+its local deployment task waits for cloud-init, uploads over SSH and activates
+Compose. A successful apply includes a working site check from your machine.
 
-## Access configuration
+## Inputs and prerequisites
 
-- `hcloud_token` is a sensitive Terraform input. Supply `TF_VAR_hcloud_token`
-  through your local environment or credential manager. If another workflow
-  already supplies `HCLOUD_TOKEN`, map it locally with
-  `export TF_VAR_hcloud_token="$HCLOUD_TOKEN"`; the provider now uses the explicit
-  Terraform variable. Do not put a token in the example, Git or cloud-init.
-- `ssh_public_key_path` defaults to `~/.ssh/id_ed25519.pub`. Terraform expands
-  the home path and reads the public key on the operator machine. The same
-  value registers `macbook-key` and configures the cloud-init operator user.
-  The private key is never read or uploaded.
-- `admin_cidrs` is still required: set the public IPv4/IPv6 ranges allowed to
-  reach SSH. The example documentation addresses must be replaced.
+Use Terraform 1.14.9, Python 3.9+, OpenSSH and Docker on your machine.
+`terraform.tfvars.example` documents the nonsecret inputs. Set `admin_cidrs`
+to your current public address ranges; they control SSH in Hetzner and UFW.
+`ssh_public_key_path` defaults to `~/.ssh/id_ed25519.pub`; the same key creates
+`macbook-key` and the cloud-init operator account. `ssh_identity_path` defaults
+to the matching private-key path. Native SSH uses it locally; Terraform does
+not read the private key. For a passphrase-protected key, run
+`ssh-add ~/.ssh/id_ed25519` first because deployment uses noninteractive SSH.
 
-Hetzner SSH keys are scoped to a project. In a separate Hetzner project, the
-same public key can be registered again. If `macbook-key` is already managed
-by another Terraform configuration in the **same** project, reference it as
-existing data rather than managing it twice. An unmanaged existing key can be
-imported into `hcloud_ssh_key.admin` after reviewing ownership.
+Supply `TF_VAR_hcloud_token`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+the **saved** `AWS_SSE_CUSTOMER_KEY` through your environment. The latter must
+remain the same to read existing state; do not generate a replacement key.
+The [separate state root](../terraform-state/README.md) creates the bucket once.
+Keep its bootstrap state and the encryption key backed up outside the VPS.
+Neither cloud nor S3 credentials are uploaded to the server.
 
-## State and host lifecycle
+From the repository root, build from a clean committed checkout, then select
+that retained artifact (reuse it for subsequent rebuilds):
 
-Before a real plan, create the private, versioned Hetzner state bucket with
-[the separate bootstrap configuration](../terraform-state/README.md). It also
-outputs the backend settings for this directory. Keep backend configuration
-and credentials outside Git. Supply the separate S3 credentials and the saved
-SSE-C encryption key through the environment, then initialize this backend.
-Prove lock contention from two clients, recovery after interruption, and prior
-state-version restoration in a disposable state key before provisioning.
-Do not disable locking to accommodate a backend. Provider credentials stay on
-the operator machine, never the app host or in cloud-init.
+```sh
+deploy/scripts/build-release.sh
+export TF_VAR_release_directory="$PWD/out/releases/$(git rev-parse HEAD)"
+terraform -chdir=deploy/terraform init -backend-config=backend.hcl
+terraform -chdir=deploy/terraform plan -out=infra.tfplan
+terraform -chdir=deploy/terraform apply infra.tfplan
+```
 
-Bootstrap is immutable: changes to `user_data` may require replacement. We do
-not ignore those changes. Read the saved plan; `prevent_destroy` and provider
-deletion protections intentionally stop casual replacement. Rebuild only as an
-explicit recovery/migration operation with backups and IP lifecycle reviewed.
-Updating a release uses Compose and does not change cloud-init.
+The builder refuses to overwrite an existing release. If it already exists,
+select its directory without rebuilding. Alternatively persist its absolute
+path as `release_directory` in your ignored `terraform.tfvars`. A saved plan
+pins the checksum manifest; changing the artifact causes deployment to fail.
+The release contains images and configuration, so the VPS needs no registry
+login or Git checkout. `site_url` is the resulting address.
 
-The state backend live verification, DNS ownership, administrator CIDRs, spending ceiling and
-apply remain owner decisions. The owner has created the SSH key, firewall and primary IPs. Server creation
-failed for CAX11 in nbg1; CX23 is the replacement target. Generate a fresh plan
-after this configuration change; do not reuse the partially applied plan. See [the operating runbook](../README.md).
+## What runs during apply
 
-The 2026-09-10 staging run proceeds at the owner’s request without the extra
-lock-contention and restore exercises. These remain unverified, not passed.
+1. `main.tf` creates the cloud resources and renders cloud-init.
+2. `cloud-init/user-data.yaml` creates `operator` with its explicit existing
+   primary group, disables root/password SSH and runs `bootstrap-host.sh`.
+3. Bootstrap installs the pinned Docker stack and enables UFW for host INPUT
+   traffic. The Hetzner firewall protects public traffic, including Docker
+   published ports; UFW alone does not filter Docker forwarding. Compose
+   publishes only Caddy's 80/443.
+4. `terraform_data.application` runs `provision-app.py` locally. It verifies
+   the release, waits for SSH and cloud-init, then uploads a temporary archive.
+5. The cloud-init-installed `install-release.sh` writes `/etc/art/operator.env`
+   and records the staging deployment selected by this apply. It invokes the
+   release's existing smoke/drain/activate/rollback scripts and checks the site.
 
-## First-boot SSH failure (2026-09-11)
+SSH uses trust on first connection with a host alias per Hetzner server ID,
+in ignored `out/provision/known_hosts`. Reusing an IP after replacement does
+not clash with the previous server's host key. This is first-use trust, not
+out-of-band host-key verification. Manual SSH uses your normal known-hosts file.
 
-The CX23 was created, but both operator and root SSH logins were rejected.
-The supplied public key matches the key offered by SSH and the fingerprint
-shown in Hetzner. Local reproduction with Ubuntu 24.04 and real cloud-init
-found that the existing `operator` group makes `useradd operator` fail unless
-the primary group is explicit. The template now sets `primary_group: operator`.
-The regression runs cloud-init's user/file modules and authenticates over SSH
-inside a disposable Ubuntu container: `deploy/scripts/verify-cloud-init.sh`.
+If upload or activation fails, make a **fresh plan**, then apply it. The failed
+application task retries against the existing server. Cloud-init changes
+replace the server; selecting a different release only redeploys the app.
+A failed cloud-init bootstrap needs diagnosis or explicit server replacement;
+retrying an upload does not rerun first boot. The complete remote rebuild has
+not yet been verified; local tests cover SSH account creation and deployment
+failure handling.
 
-This fixes future provisioning; it does not repair the running server.
-Use Hetzner's rescue system with `macbook-key` to access the installed disk
-over SSH and inspect its cloud-init logs. Root SSH being disabled in the
-installed OS does not disable root SSH in the separate rescue OS. The browser
-console and new SSH keys are not required for this route.
+## Replace or destroy
 
-Changing user_data triggers server replacement in this configuration. Keep
-destruction protections in place while diagnosing; do not apply a replacement
-plan merely to repair login. If rebuilding is chosen, replace only the server
-through a deliberate protection/plan workflow, preserving the IPs and bucket.
+`protect_server` defaults to false and this root has no `prevent_destroy`.
+To rebuild the server while keeping its IPs:
+
+```sh
+terraform -chdir=deploy/terraform plan -replace=hcloud_server.web -out=infra.tfplan
+terraform -chdir=deploy/terraform apply infra.tfplan
+```
+
+To remove all resources in **this root**, then recreate them:
+
+```sh
+terraform -chdir=deploy/terraform destroy
+terraform -chdir=deploy/terraform apply
+```
+
+Keep `release_directory` and the credentials available for these commands.
+Full destruction removes the server, IPs, firewall and SSH-key resource. New
+IPs may differ. The separately managed state bucket remains. Server replacement
+and destruction lose local Docker volumes: cached artwork and Caddy data.
+Visitor state is already in memory. This is disposable staging, not persistent
+data recovery; retain required artwork/release archives outside the VPS.
+
+### Existing protected server: one-time transition
+
+The current server (165431120) was created with deletion/rebuild protection.
+Disable both protections in Hetzner before applying its replacement (with the
+CLI: `hcloud server disable-protection 165431120 delete rebuild`); setting
+new defaults cannot remove protection from an old server being deleted.
+The original SSH failure was reproduced locally: Ubuntu already has the
+`operator` group, so cloud-init needs `primary_group: operator`. That fix is
+included. Replacing this server preserves its current IP resources.
+
+## Optional HTTPS and production
+
+Set `hostname` to a DNS hostname to use HTTPS; point its DNS at the assigned
+server addresses yourself. DNS is not managed here. Production requires a
+hostname and a separately supplied `/etc/art/launch-approved` record; this
+staging automation does not authorize or automate public launch approval.
+The extra state lock/recovery exercises were deferred by the owner for staging
+and remain unverified.

@@ -3,6 +3,7 @@
 Uses real cloud-init account/file modules and an SSH login over container
 loopback. No host keys, credentials, cloud APIs or published ports are used.
 """
+import base64
 import os
 from pathlib import Path
 import socket
@@ -33,7 +34,11 @@ class CloudInitAccess(unittest.TestCase):
             key = Path(directory) / "identity"
             subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
             template = (ROOT / "deploy/cloud-init/user-data.yaml").read_text()
-            cfg = yaml.safe_load(template.replace("${ssh_public_key}", key.with_suffix(".pub").read_text().strip()))
+            template = template.replace("${ssh_public_key}", key.with_suffix(".pub").read_text().strip())
+            for variable, filename in [("bootstrap_host", "bootstrap-host.sh"), ("install_release", "install-release.sh")]:
+                encoded = base64.b64encode((ROOT / "deploy/scripts" / filename).read_bytes()).decode()
+                template = template.replace("${" + variable + "}", encoded)
+            cfg = yaml.safe_load(template.replace("${admin_cidrs}", '["192.0.2.10/32"]'))
             system_cfg = yaml.safe_load(Path("/etc/cloud/cloud.cfg").read_text())
             cloud = SimpleNamespace(
                 distro=Distro("ubuntu", system_cfg["system_info"], helpers.Paths({})),
@@ -42,6 +47,12 @@ class CloudInitAccess(unittest.TestCase):
             )
             cc_users_groups.handle("users_groups", cfg, cloud, [])
             cc_write_files.handle("write_files", cfg, cloud, [])
+
+            self.assertEqual(cfg["runcmd"], [["/usr/local/sbin/art-bootstrap-host"]])
+            for installed, source in [("art-bootstrap-host", "bootstrap-host.sh"), ("art-install-release", "install-release.sh")]:
+                target = Path("/usr/local/sbin") / installed
+                self.assertEqual(target.read_bytes(), (ROOT / "deploy/scripts" / source).read_bytes())
+                self.assertEqual(target.stat().st_mode & 0o777, 0o700)
 
             Path("/run/sshd").mkdir(exist_ok=True)
             subprocess.run(["ssh-keygen", "-A"], check=True, capture_output=True)
@@ -80,4 +91,5 @@ class CloudInitAccess(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    subprocess.run(["python3", str(ROOT / "deploy/tests/test_install_release.py")], check=True)
     unittest.main()

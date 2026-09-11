@@ -78,35 +78,17 @@ on the target: a healthy laptop rehearsal cannot establish VPS capacity.
 
 ## Prepare an approved host
 
-1. Create the state bucket with [Terraform bootstrap](terraform-state/README.md),
-   then follow [Terraform state and lifecycle](terraform/README.md): SSE-C
-   encryption, versioning, two-client locking and recovery proof, then a
-   saved plan reviewed before an approved apply. Supply `TF_VAR_hcloud_token`;
-   the SSH public key defaults to
-   `~/.ssh/id_ed25519.pub` and is registered as `macbook-key`. Choose administrator
-   IPv4/IPv6 CIDRs, spending ceiling and a staging hostname. Never put tokens
-   in tfvars, cloud-init, release archives or the app containers.
-2. Cloud-init prepares Ubuntu 24.04 amd64. Run `scripts/bootstrap-host.sh` as
-   root there to install pinned Docker packages. It does not launch the app,
-   enable UFW, change DNS or create approval records. Host systemd supervises
-   Docker; there are no host `artweb`/`artrender` units or host Caddy install.
-3. Confirm console recovery. Allow SSH from the same administrator CIDRs in
-   UFW, confirm IPv6 support, then enable it. Docker-published ports can bypass
-   UFW's INPUT rules: apply forwarding policy through `DOCKER-USER` for Docker's
-   iptables backend, allow established traffic and incoming TCP 80/443, and deny
-   other unsolicited public forwarding. Reapply after Docker/host restart.
-   Test both IP families externally. Do not disable Docker firewall management.
-   See [Docker's firewall contract](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
-4. Create `/etc/art/operator.env` from `operator.env.example`, root-owned mode
-   0600. Choose `ART_ENVIRONMENT=staging` and a staging hostname for rehearsal;
-   production uses `singularseed.art`. Domain/origin are configuration, not
-   secrets. Set public binds only on the approved host. Verify A/AAAA reachability
-   and correct HTTPS separately; a local IPv4 check is insufficient.
-5. Record infrastructure/staging approval in root-owned `/etc/art/staging-approved`
-   for staging. Production requires `/etc/art/launch-approved` with the actual
-   owner's approval and [launch-gate evidence](../docs/web/launch-gates.md).
-   Staging approval does not grant artwork/public-launch approval. Scripts do
-   not fabricate either record.
+Follow [the Terraform provisioning workflow](terraform/README.md). It now creates
+and deploys usable staging in one apply, using a retained release built locally.
+Cloud-init installs Docker and enables UFW; Terraform uploads and activates the
+release over SSH. Staging defaults to HTTP at the server IP, without DNS.
+`install-release.sh` writes the runtime environment and staging approval record
+selected by that apply. Production still requires separate launch approval.
+
+The Hetzner firewall is the public perimeter for both host and Docker traffic.
+UFW controls host INPUT; Docker-published ports can bypass those rules. Compose
+publishes only 80/443 through Caddy. Keep the cloud firewall attached and do not
+publish additional services without updating this policy.
 
 Bootstrap pins Docker 29.8.0, Compose 5.4.0, containerd 2.3.5 and Buildx 0.37.0
 from Docker's signed Ubuntu repository. Image builds pin Go 1.26.8 and Caddy

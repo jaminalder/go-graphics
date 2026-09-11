@@ -30,7 +30,9 @@ jobs:
       - name: Build immutable Linux AMD64 release
         run: deploy/scripts/build-release.sh
       - name: Exercise activation and rollback failure paths
-        run: python3 deploy/tests/test_activation.py
+        run: |
+          python3 deploy/tests/test_activation.py
+          python3 deploy/tests/test_provision.py
       - name: Verify Ubuntu cloud-init SSH access
         run: deploy/scripts/verify-cloud-init.sh
       - name: Check deployment shell syntax

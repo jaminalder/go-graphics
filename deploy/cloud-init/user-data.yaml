@@ -13,6 +13,17 @@ users:
     ssh_authorized_keys:
       - ${ssh_public_key}
 write_files:
+  - path: /usr/local/sbin/art-bootstrap-host
+    permissions: '0700'
+    encoding: b64
+    content: ${bootstrap_host}
+  - path: /usr/local/sbin/art-install-release
+    permissions: '0700'
+    encoding: b64
+    content: ${install_release}
+  - path: /etc/art/admin-cidrs.json
+    permissions: '0600'
+    content: '${admin_cidrs}'
   - path: /etc/ssh/sshd_config.d/50-art.conf
     content: |
       PasswordAuthentication no
@@ -26,9 +37,4 @@ write_files:
     content: |
       Unattended-Upgrade::Automatic-Reboot "false";
 runcmd:
-  - [install, -d, -m, '0755', /opt/art/releases, /etc/art]
-  - [ufw, default, deny, incoming]
-  - [ufw, allow, '80/tcp']
-  - [ufw, allow, '443/tcp']
-  # SSH UFW allow rules and enable are owner steps after confirming cloud firewall
-  # and console recovery. Do not risk locking the administrator out in bootstrap.
+  - [/usr/local/sbin/art-bootstrap-host]

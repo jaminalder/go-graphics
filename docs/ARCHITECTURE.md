@@ -597,3 +597,23 @@ archives are historical artifacts and must not be deployed to CX23. The owner
 executes a fresh plan/apply; no server or remote state is changed by this edit.
 
 Source: [Hetzner cost-optimized servers](https://www.hetzner.com/cloud/cost-optimized/).
+
+
+### 67. Complete disposable staging deployment during Terraform apply (2026-09-11)
+
+The owner wants a rebuild to produce a usable app, with HTTP at the server IP.
+Cloud-init installs Docker and host INPUT rules; a separate terraform_data task
+uploads a retained, checksum-pinned amd64 release over native SSH and invokes
+our existing activation scripts. This supersedes the prior no-provisioners
+policy for initial deployment. Separating the task from the server means a
+failed upload/activation retries without forcing another server replacement.
+The operator machine must retain the artifact and remain connected during apply.
+Terraform handles only the SSH identity path, never the private-key contents.
+
+Staging is disposable: server/IP destruction guards are removed and server
+protection is an opt-in variable. The separate state-bucket root retains its
+own protection; server-local volumes are not durable across replacements.
+Hetzner's firewall covers public Docker traffic; UFW covers host INPUT only.
+Automatic staging deployment records the user's apply selection, while public
+production launch approval remains separate. The existing protected server
+needs a one-time protection change before this configuration can replace it.

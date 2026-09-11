@@ -19,7 +19,7 @@ Local image checks do not constitute verification of the target host.
 | Isolated execution | Actual hung/panic/overflow child tests, local Compose resource/private-path checks and real PNG generation; target Compose OOM/reboot isolation pending |
 | Security | Host/Origin/CSRF/body/form bounds, strict recipe allowlist, no GET rendering; adversarial HTTP/runtime tests recorded in implementation log |
 | Capacity | Named 600px preview/1200px download tiers; target-host 100-seed/configuration-class CPU/p50/p95/p99/RSS/bytes and saturation results pending |
-| Infrastructure | Owner created CX23 and its key/firewall/IPs. SSH access blocked; operator primary-group collision reproduced and fixed locally on 2026-09-11. Existing-host rescue/log inspection or replacement, Docker installation and public networking/TLS pending |
+| Infrastructure | Owner created CX23 and its key/firewall/IPs. SSH access blocked; operator primary-group collision reproduced and fixed locally on 2026-09-11. Automatic rebuild, Docker installation and release activation are configured for HTTP-at-IP staging; remote replacement/app verification and production TLS remain pending |
 | State protection | Owner reports bucket setup complete; plan succeeds after loading the SSE-C key. Lock contention and restore exercises deferred by owner for staging; recovery proof remains pending |
 | Release operations | Immutable image archives/checksums, candidate smoke, activation/rollback scripts and seven local failure-path tests; target staged deployment/rollback/reboot proof pending |
 | Clean-host recovery | Runbook supplied; second-machine restore and measured two-hour objective pending |
