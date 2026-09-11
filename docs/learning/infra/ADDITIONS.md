@@ -9,16 +9,15 @@ runbook for executable instructions, and launch-gates for proof still required.
 Three containers, pinned base images, static Go runtime, explicit proxy trust,
 separate resource limits/users, private Unix socket, mounted cache/TLS state,
 bounded logs, image archives and Compose smoke/drain/activation/rollback.
-Host application units are removed. Terraform environment is configurable;
+Host application units are removed. There is one production environment;
 cloud-init remains immutable. A host bootstrap script installs pinned Docker
-packages. Automatic OS reboot is disabled. Staging approval is distinct from
-public-launch approval.
+packages. Automatic OS reboot is disabled. Production starts at the server IP, with domain/DNS setup afterward.
 
 ## Stage 1 gaps to close through operation
 
-1. Choose/bootstrap independent state storage; prove two-client locking,
-   interrupted-operation recovery and restoration with actual backend semantics.
-2. Confirm total budget, DNS ownership, staging hostname, SSH CIDRs, operator
+1. Rehearse a full destroy/apply using local Terraform state. Keep its latest
+   copy independently backed up while resources exist; no state bucket is needed.
+2. Confirm total budget, DNS ownership, SSH CIDRs, operator
    machine and recovery objective. The public name/domain choice is already made.
 3. Install and verify on Ubuntu amd64. Apply Docker-aware forwarding policy,
    confirm console access, test IPv4/IPv6 refusals and reboot persistence.

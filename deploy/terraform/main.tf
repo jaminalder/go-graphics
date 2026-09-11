@@ -6,7 +6,9 @@ terraform {
       version = "= 1.68.0"
     }
   }
-  backend "s3" {}
+  backend "local" {
+    path = "terraform.tfstate"
+  }
 }
 variable "hcloud_token" {
   description = "Hetzner project API token; supply through TF_VAR_hcloud_token."

@@ -1,3 +1,7 @@
+> State setup update (2026-09-11): local Terraform state for one operator
+> supersedes the remote-state recommendations and lock-test gates below.
+> See [the current setup](../../deploy/terraform/README.md).
+
 # Primary-source research
 
 Accessed **2026-09-09**. This note records external findings used by the plan.

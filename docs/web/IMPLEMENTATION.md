@@ -1,3 +1,7 @@
+> State setup update (2026-09-11): local Terraform state for one operator
+> supersedes the remote-state recommendations and lock-test gates below.
+> See [the current setup](../../deploy/terraform/README.md).
+
 > Current runtime update (2026-09-10): Docker Compose on `master` supersedes the
 > initial host-unit deployment below. See ADR 0004 and deploy/README.md. Earlier
 > worktree and systemd verification entries are historical evidence only.

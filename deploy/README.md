@@ -186,9 +186,9 @@ verify permissions, certificates and renewal. Do not store the only copy of
 state or recovery credentials on the managed VPS.
 
 Proposed recovery objective: two hours, still to be measured. From a second
-machine, recover backend access/state, rebuild an approved host, install Docker,
+machine, recover the latest local Terraform state, rebuild an approved host, install Docker,
 restore operator files and TLS volumes, load a retained release and activate it.
 Review IP/DNS lifecycle, verify HTTPS, render and download an image, reboot and
 check again. Record operator, elapsed time, state version, image IDs, release and
-gaps. Linux amd64 OOM, reboot, dual-stack firewall, live TLS/renewal, state locking
+gaps. Linux amd64 OOM, reboot, dual-stack firewall, live TLS/renewal, local-state recovery
 and clean-host restore remain target-host launch gates.

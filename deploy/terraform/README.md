@@ -18,12 +18,17 @@ to the matching private-key path. Native SSH uses it locally; Terraform does
 not read the private key. For a passphrase-protected key, run
 `ssh-add ~/.ssh/id_ed25519` first because deployment uses noninteractive SSH.
 
-Supply `TF_VAR_hcloud_token`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
-the **saved** `AWS_SSE_CUSTOMER_KEY` through your environment. The latter must
-remain the same to read existing state; do not generate a replacement key.
-The [separate state root](../terraform-state/README.md) creates the bucket once.
-Keep its bootstrap state and the encryption key backed up outside the VPS.
-Neither cloud nor S3 credentials are uploaded to the server.
+Supply `TF_VAR_hcloud_token` through your environment. No object storage,
+S3 credentials or encryption key is needed; the app has no database or cloud
+storage dependency. The cloud token is not uploaded to the server.
+
+Terraform keeps its resource inventory in `deploy/terraform/terraform.tfstate`,
+ignored by Git. Keep this file while infrastructure exists and back it up
+outside this checkout and the VPS after applies. Use one operator checkout:
+do not apply from another worktree or machine with fresh state against existing
+resources. To move machines, transfer the latest local state securely first.
+After a complete destroy, a fresh checkout can rebuild from the repo, credentials,
+SSH key and retained release alone.
 
 From the repository root, build from a clean committed checkout, then select
 that retained artifact (reuse it for subsequent rebuilds):
@@ -31,7 +36,7 @@ that retained artifact (reuse it for subsequent rebuilds):
 ```sh
 deploy/scripts/build-release.sh
 export TF_VAR_release_directory="$PWD/out/releases/$(git rev-parse HEAD)"
-terraform -chdir=deploy/terraform init -backend-config=backend.hcl
+terraform -chdir=deploy/terraform init
 terraform -chdir=deploy/terraform plan -out=infra.tfplan
 terraform -chdir=deploy/terraform apply infra.tfplan
 ```
@@ -94,18 +99,24 @@ terraform -chdir=deploy/terraform apply infra.tfplan
 
 Keep `release_directory` and the credentials available for these commands.
 Full destruction removes the server, IPs, firewall and SSH-key resource. New
-IPs may differ. The separately managed state bucket remains. Server replacement
+IPs may differ. There is no state bucket in this configuration. Server replacement
 and destruction lose local Docker volumes: cached artwork and Caddy data.
 Visitor state is already in memory. This rebuild does not recover server-local
 data; retain required artwork/release archives outside the VPS.
 
 ### Existing installation: transition before the rebuild
 
-Keep the existing ignored `backend.hcl` and its exact bucket and key. The
-existing key may be `singular-seed/staging.tfstate`: this is only an object
-name, not a second environment. **Do not rename it or initialize an empty
-production state.** Keep the same credentials and saved SSE-C encryption key.
-The backend example retains the legacy key for this reason.
+This is a fresh setup after destruction, not a state migration. If the old
+infrastructure still exists, destroy it using revision `cabf554` with its
+existing backend configuration and credentials **before** initializing this
+configuration. Keep the old state bucket until that destroy finishes; removing
+these source files does not delete any existing bucket or cloud resource.
+
+After the old infrastructure has been destroyed, an already initialized checkout
+uses `terraform -chdir=deploy/terraform init -reconfigure` to forget the previous
+backend. A fresh checkout uses plain `init`. Do not pass `backend.hcl` or use
+`-migrate-state`. Existing ignored backend/cache files are not removed by this
+cleanup.
 
 Remove `environment` from your ignored `terraform.tfvars`. During the planned
 full rebuild, set `name = "singular-seed"`; the old `singular-seed-staging` name
@@ -132,4 +143,3 @@ IPv4. Publish AAAA only after IPv6 access is verified. Set `hostname` to the
 domain and make a fresh plan/apply. The same production server is redeployed
 with an HTTPS origin; Caddy manages certificates. DNS is not managed here.
 There is no environment switch or separate public-launch approval file.
-State lock contention and recovery exercises remain unverified.
