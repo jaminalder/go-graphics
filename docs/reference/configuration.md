@@ -14,6 +14,7 @@
 | `ART_S3_PREFIX` | `artifacts` | Application-owned object prefix, explicitly bound to database |
 | `ART_S3_LOCAL` | `false` | Explicit disposable development allowance for HTTP S3 |
 | `ART_LOG_LEVEL` | `info` | Structured text logging: debug, info, warn or error |
+| `ART_INSTANCE_NAME` | OS/Docker hostname | Optional explicit process label; boot ID remains unique. Default Compose display names are resolved by the host-side monitor |
 | `GOMAXPROCS` | Go runtime default | Runtime CPU parallelism; Compose sets renderer to 2 |
 
 Both service pgx pools currently allow eight connections; web's result listener uses another dedicated session. PostgreSQL Compose caps connections at 40. These are code/Compose limits, not environment knobs. Expensive-operation quotas are shared in SQL; read/asset quotas remain per web process. Generation admission is changed through CLI controls rather than environment initialization.

@@ -17,6 +17,10 @@ test: ## Run all tests
 test-persistence: ## Run real PostgreSQL/River/S3 concurrency and restart tests
 	bash deploy/scripts/test-persistence.sh
 
+.PHONY: watch
+watch: ## Watch the running local studio with actual Docker container names
+	python3 deploy/scripts/watch.py
+
 lint: ## Run golangci-lint
 	golangci-lint run
 

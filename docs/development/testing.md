@@ -2,6 +2,8 @@
 
 ## Persistent runtime
 
+Monitoring coverage includes version-1-to-2 migration with retained sessions, producer/claimant attribution, distinct restart boots, stale/stopped presence, old outstanding jobs and legacy metadata. `python3 deploy/tests/test_watch.py` tests local/hosted naming and discovery changes. Compose tests execute the actual helper and scale renderer replicas 1 → 2 → 1, verify unique identities/full names, and reject public `/monitor` access.
+
 `make test-persistence` starts disposable PostgreSQL/S3 and runs race-enabled tests for transactional admission/replay, actual PNG publication, stale-attempt rejection, River leader handover/rescue, listener reconnect, retention/cleanup and database error semantics. `make check-compose` verifies runtime roles, network/resource boundaries, rendering through Caddy and service recreation. Browser tests exercise SSE and no-JavaScript journeys on the same topology. See [implementation evidence](../plans/postgresql/implementation.md).
 
 ## Standard pre-commit gate

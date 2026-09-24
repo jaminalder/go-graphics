@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
@@ -93,7 +94,12 @@ func (q *QueueTx) Admit(owner string, requests []renderjob.Request) ([]string, e
 			if outstanding >= 9 {
 				return nil, renderjob.ErrBusy
 			}
-			job, err := q.DB.River.InsertTx(ctx, tx, RenderArgs{id, build}, &river.InsertOpts{Queue: Queue(build), MaxAttempts: 3})
+			instance := q.DB.Instance
+			metadata, err := json.Marshal(map[string]string{"producer_id": instance.ID, "producer_name": instance.Name, "producer_hostname": instance.Hostname, "producer_build": build})
+			if err != nil {
+				return nil, err
+			}
+			job, err := q.DB.River.InsertTx(ctx, tx, RenderArgs{id, build}, &river.InsertOpts{Queue: Queue(build), MaxAttempts: 3, Metadata: metadata})
 			if err != nil {
 				return nil, err
 			}

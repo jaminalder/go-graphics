@@ -29,7 +29,7 @@ def request(path, headers=None):
 def main():
     assert request("/")[0] == 200
     assert request("/", {"Host": "attacker.invalid"})[0] != 200
-    for path in ("/metrics", "/ready", "/health/live", "/generation/off"):
+    for path in ("/metrics", "/monitor", "/ready", "/health/live", "/generation/off"):
         assert request(path)[0] == 404, path
     # Visitor-supplied proxy headers do not alter routing or canonical origin.
     assert request("/", {"X-Art-Client": "192.0.2.4", "X-Forwarded-Host": "attacker.invalid"})[0] == 200
@@ -49,6 +49,20 @@ def main():
     assert all(m["Destination"] != "/var/run/docker.sock" for c in containers for m in c["Mounts"])
     assert not any(m["Destination"] == "/run/art" for c in containers for m in c["Mounts"])
     compose("exec", "-T", "web", "/app/artctl", "ready")
+    status = json.loads(compose("exec", "-T", "web", "/app/artctl", "status", "--json").stdout)
+    assert {i["role"] for i in status["instances"]} == {"web", "renderer"}
+    watch = subprocess.run(["python3", "deploy/scripts/watch.py", "--project", os.environ["ART_COMPOSE_PROJECT"], "--once"], check=True, capture_output=True, text=True)
+    assert os.environ["ART_COMPOSE_PROJECT"] + "-web-1" in watch.stdout
+    assert os.environ["ART_COMPOSE_PROJECT"] + "-renderer-1" in watch.stdout
+    compose("up", "-d", "--no-build", "--scale", "renderer=2", "--wait", "renderer")
+    status = json.loads(compose("exec", "-T", "web", "/app/artctl", "status", "--json").stdout)
+    renderers = [i for i in status["instances"] if i["role"] == "renderer" and i["status"] == "live"]
+    assert len(renderers) == 2 and renderers[0]["id"] != renderers[1]["id"]
+    watch = subprocess.run(["python3", "deploy/scripts/watch.py", "--project", os.environ["ART_COMPOSE_PROJECT"], "--once"], check=True, capture_output=True, text=True)
+    assert os.environ["ART_COMPOSE_PROJECT"] + "-renderer-2" in watch.stdout
+    compose("up", "-d", "--no-build", "--scale", "renderer=1", "--wait", "renderer")
+    status = json.loads(compose("exec", "-T", "web", "/app/artctl", "status", "--json").stdout)
+    assert len([i for i in status["instances"] if i["role"] == "renderer" and i["status"] == "live"]) == 1
     # Ordinary runtime credentials cannot perform DDL; owner administration is explicit.
     denied = compose("run", "--rm", "--no-deps", "--entrypoint", "/app/artdb", "web", "migrate", check=False)
     assert denied.returncode != 0, "web role unexpectedly migrated schema"
@@ -74,6 +88,9 @@ def main():
     for path in images:
         with opener.open(origin + path, timeout=10) as response:
             assert response.read().startswith(b"\x89PNG\r\n\x1a\n")
+    status = json.loads(compose("exec", "-T", "web", "/app/artctl", "status", "--json").stdout)
+    assert status["queue"]["completed_last_hour"] == 4
+    assert status["flow"][0]["producer"]["id"] and status["flow"][0]["renderer"]["id"]
     compose("up", "-d", "--no-build", "--force-recreate", "--wait", "web")
     with opener.open(exploration, timeout=10) as response:
         assert len(re.findall(r'src="(/images/[^\"]+)"', response.read().decode())) == 4

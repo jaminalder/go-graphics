@@ -13,6 +13,7 @@ This is a source navigation map, not a diagram of deployable services. The [C4 c
 | [persistence](../../internal/persistence/database.go) | SQL/River transactions, result events, admission and artifact lifecycle |
 | [objectstore](../../internal/objectstore/store.go) | Private S3 upload/read/cleanup with digest verification |
 | [cmd/artctl](../../cmd/artctl/main.go) | Private health, generation and metrics command |
+| [terminal monitor](../../cmd/artctl/monitor.go) | Read-only status/watch display; [host helper](../../deploy/scripts/watch.py) adds actual Docker container names |
 | [artwork](../../internal/artwork/registry.go) | Fresh local factories; canonical public edition recipes in [recipe.go](../../internal/artwork/recipe.go) |
 | [publish](../../internal/publish/catalog.go) | Curated public artwork/style/colour allowlist and fixed renditions |
 | [explore](../../internal/explore/explore.go) | Deterministic candidate planning, parent traits and seed policies |

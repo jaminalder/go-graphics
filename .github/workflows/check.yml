@@ -20,6 +20,7 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
       - run: make check
       - run: make test-persistence
+      - run: python3 deploy/tests/test_watch.py
       - run: go test -race ./internal/artwork ./internal/explore ./internal/publish ./internal/renderjob ./internal/studio ./internal/web ./cmd/staticart
       - run: govulncheck ./...
       - name: Real browser journeys and failure recovery

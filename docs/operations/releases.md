@@ -4,6 +4,8 @@ The release pipeline packages committed source and immutable images. It replaces
 
 See [persistence operations](persistence.md) for initial data/credential bootstrap. Activation pauses admission, drains jobs, stops consumers, migrates, increments build epoch, starts matching services and restores prior admission. Rollback checks schema compatibility; it never down-migrates or automatically starts a legacy binary after persistence cutover. Installer failure does not override that recovery by blindly restarting a symlink.
 
+The monitoring change adds application migration 2. It preserves version-1 data, but version-1 binaries' exact schema check rejects it. After that migration, rollback requires a compatible version-2 build; this release is not automatically rollback-compatible with `8ce7cd6`. The [monitoring runbook](monitoring.md) explains local rebuild and hosted command use.
+
 ## Build a reviewable release
 
 From a clean committed checkout with Docker available:

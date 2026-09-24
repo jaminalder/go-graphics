@@ -22,6 +22,11 @@ import (
 //go:embed schema.sql
 var schema string
 
+//go:embed monitor-schema.sql
+var monitorSchema string
+
+func applicationMigrations() []string { return []string{schema, monitorSchema} }
+
 // ErrUnavailable keeps backend diagnostics out of public responses.
 var ErrUnavailable = errors.New("the studio storage is temporarily unavailable; please try again")
 
@@ -30,9 +35,10 @@ const Lifetime = 90 * 24 * time.Hour
 
 // DB contains bounded connections and an insert-only River client.
 type DB struct {
-	Pool  *pgxpool.Pool
-	River *river.Client[pgx.Tx]
-	Build string
+	Pool     *pgxpool.Pool
+	River    *river.Client[pgx.Tx]
+	Build    string
+	Instance Instance
 }
 
 // TokenHash converts a bearer cookie into a non-secret database identifier.
@@ -124,33 +130,62 @@ func (d *DB) Migrate(ctx context.Context) error {
 	if _, err = tx.Exec(ctx, "CREATE TABLE IF NOT EXISTS art_schema(version integer PRIMARY KEY, checksum text NOT NULL)"); err != nil {
 		return err
 	}
-	var checksum string
-	err = tx.QueryRow(ctx, "SELECT checksum FROM art_schema WHERE version=1").Scan(&checksum)
-	want := TokenHash(schema)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		if _, err = tx.Exec(ctx, schema); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, "INSERT INTO art_schema VALUES(1,$1)", want); err != nil {
-			return err
-		}
-	case err != nil:
+	var latest int
+	if err = tx.QueryRow(ctx, "SELECT coalesce(max(version),0) FROM art_schema").Scan(&latest); err != nil {
 		return err
-	case checksum != want:
-		return errors.New("application migration checksum mismatch")
+	}
+	if latest > len(applicationMigrations()) {
+		return errors.New("database schema is newer than this release")
+	}
+	for i, sql := range applicationMigrations() {
+		var checksum string
+		err = tx.QueryRow(ctx, "SELECT checksum FROM art_schema WHERE version=$1", i+1).Scan(&checksum)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			if latest >= i+1 {
+				return errors.New("application migration history has a gap")
+			}
+			if _, err = tx.Exec(ctx, sql); err != nil {
+				return err
+			}
+			if _, err = tx.Exec(ctx, "INSERT INTO art_schema VALUES($1,$2)", i+1, TokenHash(sql)); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		case checksum != TokenHash(sql):
+			return errors.New("application migration checksum mismatch")
+		}
 	}
 	return tx.Commit(ctx)
 }
 
 // CheckSchema rejects a different application or River migration version.
 func (d *DB) CheckSchema(ctx context.Context) error {
-	var version int
-	var checksum string
-	if err := d.Pool.QueryRow(ctx, "SELECT version,checksum FROM art_schema ORDER BY version DESC LIMIT 1").Scan(&version, &checksum); err != nil {
+	rows, err := d.Pool.Query(ctx, "SELECT version,checksum FROM art_schema ORDER BY version")
+	if err != nil {
 		return err
 	}
-	if version != 1 || checksum != TokenHash(schema) {
+	count := 0
+	migrations := applicationMigrations()
+	for rows.Next() {
+		var version int
+		var checksum string
+		if err = rows.Scan(&version, &checksum); err != nil {
+			rows.Close()
+			return err
+		}
+		count++
+		if version != count || count > len(migrations) || checksum != TokenHash(migrations[count-1]) {
+			rows.Close()
+			return errors.New("incompatible application schema")
+		}
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if count != len(migrations) {
 		return errors.New("incompatible application schema")
 	}
 	m, err := rivermigrate.New(riverpgxv5.New(d.Pool), nil)

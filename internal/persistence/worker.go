@@ -178,6 +178,9 @@ func (w *Worker) begin(ctx context.Context, job *river.Job[RenderArgs], generati
 }
 
 func (w *Worker) terminal(ctx context.Context, j *river.Job[RenderArgs], generation string, cause error) error {
+	if err := river.MetadataSet(ctx, "art_terminal_outcome", "failed"); err != nil {
+		return err
+	}
 	tx, err := w.DB.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -285,6 +288,7 @@ func NewWorkerClient(d *DB, objects *objectstore.Store, renderer renderjob.Rende
 	river.AddWorker(workers, &Worker{DB: d, Objects: objects, Renderer: renderer})
 	river.AddWorker(workers, &Maintainer{DB: d, Objects: objects})
 	client, err := river.NewClient(riverpgxv5.New(d.Pool), &river.Config{
+		ID:      d.Instance.ID,
 		Workers: workers, Queues: map[string]river.QueueConfig{Queue(d.Build): {MaxWorkers: 1}, "maintenance": {MaxWorkers: 1}},
 		JobTimeout: 90 * time.Second, RescueStuckJobsAfter: 2 * time.Minute, MaxAttempts: 3, FetchPollInterval: 30 * time.Second,
 		ReindexerIndexNames: []string{}, CompletedJobRetentionPeriod: 24 * time.Hour, CancelledJobRetentionPeriod: 24 * time.Hour, DiscardedJobRetentionPeriod: 7 * 24 * time.Hour,

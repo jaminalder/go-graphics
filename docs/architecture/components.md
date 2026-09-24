@@ -40,6 +40,8 @@ Key: the enclosing box is one application; inside boxes are components, outside 
 
 [web](../../internal/web/web.go) binds request context to [studio.Persistent](../../internal/studio/persistent.go). It loads one bounded aggregate and invokes the existing [studio domain](../../internal/studio/studio.go) with a [QueueTx](../../internal/persistence/queue.go) sharing that transaction. Navigation, replay and job admission commit together. The legacy in-memory Manager and socket client remain for existing unit tests; production commands do not instantiate them.
 
+Private admin HTTP also exposes a read-only [monitor snapshot](../../internal/persistence/monitor.go), consumed by artctl rather than the public browser. Web and renderer write boot-specific presence records; enqueue stores producer metadata. The [host-side terminal helper](../../deploy/scripts/watch.py) resolves Docker names, without adding a monitoring container or application access to Docker.
+
 ## Renderer service components
 
 Scope: the `artrender` parent process.

@@ -54,6 +54,7 @@ Success redirects with 303. Revisions are nonnegative; commands validate ownersh
 | --- | --- | --- |
 | `GET /ready` | 204 only if renderer health succeeds with the matching build; otherwise 503 | `ready` |
 | `GET /metrics` | Four queue/cache numeric counters | `metrics` |
+| `GET /monitor` | Bounded read-only JSON queue, instance and producer/last-renderer snapshot; private only | `status`, `watch` |
 | `POST /generation/off` | Disable new admission; 204 | `generation-off` |
 | `POST /generation/on` | Enable admission; 204 | `generation-on` |
 

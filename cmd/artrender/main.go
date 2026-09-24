@@ -16,7 +16,6 @@ import (
 	"github.com/jaminalder/go-graphics/internal/objectstore"
 	"github.com/jaminalder/go-graphics/internal/persistence"
 	"github.com/jaminalder/go-graphics/internal/renderjob"
-	"github.com/jaminalder/go-graphics/internal/studio"
 )
 
 var build = "development"
@@ -47,6 +46,9 @@ func run() error {
 	if err = db.CheckSchema(ctx); err != nil {
 		return err
 	}
+	if err = db.Identify("renderer"); err != nil {
+		return err
+	}
 	objects, err := objectstore.FromEnv()
 	if err != nil {
 		return err
@@ -65,7 +67,8 @@ func run() error {
 	if err = client.Start(context.Background()); err != nil {
 		return err
 	}
-	id := studio.Token()
+	id := db.Instance.ID
+	slog.Info("instance started", "instance", id, "hostname", db.Instance.Hostname, "name", db.Instance.Name)
 	var ready atomic.Bool
 	done := make(chan struct{})
 	go func() {
@@ -76,6 +79,9 @@ func run() error {
 			check, cancel := context.WithTimeout(ctx, 5*time.Second)
 			ok := objects.Health(check) == nil
 			_, e := db.Pool.Exec(check, "INSERT INTO art_renderers(id,build,touched,storage_ok) VALUES($1,$2,now(),$3) ON CONFLICT(id) DO UPDATE SET touched=now(),storage_ok=excluded.storage_ok", id, build, ok)
+			if e == nil {
+				e = db.Heartbeat(check, &ok)
+			}
 			ready.Store(ok && e == nil)
 			cancel()
 			select {
@@ -112,5 +118,6 @@ func run() error {
 	}
 	_ = srv.Shutdown(shutdown)
 	_, _ = db.Pool.Exec(shutdown, "DELETE FROM art_renderers WHERE id=$1", id)
+	_ = db.StopInstance(shutdown)
 	return nil
 }

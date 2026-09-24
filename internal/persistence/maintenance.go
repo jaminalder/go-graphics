@@ -87,6 +87,9 @@ func (m *Maintainer) Work(ctx context.Context, _ *river.Job[MaintenanceArgs]) er
 	if _, err = tx.Exec(ctx, "DELETE FROM art_renderers WHERE touched<now()-interval '1 day'"); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, "DELETE FROM art_instances WHERE touched<now()-interval '8 days'"); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, "DELETE FROM art_uploads WHERE state='deleting' AND deleted_at<now()-interval '7 days' AND created<now()-interval '8 days'"); err != nil {
 		return err
 	}

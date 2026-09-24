@@ -34,11 +34,13 @@ Bucket binding stores the exact endpoint/bucket/prefix in PostgreSQL. Web, rende
 - `web-database`, `renderer-database`: SCRAM login strings, root:10000 mode 0440; distinct login roles with the same application/River table DML and sequence grants. They cannot create schema objects or modify migration records. They are not row-level or producer-versus-consumer authorization boundaries.
 - `web-objects`, `renderer-objects`: root:10000 mode 0440. Children receive a sanitized environment and pipes, but sharing a container is not a hostile-code sandbox.
 
-Application startup checks the initial checksummed application migration and exact pinned River migration set. `artdb migrate` uses River's supported migrator and an advisory deployment lock. Runtime processes never migrate automatically. The application migrator currently handles the initial schema, not a general numbered-migration series; future schema changes must extend it with reviewed migrations instead of editing an applied checksum. River automatic reindexing is disabled to avoid granting runtime DDL rights.
+Application startup checks every ordered application migration/checksum and the exact River migration set. `artdb migrate` serializes both under an advisory lock; runtime never migrates automatically. Migration 2 adds monitoring without modifying version 1. The previous binary's exact schema check rejects version 2, so rollback requires a compatible build. River automatic reindexing stays disabled to avoid runtime DDL rights.
 
 Changing `POSTGRES_PASSWORD_FILE` does not rotate an initialized role. Explicit role/password changes and matching secret replacement are required. Do not overwrite generated secret files casually. The installer rewrites `operator.env` but preserves `storage.env` and the secret directory.
 
 ## CLI controls
+
+Use `make watch` locally or `sudo python3 /opt/art/current/deploy/scripts/watch.py --project singular-seed` on the VPS for the live queue/instance/producer-to-renderer view with Docker names. [Terminal monitoring](monitoring.md) explains counts, naming and direct `artctl status/watch` commands.
 
 ```sh
 sudo bash /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current ps

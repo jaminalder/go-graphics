@@ -9,6 +9,9 @@ bash deploy/scripts/browser-server.sh
 
 ## Health and controls
 
+- `make watch` locally / `sudo python3 /opt/art/current/deploy/scripts/watch.py --project singular-seed` on VPS: [terminal monitoring](monitoring.md) with full Docker names.
+- `artctl status [--json]` / `artctl watch [--interval 2s]`: private queue/instance/flow monitoring inside web.
+
 - `artctl live`: process-local web liveness.
 - `artctl ready`: both schemas and a matching recent renderer/storage-health record in PostgreSQL.
 - `artctl renderer-live` / `renderer-ready`: renderer-local HTTP at loopback `:8082`.

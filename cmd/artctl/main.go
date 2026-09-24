@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -20,8 +22,13 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && (args[0] == "watch" || args[0] == "status") {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return monitorCommand(ctx, args, os.Stdout)
+	}
 	if len(args) != 1 {
-		return errors.New("usage: artctl live|ready|renderer-ready|metrics|generation-off|generation-on")
+		return errors.New("usage: artctl live|ready|renderer-ready|metrics|generation-off|generation-on|status [--json]|watch [--interval 2s]")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

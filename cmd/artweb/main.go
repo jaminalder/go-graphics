@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -60,6 +61,16 @@ func run() error {
 	if err = db.CheckSchema(ctx); err != nil {
 		return err
 	}
+	if err = db.Identify("web"); err != nil {
+		return err
+	}
+	if err = db.Heartbeat(ctx, nil); err != nil {
+		return err
+	}
+	presenceDone := make(chan struct{})
+	go func() { defer close(presenceDone); db.TrackWeb(ctx) }()
+	defer func() { stop(); <-presenceDone }()
+	slog.Info("instance started", "instance", db.Instance.ID, "hostname", db.Instance.Hostname, "name", db.Instance.Name)
 	objects, err := objectstore.FromEnv()
 	if err != nil {
 		return err
@@ -86,6 +97,18 @@ func run() error {
 		return errors.New("admin listener must be loopback")
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /monitor", func(w http.ResponseWriter, r *http.Request) {
+		check, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		snapshot, err := db.Monitor(check)
+		if err != nil {
+			http.Error(w, "monitor storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(snapshot)
+	})
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
 		q, n, f, b, e := db.Counts(r.Context())
 		if e != nil {

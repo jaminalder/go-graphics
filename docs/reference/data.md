@@ -53,7 +53,7 @@ This is the current [application schema](../../internal/persistence/schema.sql),
 
 | Table | Stored state and relationships |
 | --- | --- |
-| `art_schema` | Initial application schema version and SQL checksum; separate from River migration history |
+| `art_schema` | Ordered application migration versions and checksums; separate from River migration history |
 | `art_control` | Singleton admission flag, active build/epoch, bound bucket location and listing cursor; serializes application admission/publication |
 | `art_workspaces` | SHA-256 cookie lookup ID, CSRF, touch/expiry timestamps and bounded JSON-encoded aggregate stored as `bytea` |
 | `art_requests` | Canonical recipe bytes, rendition/build, current River job ID, publication generation/epoch and durable outcome/timestamps |
@@ -63,8 +63,11 @@ This is the current [application schema](../../internal/persistence/schema.sql),
 | `art_uploads` | Immutable key, request/generation, bytes, pending/published/deleting state, deletion eligibility and first successful deletion timestamp; also serves as deletion outbox/tombstone |
 | `art_rate_buckets` | Hashed expensive-action quota keys, tokens and last update |
 | `art_renderers` | Boot ID, build, heartbeat time and bucket-health result for readiness |
+| `art_instances` | Migration 2: web/renderer boot ID, role, Docker hostname/optional name, build, heartbeat/stopped timestamps and storage probe |
 
 The workspace aggregate contains navigation, actions/replay, sample recipes and favourite flags. SQL pins/interests are maintained in the same transaction; no separate exploration/favourite table exists. `art_requests.job_id` deliberately has no foreign key to River history, so its cleaner cannot remove product state or be blocked by it. Object upload/deletion records are likewise retained independently for cleanup.
+
+New River execution metadata stores original producer boot/name/hostname/build; coalescing another interest does not overwrite it. `attempted_by` records River claimant IDs, now identical to renderer presence IDs. Instance records persist eight days and mark clean shutdown, enabling live/stale/stopped monitoring without confusing restarted processes. See [terminal monitoring](../operations/monitoring.md).
 
 Normal image expiry removes the database pointer first and schedules physical deletion one hour later. Pending uploads older than one hour without a published pointer become deletable. Tombstones are retried hourly and removed only after seven days since first successful deletion and eight days since creation. Listing reconciliation skips objects younger than one hour, visits at most 100 per page, and requires the explicitly bound bucket location. [Maintenance](../../internal/persistence/maintenance.go) also reaps expired identities and unreferenced requests. These are application accounting limits, not an instantaneous provider-enforced bucket quota.
 
