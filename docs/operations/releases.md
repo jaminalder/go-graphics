@@ -1,6 +1,8 @@
 # Releases and activation
 
-The release pipeline packages committed source and immutable Docker image identities. It is a single-instance replacement: web state is transient and the activation script never runs two independent production queues together.
+The release pipeline packages committed source and immutable images. It replaces one active build after draining River; unexpired studio state and pointers survive in the separate database. Builds include pinned PostgreSQL/local-S3 images for isolated smoke checks.
+
+See [persistence operations](persistence.md) for initial data/credential bootstrap. Activation pauses admission, drains jobs, stops consumers, migrates, increments build epoch, starts matching services and restores prior admission. Rollback checks schema compatibility; it never down-migrates or automatically starts a legacy binary after persistence cutover. Installer failure does not override that recovery by blindly restarting a symlink.
 
 ## Build a reviewable release
 
@@ -32,11 +34,11 @@ The angle-bracket values are placeholders. Select the intended retained commit a
 1. Acquire the deployment lock and verify release checksums and immutable image IDs.
 2. Load the archived images and validate Compose configuration.
 3. Run smoke checks against a disposable isolated project.
-4. Disable prior-generation admission and wait up to 40 seconds for its queue/running counts to reach zero.
-5. Stop the prior web and renderer before replacing the `/opt/art/current` symlink.
-6. Start the new Compose release without builds/pulls, wait for health, then check private readiness, web liveness and the canonical origin.
+4. Record prior admission policy, disable new admission and wait up to 360 one-second checks for outstanding jobs to reach zero (command time adds overhead).
+5. Stop prior web/renderer, migrate application/River schemas and refresh runtime grants, then activate the new build/epoch and replace the symlink.
+6. Start the release without builds/pulls, check health/readiness/origin, then restore prior admission policy.
 
-A failure before replacement re-enables prior generation. A failure after replacement stops the changed services and attempts to restore the prior symlink/release, or tears down the failed first installation. The script reports failure even after attempting recovery: inspect state and readiness. Installer failure also restores the prior operator environment where one existed. Release switching loses in-memory studio navigation regardless of success.
+A pre-switch failure restores prior admission where enabled. After switching, rollback requires a retained persistence-aware release passing schema checks and no unfinished work blocking epoch change. Legacy/incompatible fallback is refused; data is preserved. First-install failure tears down app services, not database volumes. The installer restores the previous operator environment on activation failure. Unexpired studio navigation survives persistent releases; only the initial legacy cutover resets it.
 
 ## Roll back deliberately
 

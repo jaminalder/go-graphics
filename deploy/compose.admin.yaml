@@ -1,0 +1,28 @@
+services:
+  admin:
+    image: ${ART_APP_IMAGE:-singular-seed-app:development}
+    entrypoint: [/app/artdb]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [database, egress]
+    environment:
+      ART_DATABASE_URL_FILE: /run/secrets/admin-database
+      ART_S3_CREDENTIALS_FILE: /run/secrets/renderer-objects
+      ART_S3_ENDPOINT: ${ART_S3_ENDPOINT:?Set image endpoint}
+      ART_S3_REGION: ${ART_S3_REGION:?Set image region}
+      ART_S3_BUCKET: ${ART_S3_BUCKET:?Set image bucket}
+      ART_S3_PREFIX: ${ART_S3_PREFIX:-artifacts}
+      ART_S3_LOCAL: ${ART_S3_LOCAL:-false}
+    secrets: [admin-database, renderer-objects]
+networks:
+  database:
+    external: true
+    name: ${ART_DATABASE_NETWORK:-singular-seed-data_default}
+  egress: {}
+secrets:
+  admin-database:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/admin-database
+  renderer-objects:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/renderer-objects

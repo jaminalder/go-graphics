@@ -2,7 +2,7 @@
 
 Singular Seed creates deterministic static artwork with Go. The local `staticart` command exposes 16 artworks and a hatch specimen book. The public studio offers curated editions of Pools, Foam and Iris through HTML forms, with rendering isolated in a separate process. The repository also contains the deployment and documentation tooling.
 
-This documentation describes the checked-in implementation. It does not assert that a particular release is currently deployed. Every architectural view links to the source that establishes its claims.
+The guides, architecture, references and operations describe the implementation, not a claim that a particular release is deployed. Current architecture links to source. The design records under `plans/` preserve approved planning history; their implementation record explicitly identifies shipped behavior, adjustments and verification gaps.
 
 ## Start here
 
@@ -28,3 +28,7 @@ The [architecture index](ARCHITECTURE.md) follows C4 from the whole system to se
 - [Build and maintain this documentation](development/documentation.md).
 
 Run `make docs` to generate the complete browser edition at `out/docs/index.html`. Every Markdown page participates in the same navigation and reading layouts. Generated output remains outside this folder.
+
+## Persistence design and implementation
+
+- [Persistence operations](operations/persistence.md) and [implementation evidence](plans/postgresql/implementation.md) cover PostgreSQL/River/S3. The approved [design](plans/postgresql/README.md) preserves planning history. Database backups and production rollout are outside this local implementation task.

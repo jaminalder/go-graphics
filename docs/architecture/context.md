@@ -20,9 +20,9 @@ Key: boxes identify people or the software system; arrows describe a person's in
 
 ## Boundary and purpose
 
-The artist explores Pools, Foam and Iris without an account. The developer can render all registered local sketches, inspect traits, sweep settings and breed candidate flocks. The operator installs immutable releases and can suspend generation while keeping existing pages and images available.
+The artist explores Pools, Foam and Iris without an account and returns to retained favourites using the same browser capability cookie. The developer renders local sketches, inspects traits and breeds candidate flocks. The operator installs releases, bootstraps private persistent storage and can suspend new generation while retained pages/images remain available.
 
-The artwork engine does not contact external software systems to generate an image. Palettes and catalogue images are included in the source/binaries. Caddy, certificate issuance and the cloud host are described in the [deployment view](deployment.md); they are hosting concerns rather than artwork business dependencies.
+The artwork computation itself needs no external API: palettes and catalogue images are embedded. The studio does require database and image storage for durable operation. Its application-owned stores appear in the [container view](containers.md); their PostgreSQL/managed-bucket hosting, Caddy and certificate infrastructure appear in [deployment](deployment.md). The CLI does not require those services.
 
 ## Evidence and next view
 

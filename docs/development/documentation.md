@@ -21,7 +21,7 @@ Markdown links to documentation become relative HTML links. Linked images, datas
 
 ## Edit source, then rebuild
 
-Use ordinary GitHub-flavored Markdown, relative links and fenced `mermaid` blocks. Each diagram states its title, scope, element types, technologies and key, following [C4 conventions](../architecture/model.md). Add a useful path from the [documentation home](../README.md); the builder's global navigation includes the page automatically. Keep facts linked to their owning source and put future plans outside the current documentation.
+Use ordinary GitHub-flavored Markdown, relative links and fenced `mermaid` blocks. Each diagram states its title, scope, element types, technologies and key, following [C4 conventions](../architecture/model.md). Add a useful path from the [documentation home](../README.md); the builder's global navigation includes the page automatically. Keep facts linked to their owning source. Put future proposals in the separate `docs/plans/` section, label their approval/implementation status, and do not rewrite current-state views as if a proposal had shipped. Link relevant current views to proposals; reconcile them when behavior is implemented.
 
 The per-sketch CLI help blocks are generated from the current application:
 

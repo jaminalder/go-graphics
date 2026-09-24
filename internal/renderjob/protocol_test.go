@@ -3,6 +3,7 @@ package renderjob_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"testing"
@@ -28,7 +29,14 @@ func TestSupervisorRejectsUnknownBuildBeforeStartingChild(t *testing.T) {
 // TestMain supplies a controlled disposable child to exercise actual OS termination.
 func TestMain(m *testing.M) {
 	if len(os.Args) == 2 && os.Args[1] == "--child" {
-		switch os.Getenv("ART_TEST_CHILD") {
+		var request renderjob.Request
+		if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
+			os.Exit(2)
+		}
+		if os.Getenv("ART_TEST_SECRET") != "" {
+			os.Exit(3)
+		}
+		switch request.Build {
 		case "hang":
 			time.Sleep(time.Hour)
 		case "panic":
@@ -51,11 +59,11 @@ func TestSupervisorReapsHungPanickingAndOversizedChildren(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q := renderjob.Request{Version: 1, Build: "test", Recipe: r.Bytes(), Tier: "preview"}
 	for _, mode := range []string{"hang", "panic", "overflow"} {
 		t.Run(mode, func(t *testing.T) {
-			t.Setenv("ART_TEST_CHILD", mode)
-			s := renderjob.Supervisor{Executable: exe, Build: "test"}
+			t.Setenv("ART_TEST_SECRET", "must-not-inherit")
+			q := renderjob.Request{Version: 1, Build: mode, Recipe: r.Bytes(), Tier: "preview"}
+			s := renderjob.Supervisor{Executable: exe, Build: mode}
 			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 			defer cancel()
 			start := time.Now()

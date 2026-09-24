@@ -13,6 +13,10 @@ build: ## Build the CLI into ./bin/staticart
 test: ## Run all tests
 	go test ./...
 
+.PHONY: test-persistence
+test-persistence: ## Run real PostgreSQL/River/S3 concurrency and restart tests
+	bash deploy/scripts/test-persistence.sh
+
 lint: ## Run golangci-lint
 	golangci-lint run
 
@@ -77,7 +81,7 @@ sweep: ## Sweep 12 seeds of a sketch into a contact sheet (S=pools)
 
 .PHONY: check-compose
 check-compose: ## Rehearse the container runtime locally (Docker + Compose required)
-	deploy/scripts/verify-compose.sh
+	bash deploy/scripts/verify-compose.sh
 
 .PHONY: docs docs-check docs-sketch-help docs-prototype
 docs: ## Build all Markdown documentation into out/docs/

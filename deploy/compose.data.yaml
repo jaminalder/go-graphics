@@ -1,0 +1,30 @@
+name: singular-seed-data
+services:
+  postgres:
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: art_owner
+      POSTGRES_DB: art
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets: [postgres-password]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    mem_limit: 512m
+    shm_size: 128m
+    command: [postgres, -c, max_connections=40, -c, shared_buffers=64MB]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U art_owner -d art"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: local
+      options: {max-size: "10m", max-file: "3"}
+networks:
+  default:
+    internal: true
+volumes:
+  postgres_data: {}
+secrets:
+  postgres-password:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/postgres-password

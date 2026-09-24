@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Use the Go version declared in [go.mod](../../go.mod): 1.26.8. The Go application has no third-party module dependencies. Formatting/linting uses `golangci-lint`; browser, container and documentation checks have separate tool requirements in [testing](../development/testing.md).
+Use Go 1.26.8 from [go.mod](../../go.mod). The studio uses pinned River, pgx and AWS S3 modules; the artwork CLI needs no database or bucket. Formatting/linting uses `golangci-lint`; see [testing](../development/testing.md) for other tools.
 
 Run commands from the repository root. `out/` and `bin/` are generated, ignored directories.
 
@@ -26,27 +26,13 @@ The sweep writes a contact sheet and manifest. [CLI guide](cli.md) explains flag
 
 ## Run the local public studio
 
-Build matching web and renderer binaries, then run the renderer and web process in separate terminals, both from the repository root:
+With Docker/Compose running:
 
 ```sh
-mkdir -p out
-go build -o out/artweb ./cmd/artweb
-go build -o out/artrender ./cmd/artrender
+bash deploy/scripts/browser-server.sh
 ```
 
-Terminal one:
-
-```sh
-./out/artrender
-```
-
-Terminal two:
-
-```sh
-./out/artweb
-```
-
-Open `http://127.0.0.1:8080` exactly: the server checks the canonical Host. Both binaries default to build identity `development` and socket `out/artrender.sock`. A parent socket directory must already exist. Stop both with Ctrl-C. This direct mode provides process deadlines and output bounds, but the Linux container limits are exercised by [Compose](../operations/running.md).
+Open `http://127.0.0.1:8280` exactly. The helper builds matching services, starts disposable PostgreSQL/S3 infrastructure, migrates, creates local credentials and starts Caddy/web/renderer. Ctrl-C removes only that helper's projects/volumes. It is a disposable development session, not permanent personal storage. For retained production data and direct-binary configuration see [persistence operations](../operations/persistence.md).
 
 The public catalogue has Pools, Foam and Iris. Local CLI availability does not automatically publish a sketch. The [studio guide](studio.md) explains the artist's workflow; [operations](../operations/running.md) covers readiness and diagnostics.
 

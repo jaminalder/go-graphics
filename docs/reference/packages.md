@@ -1,6 +1,6 @@
 # Source packages and tools
 
-This is a source navigation map, not a diagram of deployable services. The [C4 component views](../architecture/components.md) group these packages by runtime responsibility. Go source has no third-party module dependencies; web JavaScript, documentation and deployment tools have their own dependencies.
+This is a source navigation map, not a diagram of deployable services. The [C4 component views](../architecture/components.md) group packages by runtime responsibility. Studio infrastructure uses pinned River, pgx and AWS S3 modules in [go.mod](../../go.mod); artwork leaf packages remain independent. Browser, documentation and deployment tools have separate dependencies.
 
 ## Applications and orchestration
 
@@ -8,14 +8,17 @@ This is a source navigation map, not a diagram of deployable services. The [C4 c
 | --- | --- |
 | [cmd/staticart](../../cmd/staticart/main.go) | Generic local render/traits/sweep/flock command wiring |
 | [cmd/artweb](../../cmd/artweb/main.go) | Public web and private admin listeners, dependency construction, shutdown |
-| [cmd/artrender](../../cmd/artrender/main.go) | Private Unix socket supervisor and child process entry point |
+| [cmd/artrender](../../cmd/artrender/main.go) | River consumer, health and child process entry point |
+| [cmd/artdb](../../cmd/artdb/main.go) | Explicit migrations, bucket binding and release/queue controls |
+| [persistence](../../internal/persistence/database.go) | SQL/River transactions, result events, admission and artifact lifecycle |
+| [objectstore](../../internal/objectstore/store.go) | Private S3 upload/read/cleanup with digest verification |
 | [cmd/artctl](../../cmd/artctl/main.go) | Private health, generation and metrics command |
 | [artwork](../../internal/artwork/registry.go) | Fresh local factories; canonical public edition recipes in [recipe.go](../../internal/artwork/recipe.go) |
 | [publish](../../internal/publish/catalog.go) | Curated public artwork/style/colour allowlist and fixed renditions |
 | [explore](../../internal/explore/explore.go) | Deterministic candidate planning, parent traits and seed policies |
-| [studio](../../internal/studio/studio.go) | Bounded transient workspaces, revisioned actions, favourites and recovery |
-| [renderjob manager](../../internal/renderjob/manager.go) | Single queue, coalescing, cancellation, PNG validation and cache |
-| [renderjob protocol](../../internal/renderjob/protocol.go) | Client, private transport, supervisor and child boundaries |
+| [studio](../../internal/studio/persistent.go) | Persistent bounded aggregates, revisioned commands, favourites and recipe transfer |
+| [renderjob manager](../../internal/renderjob/manager.go) | Legacy in-memory queue/cache used by unit-test fixtures; not wired into production commands |
+| [renderjob protocol](../../internal/renderjob/protocol.go) | Active supervisor/child pipe boundary; retained socket client/handler used by legacy protocol tests |
 | [web](../../internal/web/web.go) | Routes, guards, embedded HTML/assets and public presentation |
 | [logging](../../internal/logging/logging.go) | Structured text service logger and bounded HTTP outcome logging |
 

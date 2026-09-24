@@ -1,6 +1,8 @@
 # Provisioning the supplied host
 
-The repository provides a concrete Terraform/Hetzner deployment, not a generic cloud abstraction. Its declared target is Ubuntu 24.04 amd64 on a `cx23` server in `nbg1` by default. Terraform provisions infrastructure **and** deploys the selected local release. These pages describe the configuration; inspect the operator's actual state to determine what is running.
+The supplied target is Ubuntu 24.04 amd64 on a Hetzner `cx23` in `nbg1`. Terraform provisions infrastructure and, when `deploy_application=true` (default), deploys a selected local release after storage bootstrap. These pages describe configuration, not the actual state of a remote host.
+
+The application now needs [persistent data bootstrap](persistence.md#fresh-vps-bootstrap) and a private managed image bucket. On a fresh VPS set `deploy_application=false` until credentials/bootstrap are prepared, then enable deployment. Credentials never enter Terraform state or cloud-init. Installer can stage a verified release and stop with bootstrap instructions. Database backup work is excluded; destroying the VPS loses PostgreSQL metadata while the separate bucket survives.
 
 ## Inputs and local tools
 
@@ -17,6 +19,7 @@ The repository provides a concrete Terraform/Hetzner deployment, not a generic c
 | `release_directory` | Required retained release directory, relative to Terraform directory or absolute |
 | `hostname` | Optional lowercase hostname; empty uses HTTP at assigned IPv4 |
 | `protect_server` | Delete/rebuild protection, default false |
+| `deploy_application` | Default true; false omits application upload/activation for fresh-host preparation; a retained release path/checksum is still required |
 
 Start from [terraform.tfvars.example](../../deploy/terraform/terraform.tfvars.example), supply the intended values, and inspect the plan before an operator applies it:
 
@@ -34,13 +37,13 @@ Terraform declares a public SSH key, cloud firewall, separately retained IPv4/IP
 
 `bootstrap-host.sh` installs Docker Engine/CLI 29.8.0, containerd 2.3.5, buildx 0.37.0 and Compose plugin 5.4.0 from the Docker Ubuntu repository. It configures UFW for host INPUT traffic. Docker-published traffic is controlled at the cloud firewall perimeter; UFW INPUT alone is not its boundary.
 
-The `terraform_data.application` task verifies the selected release manifest digest, waits for SSH/cloud-init, archives/uploads the release, and calls the installer. A failed application task can be retried without recreating the VM. Triggers include server identity, release digest, origin and provisioning script digest. SSH uses a per-server host alias and `StrictHostKeyChecking=accept-new`, with known hosts retained in `out/provision/known_hosts`. This records the first observed host key; it is not out-of-band verification of that first key.
+When enabled, `terraform_data.application[0]` verifies the release digest, waits for SSH/cloud-init, uploads and calls the installer. A `moved` block preserves the prior unindexed resource address on upgrade. Failed application tasks retry independently of VM creation. Triggers include server, release digest, origin and provisioning-script digest. SSH uses a per-server alias and `StrictHostKeyChecking=accept-new`, with known hosts in `out/provision/known_hosts`; this is first-observed trust, not out-of-band key verification.
 
-The task checks the final origin from the operator machine without HTTP proxy settings. `site_url` is emitted after application provisioning. An HTTPS hostname and HTTP-by-IPv4 are distinct configured modes; do not assume the latter encrypts traffic.
+The enabled task checks the origin without operator HTTP proxies. `site_url` is also available with deployment disabled and then denotes the intended URL, not a running application. HTTPS-hostname and HTTP-by-IPv4 modes differ; the latter does not encrypt traffic.
 
 ## Destroy and recreate the deployment
 
-A full destroy/apply cycle recreates the infrastructure and deploys the selected release, including the connections between Caddy, web and renderer. DNS is managed separately: when the server's IP changes, update the domain's records in Porkbun.
+A full destroy/apply recreates infrastructure, but a new host needs explicit persistent-data/credential bootstrap before application activation. Use `deploy_application=false` during preparation. DNS is separate: update Porkbun when addresses change.
 
 Keep the local Terraform state and input configuration, API token, SSH key pair, and the complete `release_directory` outside the VPS. The release normally lives under `out/releases/`, which is ignored by Git; a fresh checkout alone does not restore it. These local files must remain available when planning destruction and recreation because Terraform reads the public key and release checksum manifest. Applying deploys the selected retained release; it does not build the latest `master`. To deploy a newer version, [build and select a new release](releases.md) first. Before recreating, check that `admin_cidrs` still includes your public IP and unlock a passphrase-protected SSH key in your local agent.
 
@@ -49,15 +52,17 @@ From the repository root, using the existing operator checkout and state:
 ```sh
 terraform -chdir=deploy/terraform destroy
 
-# Later, recreate and deploy the selected release:
-terraform -chdir=deploy/terraform apply
+# Later, recreate the host before persistent-data bootstrap:
+terraform -chdir=deploy/terraform apply -var='deploy_application=false'
+# Follow persistence.md bootstrap, then deploy the retained release:
+terraform -chdir=deploy/terraform apply -var='deploy_application=true'
 ```
 
 Both commands show a plan and request confirmation. If server deletion protection is enabled, disable it with a normal apply before destroying; merely changing `protect_server` in the file does not change the existing server during destroy.
 
 Destruction removes the resources managed by this Terraform root: the VM, both primary IPs, cloud firewall and cloud SSH-key registration. `auto_delete = false` retains the IPs when replacing only the VM, but does not retain them during a full Terraform destroy. New addresses may differ. Domain registration, Porkbun DNS records and resources outside this state are unaffected.
 
-The server's local Docker volumes disappear, including cached artwork and Caddy certificate storage; active sessions/workspaces also disappear. Export any artwork or recipes you want to keep. Hetzner deletes automatic backups with their server; separately retained snapshots survive, but this configuration does not restore from them. See [Hetzner's backup and snapshot lifecycle](https://docs.hetzner.com/cloud/servers/backups-snapshots/faq/).
+The server's local volumes disappear, including PostgreSQL identities/favourites/jobs and Caddy certificate state. Managed image objects survive separately but cannot reconstruct the database. Export wanted recipes/images. Database backup/restore is outside this task. Existing provider VM backups are not an application restore mechanism; see [Hetzner's lifecycle](https://docs.hetzner.com/cloud/servers/backups-snapshots/faq/).
 
 ### Reconnect the domain in Porkbun
 

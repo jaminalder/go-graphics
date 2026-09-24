@@ -1,6 +1,8 @@
 # Architecture
 
-Singular Seed is one artwork creation system with two user workflows: a developer CLI and a curated public studio. Go artwork packages are shared compiled code. They are not independently deployed services. The web process owns temporary studio state, one render queue and a disposable disk cache. A private supervisor runs one disposable renderer child at a time.
+Singular Seed is one artwork creation system with two user workflows: a developer CLI and a curated public studio. Go artwork packages are shared compiled code, not independently deployed services. Web persists studio commands and River jobs in PostgreSQL. The renderer consumes River, supervises a disposable child and publishes images to a private S3 bucket; PostgreSQL contains image pointers only.
+
+The [persistence implementation record](plans/postgresql/implementation.md) documents decisions, local evidence and external validation boundaries. [Persistence operations](operations/persistence.md) is the current runbook.
 
 ## C4 views
 
@@ -27,4 +29,4 @@ A public recipe contains complete concrete artistic choices. Its rendition is se
 
 ## Source of truth
 
-The structure above follows [entry points](../cmd/artweb/main.go), [registry and recipes](../internal/artwork/recipe.go), [sketch contracts](../internal/sketch/sketch.go), [rasterization](../internal/render/render.go), [publication](../internal/publish/catalog.go) and [job admission](../internal/renderjob/manager.go). See individual views for narrower references. There is no database, external queue, account service or runtime artwork API dependency in this implementation.
+The structure follows [entry points](../cmd/artweb/main.go), [recipes](../internal/artwork/recipe.go), [publication](../internal/publish/catalog.go), [transactional admission](../internal/persistence/queue.go) and [renderer worker](../internal/persistence/worker.go). No separate broker or account service is deployed. Anonymous browser capabilities identify persistent visitors.

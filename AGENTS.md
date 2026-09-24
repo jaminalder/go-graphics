@@ -1,30 +1,37 @@
 # AGENTS.md — agent guide for go-graphics
 
-## Branch and worktree rules
+## Trunk development and artistic worktrees
 
+- Product and infrastructure development is trunk-based: work directly in
+  `master/` on `master`, including application code, deployment, tests and docs.
+  Do not create a branch/worktree for this work unless the user explicitly asks.
+  Use one writing task at a time in this checkout; never run concurrent writers.
 - Keep the coordinator in `master/` on `master`. The container above it
   (`go-graphics/master` plus `go-graphics/worktrees`) is not a repository.
-- Give every writing worker one dedicated branch and sibling worktree under
+- Branches/worktrees are for artistic experiments. Give each experiment's
+  writing worker one dedicated branch and sibling worktree under
   `../worktrees/<name>`; never share a writing checkout.
 - Create, inspect, integrate, and remove worktrees with ordinary Git commands
   from `docs/WORKTREE-WORKFLOW.md`.
 - Project skills live on `master` (`.claude/skills/`, optionally
   `.cursor/skills/`). Open Cursor on `master/` so every worker sees them.
   Do not copy skills into experiment worktrees.
-- Workers operate only in their assigned worktree, do not switch its branch,
+- Artistic workers operate only in their assigned worktree, do not switch its branch,
   and do not merge or remove worktrees.
 - Keep generated renders under `out/` in the assigned worktree. Commit only a
   deliberately selected review sheet when useful.
-- Commit coherent changes before review. For artwork changes, compare fixed
+- Prepare coherent changes for review; commit only when requested. For artwork changes, compare fixed
   seeds and visually inspect the output; passing tests is not artistic approval.
-- Integrate or discard work only after explicit user approval.
+- Integrate or discard artistic experiments only after explicit user approval.
+- Repository workflow takes precedence over generic skill instructions to create
+  branches, worktrees or PRs. Commit/push only when requested by the user.
 - Do not use hard resets, cleans, force deletion, or forced worktree removal as
   routine workflow commands. Inspect and resolve the condition Git reports.
 
 Generative static 2D art in Go. Deterministic sketches → PNG/JPEG at preview,
 web, and print resolution. Stdlib raster now; `tdewolff/canvas` later for
-vector work. Zero third-party dependencies at the moment — keep it that way
-unless a documented decision says otherwise. The public studio and its
+vector work. The studio deliberately uses pinned River/pgx and AWS S3 modules
+under the PostgreSQL decision; keep artwork leaf packages independent. The public studio and its
 deployment/tooling are documented in `docs/README.md`.
 
 ## Commands
@@ -172,7 +179,11 @@ you.
 ## Docs map (read before working on the related area)
 
 - `docs/WORKTREE-WORKFLOW.md` — container layout (`master/` + `worktrees/`),
-  native Git commands, skills, review, integration, and cleanup.
+  trunk-based product/infrastructure work and artistic experiment integration.
+- `docs/plans/postgresql/README.md` — approved persistence design/work packages;
+  `implementation.md` records evidence and adjustments. Local implementation is authorized;
+  live provider provisioning and rollout require separate permission.
+- `docs/operations/persistence.md` — current PostgreSQL/River/S3 runtime/bootstrap.
 - `docs/ARCHITECTURE.md` — C4 architecture index and core invariants;
   follow its links to components, deployment, packages and testing. Update the
   relevant current-state view when responsibilities change.

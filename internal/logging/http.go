@@ -97,6 +97,8 @@ func route(path string) (string, bool) {
 	}
 	if len(parts) == 2 {
 		switch parts[0] {
+		case "events":
+			return "/events/{exploration}", true
 		case "images":
 			return "/images/{image}", true
 		case "downloads":

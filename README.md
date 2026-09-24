@@ -13,4 +13,6 @@ make check   # Required before commits
 make docs    # Complete browser edition at out/docs/index.html
 ```
 
-Go version and application dependencies are declared in [go.mod](go.mod); the Go application currently uses only the standard library. Documentation uses Python, Pandoc and pinned Mermaid. [Development workflow](docs/development/workflow.md) and [worktree rules](docs/WORKTREE-WORKFLOW.md) explain contribution and review.
+Go version and pinned River/pgx/S3 dependencies are in [go.mod](go.mod). The CLI needs no database; the studio uses PostgreSQL and a private image bucket. See [persistence operations](docs/operations/persistence.md). Documentation uses Python, Pandoc and pinned Mermaid.
+
+Product and infrastructure development is trunk-based on `master`; branches/worktrees are reserved for artistic experiments. The [implementation record](docs/plans/postgresql/implementation.md) records decisions, local evidence and external validation boundaries.

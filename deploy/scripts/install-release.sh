@@ -48,15 +48,19 @@ mv "$operator_env" /etc/art/operator.env
 # The explicit installation records the operator's selected deployment.
 printf 'Installation selected %s with release %s\n' "$origin" "$revision" > /etc/art/deployment-approved
 chmod 0600 /etc/art/deployment-approved
-if "$next/deploy/scripts/activate-release.sh" "$revision"; then
+# A fresh host requires explicit image storage credentials. Stage the verified
+# release so bootstrap-data.sh is available without bypassing checksum checks.
+if [[ ! -f /etc/art/secrets/admin-database || ! -f /etc/art/storage.env ]]; then
+ printf 'Release staged at %s. Configure storage credentials and run bootstrap-data.sh, then retry installation.\n' "$next" >&2
+ exit 1
+fi
+if bash "$next/deploy/scripts/activate-release.sh" "$revision"; then
  printf 'Application ready at %s\n' "$origin"
 else
  status=$?
  if [[ "$had_env" == yes ]]; then
   cp "$previous_env" /etc/art/operator.env
-  if [[ -L /opt/art/current ]]; then
-   /opt/art/current/deploy/scripts/compose-release.sh /opt/art/current up -d --no-build --pull never --wait --wait-timeout 60 || true
-  fi
+   # Activation owns schema-aware recovery. Do not restart a legacy binary here.
  else
   rm -f /etc/art/operator.env
  fi

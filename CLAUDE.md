@@ -2,17 +2,21 @@
 
 # Claude Code Adapter
 
-Prepare the branch and worktree with the native Git workflow in
-`docs/WORKTREE-WORKFLOW.md` before delegating writing work. Open Cursor on
-`master/`. Set a worker's working directory to `../worktrees/<name>` when
-supported. Otherwise run every worker command with the worktree as its
-explicit working directory.
+Product and infrastructure work is trunk-based directly in `master/` on `master`,
+with one writer at a time. Do not create a branch/worktree for that work.
+Branches and worktrees are only for artistic experiments, following
+`docs/WORKTREE-WORKFLOW.md`. Open Cursor on `master/`. For artistic workers,
+set the working directory to their assigned `../worktrees/<name>` explicitly.
+Repository workflow overrides generic skill branch/worktree/PR instructions.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues and specs live as markdown under `.scratch/<feature>/`.
+Issues and specs may live as markdown under `.scratch/<feature>/`. Durable,
+owner-reviewed architecture proposals and work packages live under `docs/plans/`
+and are clearly distinguished from current-state documentation. The PostgreSQL
+proposal starts at `docs/plans/postgresql/README.md`.
 
 ### Triage labels
 

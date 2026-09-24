@@ -10,7 +10,11 @@ mkdir -p "$release_dir"
 for target in app edge; do
  docker build --platform linux/amd64 --target "$target" --build-arg "REVISION=$revision" -f deploy/Dockerfile -t "singular-seed-$target:$revision" .
 done
-docker image save -o "$release_dir/images.tar" "singular-seed-app:$revision" "singular-seed-edge:$revision"
+postgres='postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
+objects='quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e'
+docker pull --platform linux/amd64 "$postgres"
+docker pull --platform linux/amd64 "$objects"
+docker image save -o "$release_dir/images.tar" "singular-seed-app:$revision" "singular-seed-edge:$revision" "$postgres" "$objects"
 {
  printf 'ART_APP_IMAGE=%s\n' "$(docker image inspect --format '{{.Id}}' "singular-seed-app:$revision")"
  printf 'ART_EDGE_IMAGE=%s\n' "$(docker image inspect --format '{{.Id}}' "singular-seed-edge:$revision")"
@@ -20,6 +24,7 @@ git archive HEAD deploy | tar -x -C "$release_dir"
 cp web/catalog/manifest.json "$release_dir/catalogue.json"
 {
  printf 'source=%s\nplatform=linux/amd64\ngo=1.26.8\nrecipe_version=1\neditions=pools:1,foam:1,iris:1\n' "$revision"
+ printf 'persistence=1\nriver=v0.47.0\npostgres=17\n'
  docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
  docker compose version
  cat "$release_dir/images.env"

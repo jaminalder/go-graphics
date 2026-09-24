@@ -1,4 +1,4 @@
-// Command artweb serves the public studio, with one isolated renderer and no database.
+// Command artweb serves the studio and transactionally submits rendering to River.
 package main
 
 import (
@@ -15,7 +15,8 @@ import (
 	"time"
 
 	"github.com/jaminalder/go-graphics/internal/logging"
-	"github.com/jaminalder/go-graphics/internal/renderjob"
+	"github.com/jaminalder/go-graphics/internal/objectstore"
+	"github.com/jaminalder/go-graphics/internal/persistence"
 	"github.com/jaminalder/go-graphics/internal/studio"
 	"github.com/jaminalder/go-graphics/internal/web"
 )
@@ -49,19 +50,31 @@ func run() error {
 		return err
 	}
 	origin := env("ART_ORIGIN", "http://"+addr)
-	client := renderjob.NewClient(env("ART_SOCKET", "out/artrender.sock"), build)
-	jobs, err := renderjob.New(renderjob.Config{Directory: env("ART_CACHE", "out/cache"), Build: build, Renderer: client})
-	if err != nil {
-		return err
-	}
-	defer jobs.Close()
-	jobs.Enable(os.Getenv("ART_GENERATION") != "off")
-	handler, err := web.New(web.Config{Origin: origin, Studio: studio.New(jobs, build), Jobs: jobs, TrustedProxy: proxy})
-	if err != nil {
-		return err
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	db, err := persistence.OpenEnv(ctx, build)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err = db.CheckSchema(ctx); err != nil {
+		return err
+	}
+	objects, err := objectstore.FromEnv()
+	if err != nil {
+		return err
+	}
+	if err = db.CheckBucket(ctx, objects); err != nil {
+		return err
+	}
+	events := persistence.NewEvents()
+	listenerDone := make(chan struct{})
+	go func() { defer close(listenerDone); events.Run(ctx, db) }()
+	defer func() { stop(); <-listenerDone }()
+	handler, err := web.New(web.Config{Origin: origin, Studio: &studio.Persistent{DB: db}, Database: db, Objects: objects, Events: events, TrustedProxy: proxy})
+	if err != nil {
+		return err
+	}
 	srv := &http.Server{Addr: addr, Handler: logging.HTTP(slog.Default(), handler), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384, BaseContext: func(net.Listener) context.Context { return ctx }}
 	admin := &http.Server{Addr: env("ART_ADMIN_ADDR", "127.0.0.1:8081"), ReadHeaderTimeout: 3 * time.Second, WriteTimeout: 5 * time.Second}
 	adminHost, _, err := net.SplitHostPort(admin.Addr)
@@ -73,13 +86,36 @@ func run() error {
 		return errors.New("admin listener must be loopback")
 	}
 	mux := http.NewServeMux()
-	mux.Handle("GET /metrics", web.Metrics(jobs))
-	mux.HandleFunc("POST /generation/off", func(w http.ResponseWriter, _ *http.Request) { jobs.Enable(false); w.WriteHeader(204) })
-	mux.HandleFunc("POST /generation/on", func(w http.ResponseWriter, _ *http.Request) { jobs.Enable(true); w.WriteHeader(204) })
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		q, n, f, b, e := db.Counts(r.Context())
+		if e != nil {
+			http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = fmt.Fprintf(w, "art_jobs_queued %d\nart_jobs_running %d\nart_cache_files %d\nart_cache_bytes %d\n", q, n, f, b)
+	})
+	mux.HandleFunc("POST /generation/off", func(w http.ResponseWriter, r *http.Request) {
+		if e := db.Enable(r.Context(), false); e != nil {
+			http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(204)
+	})
+	mux.HandleFunc("POST /generation/on", func(w http.ResponseWriter, r *http.Request) {
+		if e := db.Ready(r.Context()); e != nil {
+			http.Error(w, "renderer unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if e := db.Enable(r.Context(), true); e != nil {
+			http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
 		check, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		if !client.Health(check) {
+		if db.Ready(check) != nil {
 			http.Error(w, "renderer unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -96,7 +132,6 @@ func run() error {
 	go func() {
 		defer close(shutdownDone)
 		<-ctx.Done()
-		jobs.Enable(false)
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(closeCtx)

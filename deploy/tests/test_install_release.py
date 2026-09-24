@@ -24,6 +24,9 @@ class InstallRelease(unittest.TestCase):
             etc.mkdir(parents=True)
             old_env = "ART_ORIGIN=http://192.0.2.9\n"
             (etc / "operator.env").write_text(old_env)
+            (etc / "storage.env").write_text("ART_S3_BUCKET=existing\n")
+            (etc / "secrets").mkdir()
+            (etc / "secrets/admin-database").write_text("retained-secret")
             activate = scripts / "activate-release.sh"
             activate.write_text("#!/bin/sh\nexit " + ("17" if fail else "0") + "\n")
             activate.chmod(0o755)
@@ -44,6 +47,7 @@ class InstallRelease(unittest.TestCase):
             installer.write_text(script)
             result = subprocess.run(["bash", str(installer), str(archive), digest, revision, origin], capture_output=True, text=True)
             env = (etc / "operator.env").read_text()
+            self.assertEqual((etc / "secrets/admin-database").read_text(), "retained-secret")
             if fail or corrupt:
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertEqual(env, old_env)

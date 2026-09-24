@@ -2,6 +2,7 @@
 package web
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
@@ -14,12 +15,15 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jaminalder/go-graphics/internal/artwork"
+	"github.com/jaminalder/go-graphics/internal/objectstore"
+	"github.com/jaminalder/go-graphics/internal/persistence"
 	"github.com/jaminalder/go-graphics/internal/publish"
 	"github.com/jaminalder/go-graphics/internal/renderjob"
 	"github.com/jaminalder/go-graphics/internal/studio"
@@ -32,8 +36,11 @@ var files embed.FS
 type (
 	Config struct {
 		Origin       string
-		Studio       *studio.Store
+		Studio       Studio
 		Jobs         *renderjob.Manager
+		Database     *persistence.DB
+		Objects      *objectstore.Store
+		Events       *persistence.Events
 		TrustedProxy netip.Addr
 	}
 	app struct {
@@ -44,6 +51,8 @@ type (
 		assets       http.Handler
 		hashes       map[string]string
 		active       chan struct{}
+		images       chan struct{}
+		streams      chan struct{}
 		limits       limiter
 	}
 	page struct {
@@ -63,6 +72,24 @@ type (
 		Failed                                         bool
 	}
 )
+
+// Studio exposes only the domain operations needed by HTTP; production is PostgreSQL-backed.
+type Studio interface {
+	Create() (studio.Workspace, error)
+	Session(string) (studio.Workspace, error)
+	Get(string, string) (studio.Exploration, error)
+	Enter(string, string, string, string, string) (string, error)
+	Favourites(string) ([]studio.Favourite, error)
+	Choices(string, string, int, string, string) error
+	Retry(string, string, int, string, string) (string, error)
+	Generate(string, string, int, string, []string, bool) (string, error)
+	Favourite(string, string, string, int, bool) error
+	Cancel(string, string, int, string) error
+	Download(string, string, string) error
+	Recovery(string) ([]json.RawMessage, error)
+	Restore(string, []json.RawMessage) (string, error)
+	Clear(string) error
+}
 
 // New constructs the HTTP handler and validates the publication catalogue without rendering.
 func New(c Config) (http.Handler, error) {
@@ -89,6 +116,8 @@ func New(c Config) (http.Handler, error) {
 		return nil, e
 	}
 	a := &app{active: make(chan struct{}, 128), hashes: hashes, cfg: c, host: u.Host, secure: u.Scheme == "https", cookie: "art-studio", templates: t, assets: http.StripPrefix("/assets/", http.FileServer(http.FS(assets))), limits: limiter{keys: map[string]bucket{}}}
+	a.images = make(chan struct{}, 4) // four bounded 16 MiB reads = at most 64 MiB of encoded image buffers
+	a.streams = make(chan struct{}, 32)
 	if a.secure {
 		a.cookie = "__Host-art-studio"
 	}
@@ -104,6 +133,10 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "private, no-store")
 	if r.Host != a.host {
 		http.Error(w, "unknown host", 421)
+		return
+	}
+	if r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/events/") {
+		a.events(w, r)
 		return
 	}
 	select {
@@ -126,6 +159,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "GET" || r.Method == "HEAD" {
+		if r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/fragments/") && !strings.HasPrefix(r.URL.Path, "/images/") && !strings.HasPrefix(r.URL.Path, "/downloads/") && !strings.HasPrefix(r.URL.Path, "/assets/") && !strings.HasPrefix(r.URL.Path, "/health/") {
+			if !a.touch(w, r) {
+				return
+			}
+		}
 		a.get(w, r)
 		return
 	}
@@ -136,6 +174,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Header.Get("Origin") != a.cfg.Origin {
 		a.fail(w, r, 403, "This action must come from this site.")
+		return
+	}
+	if !a.touch(w, r) {
 		return
 	}
 	if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
@@ -186,11 +227,46 @@ func (a *app) session(r *http.Request) (studio.Workspace, error) {
 	if e != nil {
 		return studio.Workspace{}, studio.ErrExpired
 	}
-	return a.cfg.Studio.Session(c.Value)
+	return a.store(r).Session(c.Value)
+}
+
+func (a *app) store(r *http.Request) Studio {
+	if p, ok := a.cfg.Studio.(*studio.Persistent); ok {
+		return &studio.Persistent{DB: p.DB, Context: r.Context()}
+	}
+	return a.cfg.Studio
+}
+
+func (a *app) touch(w http.ResponseWriter, r *http.Request) bool {
+	p, ok := a.store(r).(*studio.Persistent)
+	if !ok {
+		return true
+	}
+	s, err := a.session(r)
+	if errors.Is(err, studio.ErrExpired) {
+		return true
+	}
+	if err != nil {
+		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/about") {
+			return true
+		}
+		a.fail(w, r, 503, persistence.ErrUnavailable.Error())
+		return false
+	}
+	if err = p.Touch(s.Token); err != nil {
+		a.fail(w, r, 503, persistence.ErrUnavailable.Error())
+		return false
+	}
+	a.setCookie(w, s.Token)
+	return true
 }
 
 func (a *app) setCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{Name: a.cookie, Value: token, Path: "/", Secure: a.secure, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 86400})
+	age := int(persistence.Lifetime.Seconds())
+	if token == "" {
+		age = -1
+	}
+	http.SetCookie(w, &http.Cookie{Name: a.cookie, Value: token, Path: "/", Secure: a.secure, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: age})
 }
 
 func (a *app) get(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +276,12 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/health/ready" {
+		if a.cfg.Database != nil {
+			if err := a.cfg.Database.CheckSchema(r.Context()); err != nil {
+				http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+				return
+			}
+		}
 		w.WriteHeader(204)
 		return
 	}
@@ -237,7 +319,15 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		p := page{Title: "Favourites", Kind: "favourites"}
 		if session, err := a.session(r); err == nil {
 			p.CSRF = session.CSRF
-			p.Favourites, _ = a.cfg.Studio.Favourites(session.Token)
+			var err error
+			p.Favourites, err = a.store(r).Favourites(session.Token)
+			if err != nil {
+				a.failError(w, r, err, 410)
+				return
+			}
+		} else if !errors.Is(err, studio.ErrExpired) {
+			a.failError(w, r, err, 503)
+			return
 		}
 		a.page(w, r, p)
 		return
@@ -251,19 +341,22 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		p := page{Title: entry.Name, Kind: "art", Entry: entry, Action: studio.Token()}
 		if s, e := a.session(r); e == nil {
 			p.CSRF = s.CSRF
+		} else if !errors.Is(e, studio.ErrExpired) {
+			a.failError(w, r, e, 503)
+			return
 		}
 		a.page(w, r, p)
 		return
 	}
 	session, e := a.session(r)
 	if e != nil {
-		a.fail(w, r, 410, e.Error())
+		a.failError(w, r, e, 410)
 		return
 	}
 	if path == "/recovery" {
-		records, e := a.cfg.Studio.Recovery(session.Token)
+		records, e := a.store(r).Recovery(session.Token)
 		if e != nil {
-			a.fail(w, r, 410, e.Error())
+			a.failError(w, r, e, 410)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -278,9 +371,9 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/export" {
-		records, e := a.cfg.Studio.Recovery(session.Token)
+		records, e := a.store(r).Recovery(session.Token)
 		if e != nil {
-			a.fail(w, r, 410, e.Error())
+			a.failError(w, r, e, 410)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -300,9 +393,9 @@ func (a *app) get(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	x, e := a.cfg.Studio.Get(session.Token, parts[1])
+	x, e := a.store(r).Get(session.Token, parts[1])
 	if e != nil {
-		a.fail(w, r, 410, e.Error())
+		a.failError(w, r, e, 410)
 		return
 	}
 	entry, _ := publish.Get(x.Artwork)
@@ -385,6 +478,10 @@ func (a *app) allowed(r *http.Request, keys ...string) bool {
 
 func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	session, e := a.session(r)
+	if e != nil && !errors.Is(e, studio.ErrExpired) {
+		a.failError(w, r, e, 503)
+		return
+	}
 	fresh := e != nil
 	path := r.URL.Path
 	if !fresh {
@@ -395,8 +492,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if path == "/explorations" || path == "/restore" {
-		if !a.limits.allow("start:"+a.client(r), 12, 2) {
-			a.fail(w, r, 429, "Please wait a moment before starting another exploration.")
+		if !a.allowExpensive(w, r, "start:"+a.client(r), 12, 2) {
 			return
 		}
 		if path == "/explorations" && !a.allowed(r, "artwork", "style", "colour", "action") {
@@ -430,7 +526,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if fresh {
-			session, e = a.cfg.Studio.Create()
+			session, e = a.store(r).Create()
 			if e != nil {
 				a.fail(w, r, 503, e.Error())
 				return
@@ -442,9 +538,9 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		}
 		id := ""
 		if path == "/restore" {
-			id, e = a.cfg.Studio.Restore(session.Token, recovered.Recipes)
+			id, e = a.store(r).Restore(session.Token, recovered.Recipes)
 		} else {
-			id, e = a.cfg.Studio.Enter(session.Token, r.PostForm.Get("artwork"), r.PostForm.Get("style"), r.PostForm.Get("colour"), r.PostForm.Get("action"))
+			id, e = a.store(r).Enter(session.Token, r.PostForm.Get("artwork"), r.PostForm.Get("style"), r.PostForm.Get("colour"), r.PostForm.Get("action"))
 		}
 		if e != nil {
 			status := 400
@@ -454,7 +550,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 			if errors.Is(e, studio.ErrConflict) {
 				status = 409
 			}
-			a.fail(w, r, status, e.Error())
+			a.failError(w, r, e, status)
 			return
 		}
 		target := "/"
@@ -473,7 +569,10 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, 400, "Invalid form.")
 			return
 		}
-		a.cfg.Studio.Clear(session.Token)
+		if err := a.store(r).Clear(session.Token); err != nil {
+			a.failError(w, r, err, 503)
+			return
+		}
 		a.setCookie(w, "")
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -516,11 +615,11 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 	target := "/explorations/" + id
 	switch operation {
 	case "choices":
-		e = a.cfg.Studio.Choices(session.Token, id, revision, r.PostForm.Get("style"), r.PostForm.Get("colour"))
+		e = a.store(r).Choices(session.Token, id, revision, r.PostForm.Get("style"), r.PostForm.Get("colour"))
 	case "batches":
-		_, e = a.cfg.Studio.Retry(session.Token, id, revision, r.PostForm.Get("action"), r.PostForm.Get("batch"))
+		_, e = a.store(r).Retry(session.Token, id, revision, r.PostForm.Get("action"), r.PostForm.Get("batch"))
 	case "similar":
-		_, e = a.cfg.Studio.Generate(session.Token, id, revision, r.PostForm.Get("action"), []string{r.PostForm.Get("sample")}, false)
+		_, e = a.store(r).Generate(session.Token, id, revision, r.PostForm.Get("action"), []string{r.PostForm.Get("sample")}, false)
 	case "favourites":
 		destination := r.PostForm.Get("return")
 		if destination != "" && destination != "sample" && destination != "favourites" {
@@ -533,11 +632,11 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		if destination == "favourites" {
 			target = "/favourites"
 		}
-		e = a.cfg.Studio.Favourite(session.Token, id, r.PostForm.Get("sample"), revision, r.PostForm.Get("on") == "yes")
+		e = a.store(r).Favourite(session.Token, id, r.PostForm.Get("sample"), revision, r.PostForm.Get("on") == "yes")
 	case "cancel":
-		e = a.cfg.Studio.Cancel(session.Token, id, revision, r.PostForm.Get("batch"))
+		e = a.store(r).Cancel(session.Token, id, revision, r.PostForm.Get("batch"))
 	case "download":
-		e = a.cfg.Studio.Download(session.Token, id, r.PostForm.Get("sample"))
+		e = a.store(r).Download(session.Token, id, r.PostForm.Get("sample"))
 		target += "/samples/" + r.PostForm.Get("sample")
 	default:
 		http.NotFound(w, r)
@@ -554,7 +653,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(e, renderjob.ErrBusy) {
 			status = 503
 		}
-		a.fail(w, r, status, e.Error())
+		a.failError(w, r, e, status)
 		return
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
@@ -563,14 +662,35 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 // A burst of three admits create, download, and similar as one natural visit.
 // Sustained quotas and the independent queue/worker bounds still cap rendering.
 func (a *app) allowGeneration(w http.ResponseWriter, r *http.Request, token string) bool {
-	if !a.limits.allow("generate-ip:"+a.client(r), 12, 3) || !a.limits.allow("generate-workspace:"+token, 6, 3) {
-		a.fail(w, r, 429, "Give these images a moment, then try again.")
+	if !a.allowExpensive(w, r, "generate-ip:"+a.client(r), 12, 3) || !a.allowExpensive(w, r, "generate-workspace:"+token, 6, 3) {
 		return false
 	}
 	return true
 }
 
+func (a *app) allowExpensive(w http.ResponseWriter, r *http.Request, key string, rate, burst float64) bool {
+	ok := false
+	if a.cfg.Database == nil {
+		ok = a.limits.allow(key, rate, burst)
+	} else {
+		var err error
+		ok, err = a.cfg.Database.Allow(r.Context(), key, rate, burst)
+		if err != nil {
+			a.failError(w, r, err, 503)
+			return false
+		}
+	}
+	if !ok {
+		a.fail(w, r, 429, "Give these images a moment, then try again.")
+	}
+	return ok
+}
+
 func (a *app) image(w http.ResponseWriter, r *http.Request) {
+	if a.cfg.Database != nil {
+		a.objectImage(w, r)
+		return
+	}
 	if a.cfg.Jobs == nil {
 		http.NotFound(w, r)
 		return
@@ -604,6 +724,58 @@ func (a *app) image(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename="singular-seed-`+id[:12]+`.png"`)
 	}
 	http.ServeContent(w, r, "singular-seed.png", info.ModTime(), f)
+}
+
+func (a *app) objectImage(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/images/"), "/downloads/")
+	if len(id) != 64 {
+		http.NotFound(w, r)
+		return
+	}
+	select {
+	case a.images <- struct{}{}:
+		defer func() { <-a.images }()
+	default:
+		a.fail(w, r, 503, "Downloads are busy.")
+		return
+	}
+	meta, err := a.cfg.Database.Artifact(r.Context(), id)
+	if errors.Is(err, os.ErrNotExist) {
+		a.fail(w, r, 410, "This image has expired.")
+		return
+	}
+	if err != nil {
+		a.failError(w, r, err, 503)
+		return
+	}
+	data, err := a.cfg.Objects.Get(r.Context(), meta.Key, meta.Digest, meta.Size)
+	if errors.Is(err, os.ErrNotExist) {
+		if e := a.cfg.Database.Missing(r.Context(), id, meta.Key); e != nil {
+			a.failError(w, r, e, 503)
+			return
+		}
+		a.fail(w, r, 410, "This image has expired.")
+		return
+	}
+	if err != nil {
+		a.fail(w, r, 503, "Image storage is temporarily unavailable.")
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("ETag", `"`+meta.Digest+`"`)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	if strings.HasPrefix(r.URL.Path, "/downloads/") {
+		w.Header().Set("Content-Disposition", `attachment; filename="singular-seed-`+id[:12]+`.png"`)
+	}
+	http.ServeContent(w, r, "singular-seed.png", meta.Created, bytes.NewReader(data))
+}
+
+func (a *app) failError(w http.ResponseWriter, r *http.Request, err error, fallback int) {
+	if errors.Is(err, persistence.ErrUnavailable) {
+		a.fail(w, r, 503, persistence.ErrUnavailable.Error())
+		return
+	}
+	a.fail(w, r, fallback, err.Error())
 }
 
 func (a *app) page(w http.ResponseWriter, r *http.Request, p page) {

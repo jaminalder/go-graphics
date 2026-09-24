@@ -8,13 +8,17 @@
 | `ART_ORIGIN` | `http://` + public address | artweb canonical scheme/host; exact Host and POST Origin checks |
 | `ART_ADMIN_ADDR` | `127.0.0.1:8081` | artweb private controls, loopback-only |
 | `ART_TRUSTED_PROXY` | empty | One unicast IP allowed to supply `X-Art-Client` |
-| `ART_SOCKET` | `out/artrender.sock` in artweb/artrender | Private renderer socket; artctl renderer probe reads the variable directly |
-| `ART_CACHE` | `out/cache` | Web-owned disposable image directory |
-| `ART_GENERATION` | enabled unless exactly `off` | Startup job admission state |
+| `ART_DATABASE_URL_FILE` | required | Protected per-service PostgreSQL connection string file |
+| `ART_S3_CREDENTIALS_FILE` | required | Protected JSON access_key/secret_key file |
+| `ART_S3_ENDPOINT`, `ART_S3_REGION`, `ART_S3_BUCKET` | required | Private S3 location; HTTPS required in production |
+| `ART_S3_PREFIX` | `artifacts` | Application-owned object prefix, explicitly bound to database |
+| `ART_S3_LOCAL` | `false` | Explicit disposable development allowance for HTTP S3 |
 | `ART_LOG_LEVEL` | `info` | Structured text logging: debug, info, warn or error |
 | `GOMAXPROCS` | Go runtime default | Runtime CPU parallelism; Compose sets renderer to 2 |
 
-Build identity is a linker-injected `main.build` value, default `development`, shared by web, renderer and artctl. It is not an environment variable. The Docker build supplies its source revision. Mixing builds fails renderer health/render validation. Source: [artweb](../../cmd/artweb/main.go), [artrender](../../cmd/artrender/main.go), [logging](../../internal/logging/logging.go), [Dockerfile](../../deploy/Dockerfile).
+Both service pgx pools currently allow eight connections; web's result listener uses another dedicated session. PostgreSQL Compose caps connections at 40. These are code/Compose limits, not environment knobs. Expensive-operation quotas are shared in SQL; read/asset quotas remain per web process. Generation admission is changed through CLI controls rather than environment initialization.
+
+Build identity is linker-injected `main.build`, default `development`, shared by web, renderer and artdb. It selects a build-specific River queue and publication epoch. Admission is stored in SQL, not `ART_GENERATION`; `ART_SOCKET`/`ART_CACHE` no longer configure production runtime.
 
 ## Compose configuration
 
@@ -27,13 +31,14 @@ Build identity is a linker-injected `main.build` value, default `development`, s
 | `ART_BIND`, `ART_BIND6` | `127.0.0.1`, `[::1]` | Host IPv4/IPv6 publishing addresses |
 | `ART_HTTP_PORT`, `ART_HTTPS_PORT` | `8088`, `8443` | Published edge ports |
 | `ART_PROXY_NET` | `172.30.80` | Prefix of fixed `/29` internal proxy subnet |
-| `ART_GENERATION` | `on` | Web startup admission state |
+| `ART_DATABASE_NETWORK` | `singular-seed-data_default` | External private network owned by data project |
+| `ART_SECRETS_DIR` | `/etc/art/secrets` | Host-side protected Compose secret files |
 | `ART_LOG_LEVEL` | `info` | Web/renderer log threshold |
 
-[deploy/local.env](../../deploy/local.env) supplies a local HTTP origin. [operator.env.example](../../deploy/operator.env.example) illustrates host settings; the installer writes `/etc/art/operator.env`. Compose fixes public web `:8080`, admin loopback `:8081`, socket `/run/art/renderer.sock` and cache `/var/cache/art`. The release wrapper fixes project name `singular-seed` and combines operator settings with release image identities. See [operations](../operations/running.md).
+[operator.env.example](../../deploy/operator.env.example) describes origin settings; [storage.env.example](../../deploy/storage.env.example) describes separate bucket settings. Compose fixes web `:8080`, web-admin loopback `:8081`, renderer-health loopback `:8082`; no socket/cache volume. Release wrappers combine operator, storage and immutable-image configuration. Use the [local helper](../operations/persistence.md), not `deploy/local.env` alone.
 
 ## Limits and artwork configuration
 
-Queue/cache defaults are concrete `renderjob.Config` fields, not exposed environment knobs. The public catalogue's preview/download policy is fixed in `publish.Tier`. [Data limits](data.md) and [HTTP limits](http-api.md) record those values. Local artwork controls use Go's `flag` plus sketch-specific declarations, documented on [individual sketch pages](sketches.md). Global render profiles do not alter the public catalogue's 600/1200-pixel policy.
+Queue/runtime limits are explicit in [River worker configuration](../../internal/persistence/worker.go), [admission](../../internal/persistence/queue.go) and Compose. The public catalogue still fixes preview/download policy in `publish.Tier`. [Data limits](data.md) and [HTTP limits](http-api.md) record the bounds. Local sketch flags/profiles do not alter the public 600/1200-pixel policy.
 
 Terraform inputs are documented in [provisioning](../operations/provisioning.md), with exact validators in [main.tf](../../deploy/terraform/main.tf).

@@ -86,6 +86,8 @@ func (s *Supervisor) Render(ctx context.Context, q Request, w io.Writer) (err er
 		return err
 	}
 	cmd := exec.CommandContext(ctx, s.Executable, "--child")
+	// Render children need neither service credentials nor inherited proxy/configuration.
+	cmd.Env = []string{"GOMAXPROCS=2", "ART_LOG_LEVEL=error"}
 	cmd.Stdin = bytes.NewReader(data)
 	cmd.WaitDelay = time.Second
 	stdout := &limitWriter{w: w, left: MaxImage, cancel: cancel}

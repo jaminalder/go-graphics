@@ -55,6 +55,11 @@ variable "protect_server" {
   type        = bool
   default     = false
 }
+variable "deploy_application" {
+  description = "Set false for a fresh VPS until image credentials and persistent data bootstrap are installed; secrets never pass through Terraform."
+  type        = bool
+  default     = true
+}
 locals {
   ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
   release_path   = abspath(pathexpand(var.release_directory))
@@ -127,7 +132,12 @@ output "ipv6" { value = hcloud_server.web.ipv6_address }
 
 # Failure taints only this deployment task, not the server. The next apply
 # retries the upload/activation against the existing host.
+moved {
+  from = terraform_data.application
+  to   = terraform_data.application[0]
+}
 resource "terraform_data" "application" {
+  count = var.deploy_application ? 1 : 0
   triggers_replace = {
     server_id      = hcloud_server.web.id
     release_digest = local.release_digest

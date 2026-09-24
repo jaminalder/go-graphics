@@ -1,66 +1,81 @@
 # Component views
 
-Each diagram below decomposes one container from the [container view](containers.md). Audience: developers. Components are coherent interfaces inside a process; source package names locate their implementations.
+Each diagram decomposes one application/process from the [container view](containers.md). Audience: developers. Components are in-process responsibilities, not additional Docker services.
 
 ## Public studio components
 
-Scope: the `artweb` container.
+Scope: `artweb`.
 
 ```mermaid
 ---
-title: "Component views — Public studio components"
+title: "Component view: artweb"
 ---
 flowchart TB
-    person["Artist · Person<br/>Browses and submits choices"]
-    subgraph app["artweb · Go container"]
-        http["Presentation · Component / Go web + HTML + JS<br/>Validates forms and renders pages"]
-        state["Studio state · Component / Go studio.Store<br/>Owns workspaces, revisions and samples"]
-        policy["Publication and exploration · Component / Go publish + explore<br/>Resolves allowed traits into complete recipes"]
-        jobs["Job admission and cache · Component / Go renderjob.Manager<br/>Coalesces requests, schedules one worker and publishes images"]
-        client["Renderer client · Component / Go renderjob.Client<br/>Checks build-bound private transport"]
+    artist["Artist · Person / browser"]
+    subgraph app["artweb · Go application"]
+        http["Presentation · Go web, HTML, JavaScript<br/>Forms, CSRF, images and SSE"]
+        domain["Studio domain · Go studio.Store<br/>Recipes, revisions, replay and favourites"]
+        persistence["Aggregate persistence · Go studio.Persistent<br/>Loads/saves one workspace transaction"]
+        queue["Admission · Go persistence.QueueTx + River<br/>Coalesces interests and inserts jobs"]
+        listener["Result listener · Go persistence.Events<br/>One LISTEN connection, local fan-out"]
+        images["Image reader · Go objectstore<br/>Bounded HTTPS read and digest check"]
     end
-    supervisor["Renderer supervisor · Container / Go<br/>Executes one bounded child"]
-    cache["Image cache · Container: data store / PNG filesystem<br/>Stores completed renditions"]
-    person -->|Submits forms and polls pages / HTTP| http
-    http -->|Reads snapshots and applies commands / Go calls| state
-    http -->|Opens images / Go calls| jobs
-    state -->|Completes permitted recipes / Go calls| policy
-    state -->|Admits or cancels jobs and reads status / Go calls| jobs
-    jobs -->|Requests rendition / Renderer interface| client
-    client -->|Renders and checks health / HTTP over Unix socket| supervisor
-    jobs -->|Publishes and opens completed PNGs / filesystem calls| cache
+    db[("PostgreSQL · Data store<br/>Studio aggregates, River jobs and pointers")]
+    bucket[("Private S3 bucket · Data store<br/>Immutable PNG objects")]
+    artist -->|HTTP forms and reads| http
+    http -->|Domain commands / Go calls| persistence
+    persistence -->|Apply bounded domain behavior / Go calls| domain
+    domain -->|Transaction-bound job operations / Go calls| queue
+    persistence -->|Workspace and pin transactions / SQL| db
+    queue -->|River InsertTx and status / SQL| db
+    db -->|Committed result hints / NOTIFY| listener
+    listener -->|Wake local authorized streams / Go channels| http
+    http -->|Resolve image pointer / SQL| db
+    http -->|Fetch retained image / Go call| images
+    images -->|Read PNG / HTTPS S3 GET| bucket
+    http -->|SSE hints and HTML/images / HTTP| artist
 ```
 
-Key: the enclosing box is one container. Inside boxes are Go components; outside boxes are a person, another container and a store. Arrows are directional calls/requests, labeled with their implementation mechanism. Layout has no semantic meaning.
+Key: the enclosing box is one application; inside boxes are components, outside boxes are a person and stores. Arrows identify directional calls/transports. Web does not call a renderer or execute jobs. River's web client is insert-only.
 
-[cmd/artweb](../../cmd/artweb/main.go) constructs dependencies, configures listeners, adds structured HTTP logging and handles shutdown. [web](../../internal/web/web.go) owns host, origin, form and CSRF checks; [studio](../../internal/studio/studio.go) owns navigation and command semantics; [publish](../../internal/publish/catalog.go) owns the public allowlist; [explore](../../internal/explore/explore.go) proposes deterministic candidates; [Manager](../../internal/renderjob/manager.go) is the only queue. Embedded templates and assets are presentation implementation, not independent backend services.
+[web](../../internal/web/web.go) binds request context to [studio.Persistent](../../internal/studio/persistent.go). It loads one bounded aggregate and invokes the existing [studio domain](../../internal/studio/studio.go) with a [QueueTx](../../internal/persistence/queue.go) sharing that transaction. Navigation, replay and job admission commit together. The legacy in-memory Manager and socket client remain for existing unit tests; production commands do not instantiate them.
 
-## Renderer supervisor components
+## Renderer service components
 
-Scope: the `artrender` supervisor container.
+Scope: the `artrender` parent process.
 
 ```mermaid
 ---
-title: "Component views — Renderer supervisor components"
+title: "Component view: artrender parent"
 ---
-flowchart LR
-    web["Public studio · Container / Go<br/>Owns request admission"]
-    subgraph renderer["Supervisor · Go container"]
-        transport["Private HTTP handler · Component / Go net/http<br/>Parses bounded requests and reports build health"]
-        execution["Child supervision · Component / Go os/exec<br/>Allows one child; enforces timeout and output limits"]
-        validation["Publication validation · Component / Go publish + artwork<br/>Checks release, recipe and rendition policy"]
+flowchart TB
+    db[("PostgreSQL · Data store<br/>River and application records")]
+    bucket[("Private S3 bucket · Data store<br/>PNG bytes")]
+    subgraph app["artrender · Go application"]
+        river["River client · Go library<br/>Claims, retries and internal maintenance election"]
+        worker["Render handler · Go persistence.Worker<br/>Attempt guard, validation and publication"]
+        supervisor["Supervisor · Go renderjob.Supervisor<br/>Fixed executable, deadlines and output bounds"]
+        cleanup["Application maintenance · Go persistence.Maintainer<br/>Expiry, intents and deletion reconciliation"]
+        objects["Object client · Go objectstore<br/>S3 PUT, LIST, DELETE and health"]
     end
-    child["Render child · Container / Go process<br/>Renders one recipe"]
-    web -->|Requests PNG / HTTP JSON over Unix socket| transport
-    transport -->|Validates request / Go calls| validation
-    transport -->|Runs accepted rendition / Go calls| execution
-    execution -->|Starts process and writes request / exec + JSON stdin| child
-    child -->|Returns image / PNG stdout| execution
+    child["Render child · Go process<br/>Computes one PNG"]
+    river -->|Claim, retry and schedule / SQL| db
+    db -->|Work and control hints / NOTIFY| river
+    river -->|Job context / Go call| worker
+    river -->|Periodic maintenance job / Go call| cleanup
+    worker -->|Render request / Go call| supervisor
+    supervisor -->|exec and JSON stdin| child
+    child -->|PNG stdout| supervisor
+    worker -->|Upload image / Go call| objects
+    objects -->|HTTPS S3 operations| bucket
+    worker -->|Serializable pointer, outcome and completion / SQL| db
+    cleanup -->|Ownership and lifecycle transactions / SQL| db
+    cleanup -->|List/delete unreferenced objects / Go calls| objects
 ```
 
-Key: the enclosing box is the supervisor process. Typed internal boxes are components; external boxes are containers. Arrows name directional interactions and protocols. The child is outside the supervisor boundary because it is a separate process.
+Key: the enclosing box is the parent process. River maintenance is library code inside that process, not another service. The separate child shares its Docker network/resource boundary. All renderers consume independently; one River client is elected for internal queue maintenance.
 
-[cmd/artrender](../../cmd/artrender/main.go) creates the private socket and handles signals. [protocol.go](../../internal/renderjob/protocol.go) implements handler, validation and supervision. It also contains the child entry function and client code compiled into other containers. A shared source file does not imply shared runtime memory.
+[Worker](../../internal/persistence/worker.go) verifies canonical identity and fences publication using River attempt state and application generation/epoch. [Supervisor](../../internal/renderjob/protocol.go) kills/reaps child processes on deadline/output overflow. [Maintainer](../../internal/persistence/maintenance.go) performs application cleanup as River jobs, separately from River's own scheduler/rescuer/cleaner.
 
 ## Render child components
 
@@ -68,50 +83,50 @@ Scope: one `artrender --child` process.
 
 ```mermaid
 ---
-title: "Component views — Render child components"
+title: "Component view: disposable render child"
 ---
 flowchart LR
-    supervisor["Renderer supervisor · Container / Go<br/>Owns child lifecycle"]
-    subgraph child["Child · Go container"]
-        input["Request decoder · Component / Go renderjob.Child<br/>Reads and validates one request"]
-        recipe["Recipe execution · Component / Go artwork + publish<br/>Reconstructs concrete artwork and fixed rendition"]
-        artwork["Artwork implementation · Component / Go pools, foam or iris<br/>Plans and paints or samples an image"]
-        encode["Image encoding · Component / Go render<br/>Writes PNG and deterministic metadata"]
+    parent["Renderer parent · Go application<br/>Owns child lifecycle"]
+    subgraph child["Render child · Go process"]
+        input["Input validation · Go renderjob.Child<br/>Bounded recipe/build/tier decoding"]
+        recipe["Recipe execution · Go artwork/publish<br/>Reconstructs validated edition"]
+        algorithm["Artwork · Go sketch packages<br/>Deterministic image computation"]
+        encoding["PNG encoding · Go render<br/>Pixels and recipe metadata"]
     end
-    supervisor -->|Provides one request / JSON stdin| input
-    input -->|Executes validated recipe / Go calls| recipe
-    recipe -->|Creates and renders fresh sketch / Go calls| artwork
-    recipe -->|Encodes completed image / Go calls| encode
-    encode -->|Returns completed rendition / PNG stdout| supervisor
+    parent -->|JSON stdin| input
+    input -->|Go calls| recipe
+    recipe -->|Go calls| algorithm
+    recipe -->|Encode rendered image / Go call| encoding
+    encoding -->|PNG stdout| parent
 ```
 
-Key: one process boundary encloses Go components. The external box is the supervising container. Arrows name call or pipe direction; placement is layout only. [Child and transport](../../internal/renderjob/protocol.go), [recipe rendering](../../internal/artwork/recipe.go) and [materials](../reference/materials.md) establish these responsibilities.
+Key: internal boxes are components of one process; parent is an external application. Pipes carry requests/results. The child does not use River or S3 credentials in its input/environment, but same-container execution is not a sandbox for hostile code. Source: [child](../../internal/renderjob/protocol.go), [recipe](../../internal/artwork/recipe.go), [render](../../internal/render/meta.go).
 
 ## Local renderer components
 
-Scope: the `staticart` container.
+Scope: `staticart`, independent of PostgreSQL and S3.
 
 ```mermaid
 ---
-title: "Component views — Local renderer components"
+title: "Component view: staticart"
 ---
 flowchart TB
-    developer["Developer · Person<br/>Renders and reviews artwork"]
-    subgraph cli["staticart · Go container"]
-        command["Command and batch control · Component / Go cmd/staticart<br/>Parses flags and schedules render, sweep or flock"]
-        registry["Definitions and traits · Component / Go artwork.Registry + sketch + trait<br/>Creates fresh definitions and resolves options"]
-        algorithms["Artwork implementations · Component / Go sketch packages<br/>Plan and render local artworks"]
-        exploration["Candidate planning · Component / Go explore<br/>Breeds trait and seed candidates"]
-        output["Image and sheet output · Component / Go render<br/>Encodes images, metadata and contact sheets"]
+    developer["Developer · Person"]
+    subgraph app["staticart · Go application"]
+        command["Commands · Go cmd/staticart<br/>Render, sweep and flock control"]
+        registry["Definitions · Go artwork/sketch/trait<br/>Fresh factories and resolved controls"]
+        exploration["Exploration · Go explore<br/>Candidate seeds and traits"]
+        algorithms["Artwork · Go sketch packages<br/>Image computation"]
+        output["Output · Go render<br/>Images, metadata and contact sheets"]
     end
-    files["Local artwork files · Container: data store / filesystem<br/>Images and flock records"]
-    developer -->|Invokes command / command arguments| command
-    command -->|Creates and configures artwork / Go calls| registry
-    command -->|Plans flock candidates / Go calls| exploration
-    command -->|Renders configured sketch / Go calls| algorithms
-    command -->|Encodes results / Go calls| output
-    command -->|Reads and writes flock records / JSONL filesystem calls| files
-    output -->|Writes images and sheets / filesystem calls| files
+    files[("Local artwork files · Filesystem store")]
+    developer -->|Command arguments| command
+    command -->|Go calls| registry
+    command -->|Go calls| exploration
+    command -->|Go calls| algorithms
+    command -->|Go calls| output
+    command -->|Read/write flock records / filesystem| files
+    output -->|Write artwork and sheets / filesystem| files
 ```
 
-Key: one CLI process encloses Go components. Outside boxes identify the person and local store. Arrows describe calls or file operations. Source: [command](../../cmd/staticart/main.go), [sweep](../../cmd/staticart/sweep.go), [flock](../../cmd/staticart/flock.go), [exploration](../../internal/explore/explore.go). The [package map](../reference/packages.md) details shared mechanisms without giving each leaf its own C4 box.
+Key: components are enclosed in one CLI application; person/store are outside. Arrows identify calls/file operations. Sources: [CLI](../../cmd/staticart/main.go), [flock](../../cmd/staticart/flock.go), [explore](../../internal/explore/explore.go), [package map](../reference/packages.md).

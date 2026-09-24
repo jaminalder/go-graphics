@@ -6,13 +6,19 @@ disable-model-invocation: true
 
 You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
 
-The goal is a PR which implements the entire spec on a single branch.
+Follow the repository workflow in `AGENTS.md` and `docs/WORKTREE-WORKFLOW.md`.
+For product/infrastructure work, implement directly on `master` with one writer
+at a time; do not create branches, worktrees or PRs unless explicitly requested.
+Only artistic experiments use the branch/worktree flow below. A planning-only
+request stops for owner review before implementation.
 
 The tickets are not a list of steps. They are a **task graph** with blocking relationships between them. This means there is always a **frontier** of tickets which are ready to be grabbed.
 
 Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
 
-**Implementer subagents** should be run in the background where possible for **maximum concurrency**.
+For artistic experiments, independent implementer subagents may use assigned
+worktrees when delegation is authorized. Never run concurrent writers in the
+shared `master` checkout.
 
 ## Steps
 
@@ -20,16 +26,16 @@ Communication to and from subagents should be sparse. Communicate primarily thro
 
 2. (optional) Use an **exploration subagent** to conduct any exploration required by the tickets - relevant codebase files or external documentation. Ensure the exploration subagent can save files - it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
 
-3. Create a branch, and a draft PR. The PR should be marked as 'closing' the spec issue and tickets.
+3. For product/infrastructure, stay on `master`. For artistic experiments, prepare the assigned branch/worktree. Create a PR only if requested.
 
-4. Use **implementer subagents** to implement each ticket. Each implementer subagent should work in its own worktree, on its own branch.
+4. Implement ready tickets in dependency order. Product/infrastructure tickets use one writer on `master`; only artistic implementers use separate assigned branches/worktrees.
 
-5. Once an **implementer subagent** completes, merge its work to the PR branch with a **merger subagent**.
+5. Review each completed ticket. Integrate artistic branches only after explicit owner approval; trunk work needs no merge.
 
-6. If this changes the **frontier** of available tickets, kick off more **implementer subagents** to work on the new tickets. This allows for maximum concurrency.
+6. Advance to the next unblocked ticket, retaining the workflow's single-writer constraint for trunk development.
 
-7. Once all tickets are complete, run /code-review on the PR branch. Fix all issues raised by the code review in a single **implementer subagent**.
+7. Once all tickets are complete, review the implementation and fix findings in the same permitted checkout.
 
-8. Mark the PR as ready for review.
+8. Present the completed work for review. Update a PR only if one was requested.
 
-9. Clean up all **implementer subagent** worktrees.
+9. Clean up artistic worktrees only after approved integration/discard and inspection. There are no product/infrastructure worktrees to clean up.

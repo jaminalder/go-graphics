@@ -38,10 +38,10 @@ Key: this selective UML-style code diagram decomposes only the Recipe execution 
 
 `artwork.Decode` rejects unsupported version/edition, malformed seeds, unknown palettes and invalid concrete configs. It resolves complete traits, normalizes the decimal seed and palette, and re-encodes a canonical record. `publish.Validate` then restricts that record to the public trait space and curated palette list; rebuilding an allowed record and comparing canonical bytes rejects private numeric overrides.
 
-`Request.Validate` checks protocol version and an exact nonempty renderer build before applying publication and tier validation. Both ends of the private transport enforce that contract. `Manager.Admit` derives each key from canonical recipe plus serialized rendition plus build, validates a whole batch, and reserves capacity atomically. The `Renderer` interface allows queue tests to use controlled renderers without invoking expensive artwork code.
+`Request.Validate` checks version/build before publication and tier validation. The River handler and child enforce the contract. `persistence.QueueTx.Admit` derives canonical recipe/rendition/build keys and inserts jobs inside the studio transaction. River args reference stored exact recipe bytes rather than becoming the canonical hash source. The `Renderer` interface permits controlled failure tests while production invokes bounded subprocesses.
 
 `Recipe.Bytes` and `Traits` return owned copies. The registry creates fresh mutable sketch objects; a shared registry lookup does not leak CLI settings into another render. Tests defend canonicalization, override isolation, identity, admission, cancellation and transport failure.
 
 ## Source
 
-[Recipe and rendition](../../internal/artwork/recipe.go), [public validation](../../internal/publish/catalog.go), [admission](../../internal/renderjob/manager.go), [renderer interface and client](../../internal/renderjob/protocol.go), [recipe tests](../../internal/artwork/recipe_test.go). See [data reference](../reference/data.md) for the persisted encodings and [package reference](../reference/packages.md) for the rest of the codebase.
+[Recipe and rendition](../../internal/artwork/recipe.go), [public validation](../../internal/publish/catalog.go), [admission](../../internal/persistence/queue.go), [renderer interface and child](../../internal/renderjob/protocol.go), [recipe tests](../../internal/artwork/recipe_test.go). See [data](../reference/data.md) and [packages](../reference/packages.md).

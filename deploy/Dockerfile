@@ -3,21 +3,19 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG REVISION=development
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
+RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY web/catalog/ web/catalog/
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X main.build=$REVISION" -o /app/ ./cmd/artweb ./cmd/artrender ./cmd/artctl ./cmd/staticart
-RUN mkdir -p /runtime/run/art /runtime/var/cache/art && \
-    chown 10002:10000 /runtime/run/art && chmod 0770 /runtime/run/art && \
-    chown 10001:10000 /runtime/var/cache/art && chmod 0700 /runtime/var/cache/art
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X main.build=$REVISION" -o /app/ ./cmd/artweb ./cmd/artrender ./cmd/artctl ./cmd/artdb ./cmd/staticart
 
 FROM scratch AS app
 ARG REVISION=development
 LABEL org.opencontainers.image.revision=$REVISION
 COPY --from=build /app/ /app/
-COPY --from=build /runtime/ /
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 USER 10001:10000
 ENTRYPOINT ["/app/artweb"]
 

@@ -12,7 +12,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 
 class Activation(unittest.TestCase):
-    def scenario(self, previous=False, failure="", origin="http://192.0.2.1", approved=True):
+    def scenario(self, previous=False, failure="", origin="http://192.0.2.1", approved=True, legacy=False, admission="on"):
         with tempfile.TemporaryDirectory(prefix="art-activation-") as directory:
             root = Path(directory).resolve()
             art, etc, commands = root / "opt/art", root / "etc", root / "commands"
@@ -20,6 +20,9 @@ class Activation(unittest.TestCase):
             (etc / "art").mkdir(parents=True)
             (root / "run/lock").mkdir(parents=True)
             (etc / "art/operator.env").write_text(f"ART_ORIGIN={origin}\n")
+            (etc / "art/storage.env").touch()
+            (etc / "art/secrets").mkdir()
+            (etc / "art/secrets/admin-database").touch()
             if approved:
                 (etc / "art/deployment-approved").touch()
             for revision in ("a" * 40, "b" * 40):
@@ -29,6 +32,11 @@ class Activation(unittest.TestCase):
                 wrapper = release / "deploy/scripts/compose-release.sh"
                 wrapper.write_text((SCRIPTS / "compose-release.sh").read_text().replace("/etc/", str(etc) + "/"))
                 wrapper.chmod(0o755)
+                if not (legacy and revision.startswith("a")):
+                    (release / "deploy/compose.admin.yaml").touch()
+                    admin = release / "deploy/scripts/admin-release.sh"
+                    admin.write_text('#!/bin/sh\necho "admin $*" >> "$EVENTS"\ncase "$*" in *admission) echo "$ADMISSION";; *migrate) [ "$FAILURE" != migration ];; *aaaaaaaa*status) [ "$FAILURE" != incompatible ];; esac\n')
+                    (release / "deploy/scripts/database-roles.py").write_text('pass\n')
                 smoke = release / "deploy/scripts/smoke-release.sh"
                 smoke.write_text('#!/bin/sh\necho smoke >> "$EVENTS"\n[ "$FAILURE" != smoke ]\n')
                 smoke.chmod(0o755)
@@ -62,7 +70,7 @@ exit 0
             local = root / "activate.sh"
             local.write_text(script)
             events = root / "events"
-            result = subprocess.run(["bash", str(local), "b" * 40], env={**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"], "EVENTS": str(events), "FAILURE": failure}, capture_output=True, text=True)
+            result = subprocess.run(["bash", str(local), "b" * 40], env={**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"], "EVENTS": str(events), "FAILURE": failure, "ADMISSION": admission}, capture_output=True, text=True)
             current = (art / "current").resolve() if (art / "current").is_symlink() else None
             return result, events.read_text() if events.exists() else "", current, art
 
@@ -108,6 +116,24 @@ exit 0
             result, events, _, _ = self.scenario(failure=failure)
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn("docker", events)
+
+    def test_migration_failure_rolls_back_only_compatible_release(self):
+        result, events, current, art = self.scenario(previous=True, failure="migration")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(current, art / "releases" / ("a" * 40))
+        self.assertNotIn("--volumes", events)
+
+    def test_legacy_fallback_is_not_automatic_after_switch(self):
+        result, events, current, art = self.scenario(previous=True, failure="ready", legacy=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("legacy/incompatible rollback refused", result.stderr)
+        self.assertEqual(current, art / "releases" / ("b" * 40))
+
+    def test_intentionally_disabled_admission_stays_disabled(self):
+        result, events, _, _ = self.scenario(previous=True, admission="off")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("generation-on", events)
+        self.assertNotIn(" enable\n", events)
 
     def test_single_deployment_approval_covers_http_and_https(self):
         for origin in ("http://192.0.2.1", "https://example.test"):

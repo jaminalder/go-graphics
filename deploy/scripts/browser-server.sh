@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/../.."
-mkdir -p out
-# Separate test endpoints/cache from any manual preview session.
-go build -o out/browser-artrender ./cmd/artrender
-go build -o out/browser-artweb ./cmd/artweb
-ART_SOCKET=out/browser-render.sock out/browser-artrender &
-renderer_pid=$!
-web_pid=""
-cleanup() {
-  if [[ -n "$web_pid" ]]; then kill "$web_pid" 2>/dev/null || true; fi
-  kill "$renderer_pid" 2>/dev/null || true
-  if [[ -n "$web_pid" ]]; then wait "$web_pid" 2>/dev/null || true; fi
-  wait "$renderer_pid" 2>/dev/null || true
-}
-trap cleanup EXIT
+root=$(git rev-parse --show-toplevel)
+export ART_ORIGIN="http://${ART_BROWSER_ADDR:-127.0.0.1:8280}"
+export ART_HTTP_PORT="${ART_BROWSER_ADDR:-127.0.0.1:8280}"
+ART_HTTP_PORT=${ART_HTTP_PORT##*:}
+export ART_HTTPS_PORT=18444 ART_PROXY_NET=172.30.83
+source "$root/deploy/scripts/local-persistence.sh"
+python3 -c 'import json,os,pathlib; pathlib.Path("out/browser-runtime.json").write_text(json.dumps({"project":os.environ["ART_COMPOSE_PROJECT"],"secrets":os.environ["ART_SECRETS_DIR"]}))'
+trap cleanup_persistence EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-ART_ADDR="${ART_BROWSER_ADDR:-127.0.0.1:8280}" ART_ADMIN_ADDR="${ART_BROWSER_ADMIN_ADDR:-127.0.0.1:8281}" ART_ORIGIN="http://${ART_BROWSER_ADDR:-127.0.0.1:8280}" ART_SOCKET=out/browser-render.sock ART_CACHE=out/browser-cache out/browser-artweb &
-web_pid=$!
-wait "$web_pid"
+compose build web caddy
+start_persistence
+while sleep 5; do compose exec -T web /app/artctl live; done

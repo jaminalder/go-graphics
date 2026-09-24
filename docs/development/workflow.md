@@ -4,7 +4,7 @@
 
 Applications live in `cmd/`; reusable mechanisms and artwork implementations live in `internal/`; embedded web assets and templates live in `internal/web`; catalogue provenance and browser tests live in `web/`; runnable infrastructure lives in `deploy/`. The [package map](../reference/packages.md) and [C4 components](../architecture/components.md) identify ownership.
 
-Use a dedicated branch/worktree for writing work, keeping the coordinator on master. [Worktree workflow](../WORKTREE-WORKFLOW.md) gives exact commands and integration rules. Generated renders, benchmark output and HTML belong under that worktree's `out/`. Committed golden files remain under sketch `testdata/`.
+Product and infrastructure development is trunk-based: work directly in `master/` on `master`, one writer at a time. Dedicated branches/worktrees are only for artistic experiments unless the user explicitly requests otherwise. [Trunk and worktree workflow](../WORKTREE-WORKFLOW.md) gives the scope, commands and integration rules. Generated renders, benchmark output and HTML belong under the active checkout's `out/`. Committed golden files remain under sketch `testdata/`.
 
 ## Artwork and configuration changes
 
@@ -19,3 +19,5 @@ Planning resolves random choices before repeated sampling. Point samplers keep i
 Run `make check` before every commit. The target formats, vets, lints and tests Go source. Run targeted tests appropriate to the changed responsibility; [testing](testing.md) lists broader public-runtime checks. For artwork/color changes, render fixed seeds and visually inspect outputs and a sweep; tests establish determinism and bounds, not artistic approval.
 
 Update the relevant current-state documentation with behavior changes. Retain the C4 abstraction boundaries: a new Go package is not automatically a container, and deployment changes are not component changes. [Documentation maintenance](documentation.md) covers source links, option snapshots and generated HTML.
+
+For design-first changes, record target/work packages/review under `docs/plans/` and wait for approval. The [PostgreSQL design](../plans/postgresql/README.md) was approved for local execution; its implementation record explains adjustments, while current architecture/operations describe the code.

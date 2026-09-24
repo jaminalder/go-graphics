@@ -5,7 +5,8 @@
 		timeouts {
 			read_header 5s
 			read_body 10s
-			write 30s
+			# artweb bounds ordinary responses and SSE writes separately.
+			write 0
 			idle 60s
 		}
 	}
@@ -20,6 +21,8 @@ http:// {
 	@private path /health/* /ready /metrics /generation/*
 	respond @private 404
 	reverse_proxy web:8080 {
+		flush_interval -1
+		stream_timeout 5m
 		header_up X-Art-Client {remote_host}
 		header_up -X-Forwarded-For
 		header_up -X-Forwarded-Host

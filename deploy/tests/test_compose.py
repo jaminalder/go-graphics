@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 import urllib.parse
 
-COMPOSE = ["docker", "compose", "-p", os.environ["ART_COMPOSE_PROJECT"], "--env-file", "deploy/local.env", "-f", "deploy/compose.yaml"]
+COMPOSE = ["docker", "compose", "-p", os.environ["ART_COMPOSE_PROJECT"], "-f", "deploy/compose.yaml"]
 
 
 def compose(*args, check=True):
@@ -44,13 +44,15 @@ def main():
         assert "no-new-privileges:true" in host["SecurityOpt"]
         assert not host["PortBindings"]
         assert services[name]["Config"]["User"] != "0"
-    assert services["renderer"]["HostConfig"]["NetworkMode"] == "none"
+    assert services["renderer"]["HostConfig"]["NetworkMode"] != "none"
     assert not any(m["Destination"] == "/var/cache/art" for m in services["renderer"]["Mounts"])
     assert all(m["Destination"] != "/var/run/docker.sock" for c in containers for m in c["Mounts"])
-    socket = next(m for m in services["web"]["Mounts"] if m["Destination"] == "/run/art")
-    assert not socket["RW"]
+    assert not any(m["Destination"] == "/run/art" for c in containers for m in c["Mounts"])
     compose("exec", "-T", "web", "/app/artctl", "ready")
-    # Real form -> bounded queue -> socket -> child -> cached PNG, through Caddy.
+    # Ordinary runtime credentials cannot perform DDL; owner administration is explicit.
+    denied = compose("run", "--rm", "--no-deps", "--entrypoint", "/app/artdb", "web", "migrate", check=False)
+    assert denied.returncode != 0, "web role unexpectedly migrated schema"
+    # Real form -> River -> child -> bucket/pointer -> image, through Caddy.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     origin = os.environ["ART_ORIGIN"]
     with opener.open(origin + "/art/iris", timeout=10) as response:
@@ -72,15 +74,23 @@ def main():
     for path in images:
         with opener.open(origin + path, timeout=10) as response:
             assert response.read().startswith(b"\x89PNG\r\n\x1a\n")
+    compose("up", "-d", "--no-build", "--force-recreate", "--wait", "web")
+    with opener.open(exploration, timeout=10) as response:
+        assert len(re.findall(r'src="(/images/[^\"]+)"', response.read().decode())) == 4
+    # Recreate PostgreSQL with the retained volume, then reconnect to the same workspace.
+    data_compose = ["docker", "compose", "-p", os.environ["ART_DATA_PROJECT"], "-f", "deploy/compose.data.yaml"]
+    subprocess.run(data_compose + ["up", "-d", "--force-recreate", "--wait", "postgres"], check=True, capture_output=True)
+    with opener.open(exploration, timeout=10) as response:
+        assert len(re.findall(r'src="(/images/[^\"]+)"', response.read().decode())) == 4
     compose("stop", "renderer")
     assert request("/")[0] == 200
     assert compose("exec", "-T", "web", "/app/artctl", "ready", check=False).returncode != 0
     compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "60", "renderer")
     compose("exec", "-T", "web", "/app/artctl", "ready")
-    # Recreate the renderer against an existing socket volume: stale socket recovery.
+    # Renderer recreation reconnects to River without a shared socket.
     compose("up", "-d", "--no-build", "--force-recreate", "--wait", "--wait-timeout", "60", "renderer")
     compose("exec", "-T", "web", "/app/artctl", "ready")
-    print("Compose boundaries, private paths, four real PNGs, renderer failure and recreation passed")
+    print("Compose boundaries, runtime DDL denial, four real PNGs, retained-volume database/web/renderer recreation passed")
 
 
 if __name__ == "__main__":

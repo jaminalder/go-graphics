@@ -22,7 +22,7 @@ Downloaded PNG metadata contains the canonical recipe and renderer build informa
 
 ## Favourites and recovery
 
-The session keeps up to 24 favourites across at most four explorations. The server keeps navigation in memory, expiring after 30 minutes idle or 24 hours total, and losing it on a web restart. A browser cookie identifies the workspace; it is not an account. This implementation does not persist favourites to browser local storage.
+The anonymous visitor keeps up to 24 favourites across four explorations. PostgreSQL retains navigation, recipes and favourite preview pins across restarts, expiring after 90 days of inactivity. A persistent cookie identifies the visitor on the same browser profile; it is not an account. Losing that cookie or using another device does not recover the visitor automatically. There is no browser local-storage database.
 
 While a session is active, manually visiting `/export` downloads `art-favourites.json`. The current page templates do not expose export/restore controls or a recovery form. The implemented `/restore` form endpoint accepts that JSON through a technical HTTP client in a fresh session without existing explorations. It validates every recipe against currently available editions and rebuilds kept samples without rendering. See [HTTP interfaces](../reference/http-api.md) for the protocol. Download image files through the normal interface to retain the artwork itself.
 
@@ -30,6 +30,6 @@ While a session is active, manually visiting `/export` downloads `art-favourites
 
 An active batch must finish before another is generated in that exploration. The HTTP API supports cancellation of unfinished interests, but the current page templates do not expose a cancel control. A failed/unavailable latest batch can be retried explicitly from the interface. Refreshing or polling never retries a render automatically.
 
-A stale form can report a conflict because another tab changed the exploration revision. Refresh the page to use its current state. Expired sessions and images report expiry. Rate or capacity limits show a pause message; wait and submit again. JavaScript enhances polling, navigation and sharing; ordinary forms remain the base interaction.
+A stale form reports a conflict if another tab changed the revision. Refresh to use current state. Expired identities/images report expiry; storage outages report temporary unavailability without clearing the cookie. JavaScript uses server-sent result events with snapshot refresh, navigation and sharing; ordinary forms and no-JavaScript refresh remain supported.
 
 Source: [templates](../../internal/web/templates/page.html), [browser enhancement](../../internal/web/assets/studio.js), [studio state](../../internal/studio/studio.go), [HTTP behavior](../reference/http-api.md), [data lifetimes](../reference/data.md).

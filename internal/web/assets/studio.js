@@ -4,9 +4,21 @@
  const files=new Map();
  let requestedDownload=null;
  let focusedAction=null;
+ let events=null;
+ let eventPath=null;
  function enhance(){
   document.querySelectorAll("[data-prepare-download]").forEach(button=>button.textContent="Download image");
   const main=document.querySelector("main");
+  const path=main?.dataset.events||null;
+  if(path!==eventPath){
+   events?.close();events=null;eventPath=path;
+   if(path){
+    events=new EventSource(path);
+    const refresh=()=>{const target=document.querySelector('main[data-events]');if(target&&!document.hidden)htmx.trigger(target,'render-update');};
+    events.addEventListener('snapshot',refresh);
+    events.addEventListener('changed',refresh);
+   }
+  }
   if(requestedDownload&&main?.dataset.sample===requestedDownload){const link=main.querySelector("a[data-download]");if(link){requestedDownload=null;link.click();}}
   else if(requestedDownload)requestedDownload=null;
   document.querySelectorAll('[data-back]').forEach(button=>button.hidden=false);

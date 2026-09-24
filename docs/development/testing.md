@@ -1,5 +1,9 @@
 # Tests and verification
 
+## Persistent runtime
+
+`make test-persistence` starts disposable PostgreSQL/S3 and runs race-enabled tests for transactional admission/replay, actual PNG publication, stale-attempt rejection, River leader handover/rescue, listener reconnect, retention/cleanup and database error semantics. `make check-compose` verifies runtime roles, network/resource boundaries, rendering through Caddy and service recreation. Browser tests exercise SSE and no-JavaScript journeys on the same topology. See [implementation evidence](../plans/postgresql/implementation.md).
+
 ## Standard pre-commit gate
 
 ```sh
@@ -24,7 +28,7 @@ Open changed goldens and useful-size previews. Sweep fixed seeds/options and com
 go test -race ./internal/artwork ./internal/explore ./internal/publish ./internal/renderjob ./internal/studio ./internal/web ./cmd/staticart
 ```
 
-These tests cover recipe canonicalization, public policy, fresh definitions, bounded/coalesced admission, cancellation, cache reconciliation, renderer failure limits, revision/replay/ownership and HTTP protections. Fake renderer implementations make queue failure paths controllable; real renderer tests cover process/protocol behavior. Race checks are separate from `make check`.
+These unit tests cover recipes, public policy, legacy queue/cache fixtures, child failure limits, domain replay/revision and HTTP guards. They do not exercise production SQL/S3 unless `make test-persistence` supplies its dedicated fixture. That suite refuses arbitrary database URLs because it drops its disposable schema. Race checks are separate from `make check`.
 
 Browser journeys use Playwright 1.63.0 from the lockfile:
 
@@ -35,7 +39,7 @@ npx playwright install chromium
 npm test
 ```
 
-[Playwright configuration](../../web/browser/playwright.config.js) starts the local test server via the checked-in script. [Journeys](../../web/browser/journey.spec.js) exercise gallery/exploration, favourites, downloads, no-JavaScript behavior and failure recovery. Browser dependencies are test tooling, not Go module dependencies.
+[Playwright configuration](../../web/browser/playwright.config.js) starts disposable Docker PostgreSQL/S3 and application services. The three [journeys](../../web/browser/journey.spec.js) cover desktop/mobile exploration, favourites, downloads, sharing, similarity and no-JavaScript use. Failure/reconnect/rescue evidence comes from the Go integration and Compose tests rather than those three browser journeys. Run one browser fixture at a time; teardown is manifest-scoped.
 
 ## Deployment checks
 

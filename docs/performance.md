@@ -21,6 +21,6 @@ Raster AA factor N costs N×N samples per output pixel. Pure row workers use Go 
 
 ## Public bounds
 
-The public catalogue fixes square 600/1200-pixel PNG renditions at AA1, restricts expensive trait choices and forbids numeric overrides. One web worker renders serially through one supervisor child, bounded by 15-second preview and 30-second download deadlines. Compose provides an additional renderer 2 GiB memory / 1.5 CPU limit with `GOMAXPROCS=2`. These controls cap resource use; they do not guarantee every admitted candidate finishes on every machine.
+The public catalogue fixes square 600/1200-pixel PNG renditions at AA1, restricts expensive traits and forbids numeric overrides. One River worker per renderer supervises one child with 15-second preview/30-second download bounds. The 2 GiB/1.5 CPU renderer limit includes queue/upload/maintenance memory; children use `GOMAXPROCS=2`. PostgreSQL and bucket add coordination/I/O costs. Limits do not guarantee every candidate finishes on every machine.
 
 See [cache/queue limits](reference/data.md), [runtime isolation](architecture/deployment.md), [queue implementation](../internal/renderjob/manager.go) and [supervisor](../internal/renderjob/protocol.go). Performance tuning requires both measurements and fixed-seed visual inspection when sampling/development changes.

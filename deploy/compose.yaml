@@ -1,4 +1,4 @@
-# One fixed project owns the only production queue. Use the release scripts on hosts.
+# River coordinates durable jobs through the separately managed PostgreSQL service.
 x-common: &common
   restart: unless-stopped
   read_only: true
@@ -63,16 +63,20 @@ services:
       ART_ADDR: 0.0.0.0:8080
       ART_ADMIN_ADDR: 127.0.0.1:8081
       ART_TRUSTED_PROXY: ${ART_PROXY_NET:-172.30.80}.2
-      ART_SOCKET: /run/art/renderer.sock
-      ART_CACHE: /var/cache/art
-      ART_GENERATION: ${ART_GENERATION:-on}
+      ART_DATABASE_URL_FILE: /run/secrets/web-database
+      ART_S3_CREDENTIALS_FILE: /run/secrets/web-objects
+      ART_S3_ENDPOINT: ${ART_S3_ENDPOINT:?Configure private object storage}
+      ART_S3_REGION: ${ART_S3_REGION:?Set bucket region}
+      ART_S3_BUCKET: ${ART_S3_BUCKET:?Set image bucket}
+      ART_S3_PREFIX: ${ART_S3_PREFIX:-artifacts}
+      ART_S3_LOCAL: ${ART_S3_LOCAL:-false}
       ART_LOG_LEVEL: ${ART_LOG_LEVEL:-info}
     networks:
       proxy:
         ipv4_address: ${ART_PROXY_NET:-172.30.80}.3
-    volumes:
-      - socket:/run/art:ro
-      - cache:/var/cache/art
+      database: {}
+      egress: {}
+    secrets: [web-database, web-objects]
     tmpfs: ["/tmp:size=16m,mode=1777"]
     mem_limit: 384m
     memswap_limit: 384m
@@ -90,26 +94,35 @@ services:
     image: ${ART_APP_IMAGE:-singular-seed-app:development}
     entrypoint: [/app/artrender]
     user: "10002:10000"
-    network_mode: none
+    networks: [database, egress]
     environment:
-      ART_SOCKET: /run/art/renderer.sock
+      ART_DATABASE_URL_FILE: /run/secrets/renderer-database
+      ART_S3_CREDENTIALS_FILE: /run/secrets/renderer-objects
+      ART_S3_ENDPOINT: ${ART_S3_ENDPOINT:?Configure private object storage}
+      ART_S3_REGION: ${ART_S3_REGION:?Set bucket region}
+      ART_S3_BUCKET: ${ART_S3_BUCKET:?Set image bucket}
+      ART_S3_PREFIX: ${ART_S3_PREFIX:-artifacts}
+      ART_S3_LOCAL: ${ART_S3_LOCAL:-false}
       GOMAXPROCS: "2"
       ART_LOG_LEVEL: ${ART_LOG_LEVEL:-info}
-    volumes:
-      - socket:/run/art
+    secrets: [renderer-database, renderer-objects]
     tmpfs: ["/tmp:size=16m,mode=1777"]
     mem_limit: 2g
     memswap_limit: 2g
     cpus: 1.5
-    stop_grace_period: 10s
+    stop_grace_period: 100s
     healthcheck:
-      test: [CMD, /app/artctl, renderer-ready]
+      test: [CMD, /app/artctl, renderer-live]
       interval: 10s
       timeout: 4s
       retries: 3
       start_period: 10s
 
 networks:
+  database:
+    external: true
+    name: ${ART_DATABASE_NETWORK:-singular-seed-data_default}
+  egress: {}
   edge: {}
   proxy:
     internal: true
@@ -118,7 +131,15 @@ networks:
         - subnet: ${ART_PROXY_NET:-172.30.80}.0/29
 
 volumes:
-  socket: {}
-  cache: {}
   caddy_data: {}
   caddy_config: {}
+
+secrets:
+  web-database:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/web-database
+  renderer-database:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/renderer-database
+  web-objects:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/web-objects
+  renderer-objects:
+    file: ${ART_SECRETS_DIR:-/etc/art/secrets}/renderer-objects

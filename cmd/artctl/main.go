@@ -10,11 +10,7 @@ import (
 	"net/url"
 	"os"
 	"time"
-
-	"github.com/jaminalder/go-graphics/internal/renderjob"
 )
-
-var build = "development"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -29,14 +25,12 @@ func run(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if args[0] == "renderer-ready" {
-		if !renderjob.NewClient(os.Getenv("ART_SOCKET"), build).Health(ctx) {
-			return errors.New("renderer unavailable")
-		}
-		return nil
-	}
 	method, endpoint := "GET", "http://127.0.0.1:8081/"
 	switch args[0] {
+	case "renderer-ready":
+		endpoint = "http://127.0.0.1:8082/ready"
+	case "renderer-live":
+		endpoint = "http://127.0.0.1:8082/live"
 	case "live":
 		endpoint = "http://127.0.0.1:8080/health/live"
 	case "ready", "metrics":

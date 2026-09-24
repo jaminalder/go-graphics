@@ -4,7 +4,7 @@ The public interface is server-rendered HTML and form submissions. It is not a g
 
 ## Public reads
 
-GET and HEAD use the same route selection. Every request must use the configured canonical Host. Reading never creates a workspace or render job, though session reads refresh its idle timestamp.
+Every request must use the canonical Host. Ordinary GET/HEAD share route selection, but SSE is GET-only. Reads never create an identity/job. Meaningful page GETs renew an existing identity and cookie; HEAD, image, asset, fragment, health and SSE requests do not. `Session` lookup alone does not renew expiry.
 
 | Path | Result |
 | --- | --- |
@@ -15,14 +15,16 @@ GET and HEAD use the same route selection. Every request must use the configured
 | `/recover` | 303 redirect to favourites |
 | `/explorations/<id>` | Owned exploration, batch and sample status |
 | `/explorations/<id>/samples/<sample>` | Owned sample detail |
-| `/fragments/explorations/<id>` | Main HTML fragment for polling |
+| `/fragments/explorations/<id>` | Main HTML fragment refreshed after result events |
+| `/events/<id>` | Authorized SSE snapshot/change/heartbeat hints; no work creation or session refresh |
 | `/fragments/explorations/<id>/samples/<sample>` | Sample main fragment |
 | `/recovery` | Existing workspace's `{version:1, recipes:[...]}` JSON |
 | `/export` | Same recovery records as `art-favourites.json` attachment |
 | `/images/<64-character-key>` | Available PNG, public immutable cache headers and ETag |
 | `/downloads/<64-character-key>` | PNG with attachment filename `singular-seed-<key-prefix>.png` |
 | `/assets/<hash>/<name>` | Embedded static asset only when its hash matches |
-| `/health/live`, `/health/ready` | 204 from web route handling; neither probes the renderer |
+| `/health/live` | Web-process liveness; 204 without database access |
+| `/health/ready` | Application/River schema check; 503 on database incompatibility/unavailability, no renderer probe |
 
 Exploration, sample and recovery reads require a valid workspace cookie. Image/download reads do not. A missing artifact returns 410 and never starts work. Assets and ready images use `public, max-age=31536000, immutable`; ordinary HTML defaults to `private, no-store`. Caddy hides health/private paths from the public origin.
 
@@ -38,11 +40,11 @@ POST requires an exact configured `Origin`, exact `Content-Type: application/x-w
 | `/explorations/<id>/choices` | `revision`, `style`, `colour` | Change current pins |
 | `/explorations/<id>/batches` | `revision`, `action`, `batch` | Retry the unavailable latest batch using its original direction |
 | `/explorations/<id>/similar` | `revision`, `action`, `sample` | Generate four images in the selected sample's family |
-| `/explorations/<id>/favourites` | `revision`, `sample`, `on`, `return` | Set favourite when `on=yes`; optional return is `sample` or `favourites` |
+| `/explorations/<id>/favourites` | `revision`, `sample`, `on`, `return` | Set/pin favourite when `on=yes`; explicitly admits an unavailable preview; optional return is `sample` or `favourites` |
 | `/explorations/<id>/download` | `sample` | Request/reuse larger rendition; no revision required |
 | `/explorations/<id>/cancel` | `revision`, `batch` | Cancel unfinished interests in latest batch |
 
-Success redirects with 303. Revisions are nonnegative integers; commands validate current ownership and revision. Action identifiers are 48 hexadecimal characters. Exact replay returns the original admitted result within retained history; reuse with a different request conflicts. Errors use HTML pages: 400 invalid input, 403 origin/CSRF, 409 conflict, 410 expiry, 413 oversized form, 415 unsupported content type, 421 unknown host, 429 rate limit, 503 finite capacity. Busy/rate replies set `Retry-After: 10`.
+Success redirects with 303. Revisions are nonnegative; commands validate ownership/revision. Action IDs are 48 hexadecimal characters; retained replay returns the original result, and conflicting reuse is rejected. Errors: 400 invalid input, 403 origin/CSRF, 409 conflict, 410 expiry/confirmed missing object, 413 oversized form, 415 content type, 421 Host, 429 rate, 503 capacity or database/bucket failure. Busy/rate replies set `Retry-After: 10`; storage failure never clears the visitor cookie.
 
 ## Private administrator interface
 
@@ -55,16 +57,16 @@ Success redirects with 303. Revisions are nonnegative integers; commands validat
 | `POST /generation/off` | Disable new admission; 204 | `generation-off` |
 | `POST /generation/on` | Enable admission; 204 | `generation-on` |
 
-`artctl live` calls public loopback `:8080/health/live` with Host derived from `ART_ORIGIN`. The command's ports are hard-coded, so changing admin/public ports also requires using another HTTP client. `renderer-ready` checks the Unix socket from `ART_SOCKET`; it needs the matching build. Private commands accept one operation and use a three-second deadline.
+`artctl live` calls loopback `:8080/health/live` with canonical Host. `ready` queries both schemas and recent matching renderer/storage status through PostgreSQL. `renderer-live`/`renderer-ready` call renderer-local HTTP `:8082`. Ports are fixed in artctl. Commands use a three-second deadline. Admission switches are durable in SQL; process restart does not reset them.
 
-## Renderer socket protocol
+## Renderer child protocol
 
-`artrender` listens on `ART_SOCKET` with mode 0660. `GET /health` returns 204 and `X-Renderer-Build`. `POST /render` accepts strict JSON up to 32768 bytes:
+There is no production renderer HTTP/Unix socket API. River invokes a handler which starts its fixed executable with `--child`, passing strict JSON up to 32768 bytes over stdin:
 
 ```json
 {"version":1,"build":"<matching-release>","recipe":{},"tier":"preview"}
 ```
 
-The empty recipe above is a structural placeholder, not an executable request; the `recipe` value must be a complete validated [edition record](data.md). `tier` is `preview` or `download`. Unknown fields, duplicate JSON keys, unsupported editions and release mismatches fail closed. A successful response is `image/png` with `X-Renderer-Build`; invalid input returns 400 and execution failure 503.
+The empty recipe is a placeholder; the recipe must be a complete validated [edition record](data.md), tier preview/download. Unknown fields, duplicate keys, unsupported editions and build mismatches fail closed. Child stdout is complete PNG; failure exits nonzero. This pipe interface is not publicly routable.
 
-There is at most one active child. The supervisor starts only its fixed executable with `--child`, passes JSON over stdin and accepts PNG on stdout. Preview deadline is 15 seconds, download 30 seconds; stdout is limited to 16 MiB and stderr to 8192 bytes. The client has a 35-second overall timeout and rejects oversized or mismatched-build responses. The manager validates the PNG and dimensions before publication. This protocol is private, not routed by Caddy.
+One child is active per renderer. Preview deadline is 15 seconds, download 30; stdout is at most 16 MiB and stderr 8192 bytes. River jobs have a 90-second total bound including upload/publication. Parent validates PNG/dimensions and commits a fenced pointer after upload. Children share container networking but receive a sanitized environment.

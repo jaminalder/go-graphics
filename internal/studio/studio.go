@@ -79,13 +79,21 @@ type (
 	Store struct {
 		mu         sync.Mutex
 		workspaces map[string]*workspace
-		jobs       *renderjob.Manager
+		jobs       Jobs
 		build      string
+		persistent bool
 	}
 )
 
+// Jobs is the domain's transactional queue boundary. Production binds it to a SQL transaction.
+type Jobs interface {
+	Admit(string, []renderjob.Request) ([]string, error)
+	Status(string, string) renderjob.Status
+	Cancel(string, string)
+}
+
 // New constructs a bounded transient studio.
-func New(jobs *renderjob.Manager, build string) *Store {
+func New(jobs Jobs, build string) *Store {
 	return &Store{workspaces: map[string]*workspace{}, jobs: jobs, build: build}
 }
 
@@ -112,6 +120,9 @@ func (s *Store) Create() (Workspace, error) {
 }
 
 func (s *Store) prune() {
+	if s.persistent {
+		return
+	}
 	now := time.Now()
 	for key, w := range s.workspaces {
 		if now.Sub(w.touched) > 30*time.Minute || now.Sub(w.created) > 24*time.Hour {
@@ -694,13 +705,14 @@ func (s *Store) Restore(token string, records []json.RawMessage) (string, error)
 }
 
 // Clear explicitly removes server state and cancels active interests.
-func (s *Store) Clear(token string) {
+func (s *Store) Clear(token string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if w := s.workspaces[token]; w != nil {
 		w.touched = time.Time{}
 	}
 	s.prune()
+	return nil
 }
 
 // String returns a concise sample label, keeping seed precision intact.

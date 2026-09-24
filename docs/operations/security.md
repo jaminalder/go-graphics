@@ -4,7 +4,7 @@ The public service exposes a curated finite artwork space through forms. It does
 
 ## Network and browser boundary
 
-The web listener defaults to loopback. A non-loopback binding requires exactly one trusted proxy IP; only requests from that peer may supply the client identity header used for rate limiting. Caddy overwrites `X-Art-Client` and removes forwarded host/client headers. The canonical Host and POST Origin must match configuration. The private admin listener remains loopback-only and Caddy blocks its paths. The renderer uses HTTP over a mode-0660 Unix socket and has no network in Compose.
+The web listener defaults to loopback. Non-loopback requires one trusted proxy IP; Caddy overwrites `X-Art-Client` and removes forwarded host/client headers. Canonical Host and POST Origin must match. Private control listeners are loopback-only and Caddy blocks their paths. Web/renderer communicate through PostgreSQL, not a render API. Renderer has database and bucket networking; children share that namespace by design.
 
 Responses set a same-origin Content Security Policy, deny framing, disable content sniffing, constrain referrers and browser permissions. Existing-session writes require constant-time CSRF token comparison. Cookies are HttpOnly and SameSite Lax; HTTPS adds Secure and the `__Host-` name. Public art pages/GETs do not create workspace state or jobs.
 
@@ -12,13 +12,13 @@ Responses set a same-origin Content Security Policy, deny framing, disable conte
 
 The application bounds concurrent HTTP handling to 128, request targets to 4096 bytes and form bodies to 64 KiB. Token buckets separately limit reads/assets, new starts, generation per IP and generation per workspace. Default read rate is 240/minute burst 30, assets 1200/minute burst 60, starts 12/minute burst 2, generation IP 12/minute burst 3 and workspace 6/minute burst 3. Limiter keys are bounded to 10000 with idle pruning.
 
-The queue has eight waiting positions and one serial worker; each workspace has up to four active interests. A supervisor admits only one child, with deadline/output bounds. Cache capacity, file count/age, job records, subscriber count, open image readers and recipe memory are separately bounded. See [data limits](../reference/data.md) and [private protocol](../reference/http-api.md).
+The queue caps nine outstanding render jobs and four active interests per workspace. River runs one render worker per renderer; the supervisor allows one bounded child. Image object reservations, count/retention, subscribers and read buffers are bounded. SSE has 32 streams per web process, authorized snapshots and 30-second active-result reconciliation; streams do not refresh identity lifetime. See [data limits](../reference/data.md).
 
 ## Execution and storage boundary
 
-The child executable path is fixed by the supervisor, and the only child argument is `--child`; a recipe never becomes shell text. The renderer container has no network, no web cache mount, read-only root and a separate user. Docker imposes memory/CPU/process bounds. The web process alone publishes validated PNG files. Requests carry a release identity that both sides must match, so a mixed release fails closed.
+The child executable is fixed and its only argument is `--child`; recipes never become shell text. Children receive sanitized environment/stdin/stdout, but share the container network and can access same-UID mounted files: this is trusted artwork process isolation, not a hostile-code sandbox. Renderer validates and uploads PNGs, then publishes pointers with attempt/epoch fencing and River completion. Runtime database roles lack DDL; migrations use separate owner credentials. Web has read-only production bucket credentials; renderer has scoped upload/cleanup access. All production bucket requests verify TLS.
 
-Workspaces and capability tokens are private transient state. Artifact URLs are intentionally usable without a session while cached. Recovery JSON contains artistic recipes; it does not contain cookies, CSRF tokens or navigation capabilities. There are no user accounts or cloud favourites. Protect exported files according to the user's needs.
+Cookie tokens are hashed for SQL lookup; workspace/CSRF data persists for 90-day idle retention. Artifact URLs intentionally work without a session when the key is known and retained. Export JSON contains recipes, not capabilities. There are no accounts/login or automatic cross-device recovery. Favourite previews persist with the anonymous owner. Image cleanup is bound to the configured endpoint/bucket/prefix and refuses an unrelated location.
 
 ## Operational limits
 
