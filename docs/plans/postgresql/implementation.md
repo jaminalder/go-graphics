@@ -4,6 +4,8 @@ Scope: approved local code/infrastructure tooling and disposable testing directl
 
 ## Implemented architecture
 
+Later load-test work supersedes the original nine-job/read-limit defaults: see [operational profiles](../../operations/limits.md). Production now defaults to 16 outstanding jobs, local-capacity 64, with two-minute first-start age and actual-byte image buffering. Original run measurements below remain historical evidence.
+
 - Web: PostgreSQL-backed anonymous studio, transaction-bound River enqueue, shared expensive-operation quotas, S3 reads, result listener and authorized SSE.
 - Renderer: River OSS v0.47.0 consumer/maintenance client in the existing service, fixed bounded child executable, PNG validation, S3 upload and serializable completion.
 - PostgreSQL 17.11: studio aggregates, River state and artifact metadata, not PNGs.

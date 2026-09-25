@@ -97,6 +97,24 @@ func run() error {
 		return errors.New("admin listener must be loopback")
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /load-stats", func(w http.ResponseWriter, r *http.Request) {
+		since, e1 := time.Parse(time.RFC3339Nano, r.URL.Query().Get("since"))
+		until, e2 := time.Parse(time.RFC3339Nano, r.URL.Query().Get("until"))
+		if e1 != nil || e2 != nil || !until.After(since) || until.Sub(since) > 25*time.Hour {
+			http.Error(w, "invalid time window", http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		stats, err := db.LoadStats(ctx, since, until)
+		if err != nil {
+			http.Error(w, "load statistics unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(stats)
+	})
 	mux.HandleFunc("GET /monitor", func(w http.ResponseWriter, r *http.Request) {
 		check, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()

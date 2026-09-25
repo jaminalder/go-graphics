@@ -23,6 +23,8 @@ import (
 )
 
 func environment(t *testing.T) (*persistence.DB, *objectstore.Store) {
+	t.Setenv("ART_LIMITS_PROFILE", "production")
+	t.Setenv("ART_LIMITS_JSON", `{"outstanding_jobs":9}`) // preserve this fixture's explicit admission-race budget
 	t.Helper()
 	url := os.Getenv("ART_TEST_DATABASE_URL")
 	if url == "" {

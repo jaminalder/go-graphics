@@ -2,6 +2,8 @@
 
 A read-only terminal view of PostgreSQL/River state, without another monitoring service, application Docker socket mount or public database port. Counts describe execution jobs, not HTTP requests or unique visitors.
 
+Run [k6 load testing](load-testing.md) in another terminal to generate browse, studio or burst traffic while watching this view and changing replica counts.
+
 ## Run locally
 
 Start/rebuild `bash deploy/scripts/browser-server.sh`, then in another terminal:

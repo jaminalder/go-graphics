@@ -99,7 +99,7 @@ func TestInitialCreationSharesTheRenderingQuotaWithDetailActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 7; i++ {
 		path := "/explorations/" + x.ID + "/download"
 		body := "csrf=" + session.CSRF + "&sample=unknown"
 		expected := 410
@@ -108,7 +108,7 @@ func TestInitialCreationSharesTheRenderingQuotaWithDetailActions(t *testing.T) {
 			body = "csrf=" + session.CSRF + "&artwork=iris&style=fine&colour=&action=" + studio.Token()
 			expected = 503
 		}
-		if i == 3 {
+		if i == 6 {
 			expected = 429
 		}
 		request := httptest.NewRequest("POST", "http://example.test"+path, strings.NewReader(body))

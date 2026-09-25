@@ -140,6 +140,7 @@ func renderMonitor(out io.Writer, s persistence.MonitorSnapshot) error {
 	}
 	b := &strings.Builder{}
 	fmt.Fprintf(b, "RENDER MONITOR  %s UTC  build=%s  admission=%t\n", s.At.UTC().Format("15:04:05"), short(s.Build, 12), s.Enabled)
+	fmt.Fprintf(b, "POLICY  %s  outstanding=%d  visitor=%d  queue-age=%ds\n", clean(s.Limits.Profile), s.Limits.Outstanding, s.Limits.VisitorJobs, s.Limits.QueueAgeSeconds)
 	fmt.Fprintf(b, "QUEUE  waiting=%d  running=%d  retrying=%d  failed(1h)=%d  completed(1h)=%d  oldest-wait=%s\n\n", s.Queue.Waiting, s.Queue.Running, s.Queue.Retrying, s.Queue.Failed, s.Queue.Completed, duration(s.Queue.OldestSeconds))
 	fmt.Fprintln(b, "INSTANCES (last hour + owners of running jobs)")
 	t := tabwriter.NewWriter(b, 0, 4, 2, ' ', 0)

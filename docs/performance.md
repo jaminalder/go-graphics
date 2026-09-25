@@ -1,5 +1,7 @@
 # Performance and resource behavior
 
+For application HTTP/rendering demand and replica experiments use the [k6 scenarios](operations/load-testing.md). Their completion latency includes queueing, rendering, publication and polling/transfer time, distinct from artwork microbenchmarks below.
+
 ## Measure the boundary that changed
 
 List benchmark entry points from source with `rg '^func Benchmark' internal cmd tools`, then run the relevant package with `go test -run '^$' -bench . -benchmem ./internal/<package>`. Planning, point sampling, sequential painting, histogram iteration and encoding have different costs; compare the same seeds/settings and record dimensions, AA, Go version and machine.

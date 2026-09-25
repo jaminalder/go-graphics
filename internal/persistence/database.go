@@ -17,6 +17,8 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
+
+	"github.com/jaminalder/go-graphics/internal/limits"
 )
 
 //go:embed schema.sql
@@ -39,6 +41,7 @@ type DB struct {
 	River    *river.Client[pgx.Tx]
 	Build    string
 	Instance Instance
+	Limits   limits.Policy
 }
 
 // TokenHash converts a bearer cookie into a non-secret database identifier.
@@ -52,6 +55,10 @@ func Queue(build string) string { return "render_" + TokenHash(build)[:24] }
 
 // Open creates explicit database connections; migrations are a separate operation.
 func Open(ctx context.Context, url, build string) (*DB, error) {
+	policy, err := limits.FromEnv()
+	if err != nil {
+		return nil, err
+	}
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, errors.New("invalid database configuration")
@@ -75,7 +82,7 @@ func Open(ctx context.Context, url, build string) (*DB, error) {
 		p.Close()
 		return nil, err
 	}
-	return &DB{Pool: p, River: r, Build: build}, nil
+	return &DB{Pool: p, River: r, Build: build, Limits: policy}, nil
 }
 
 // OpenEnv loads the connection secret from a file, not a process argument.

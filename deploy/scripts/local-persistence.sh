@@ -9,6 +9,8 @@ export ART_SECRETS_DIR
 mkdir -p "$root/out"
 ART_SECRETS_DIR=$(mktemp -d "$root/out/persistence-secrets.XXXXXXXX")
 export ART_S3_ENDPOINT=http://objects:9000 ART_S3_REGION=us-east-1 ART_S3_BUCKET=art-local ART_S3_LOCAL=true ART_S3_PREFIX=artifacts
+export ART_LIMITS_PROFILE=${ART_LIMITS_PROFILE:-local-capacity}
+export ART_LIMITS_JSON=${ART_LIMITS_JSON:-}
 export ART_ORIGIN=${ART_ORIGIN:-http://localhost:18088}
 export ART_DOMAIN
 ART_DOMAIN="http://$(python3 -c 'import os,urllib.parse; print(urllib.parse.urlparse(os.environ["ART_ORIGIN"]).hostname)')"

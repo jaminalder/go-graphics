@@ -31,6 +31,10 @@ Run `make docs` to generate the complete browser edition at `out/docs/index.html
 
 ## Persistence design and implementation
 
+- [Limit profiles](operations/limits.md): production and local-capacity policies, configuration and measured renderer load.
+
+- [Load testing](operations/load-testing.md): k6 browse, studio and burst scenarios for manual scaling experiments.
+
 - [Terminal monitoring](operations/monitoring.md): live queue, instance health and producer-to-renderer counts using `make watch` or the hosted helper.
 
 - [Persistence operations](operations/persistence.md) and [implementation evidence](plans/postgresql/implementation.md) cover PostgreSQL/River/S3. The approved [design](plans/postgresql/README.md) preserves planning history. Database backups and production rollout are outside this local implementation task.

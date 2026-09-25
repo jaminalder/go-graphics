@@ -1,4 +1,7 @@
 # River coordinates durable jobs through the separately managed PostgreSQL service.
+x-limits: &limits
+  ART_LIMITS_PROFILE: ${ART_LIMITS_PROFILE:-production}
+  ART_LIMITS_JSON: ${ART_LIMITS_JSON:-}
 x-common: &common
   restart: unless-stopped
   read_only: true
@@ -60,6 +63,7 @@ services:
         REVISION: ${ART_REVISION:-development}
     environment:
       ART_ORIGIN: ${ART_ORIGIN:?Set the canonical browser origin}
+      <<: *limits
       ART_ADDR: 0.0.0.0:8080
       ART_ADMIN_ADDR: 127.0.0.1:8081
       ART_TRUSTED_PROXY: ${ART_PROXY_NET:-172.30.80}.2
@@ -97,6 +101,7 @@ services:
     networks: [database, egress]
     environment:
       ART_DATABASE_URL_FILE: /run/secrets/renderer-database
+      <<: *limits
       ART_S3_CREDENTIALS_FILE: /run/secrets/renderer-objects
       ART_S3_ENDPOINT: ${ART_S3_ENDPOINT:?Configure private object storage}
       ART_S3_REGION: ${ART_S3_REGION:?Set bucket region}

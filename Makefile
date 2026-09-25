@@ -21,6 +21,22 @@ test-persistence: ## Run real PostgreSQL/River/S3 concurrency and restart tests
 watch: ## Watch the running local studio with actual Docker container names
 	python3 deploy/scripts/watch.py
 
+SCENARIO ?= browse
+USERS ?= 3
+DURATION ?= 2m
+LOAD_ARGS ?=
+.PHONY: load
+load: ## Run k6: SCENARIO=browse|studio|burst USERS=3 DURATION=2m [LOAD_ARGS='...']
+	python3 deploy/scripts/load.py --scenario "$(SCENARIO)" --users "$(USERS)" --duration "$(DURATION)" $(LOAD_ARGS)
+
+.PHONY: check-load
+check-load: ## Exercise all k6 scenarios on an isolated disposable stack
+	bash deploy/scripts/verify-load.sh
+
+.PHONY: check-capacity
+check-capacity: ## Compare 1 and 2 renderers under bounded local k6 capacity load
+	bash deploy/scripts/verify-capacity.sh
+
 lint: ## Run golangci-lint
 	golangci-lint run
 

@@ -35,15 +35,15 @@ Recipe digest is SHA-256 of canonical recipe bytes. Rendition key is SHA-256 of 
 | Batches/action replay | Workspace aggregate | Latest eight retained; samples retained for batches, parents and favourites |
 | Favourites | Aggregate + SQL pins | At most 24; recipe and preview retained with unexpired identity |
 | Workspace payloads | PostgreSQL bytea | At most 2 MiB each and 64 MiB globally; byte-exact recipes in render requests |
-| Queue | PostgreSQL / River | Nine outstanding render jobs globally; four active interests per owner; one local worker per renderer |
+| Queue | PostgreSQL / River | Default 16 production/64 local-capacity outstanding jobs; four active interests per owner; one worker per renderer |
 | Job subscribers | SQL interests | Up to 24 per coalesced rendition |
 | River history | PostgreSQL | Completed/cancelled 24 hours, discarded seven days; application references survive history pruning |
 | PNGs | Private bucket | 2 GiB / 5000 accounted objects including pending/deleting; ordinary age 24 hours, live favourite pins exempt |
-| Open image readers | Web buffers | Four bounded 16 MiB reads, at most 64 MiB encoded buffers per process |
+| Open image readers | Web byte/reader budget | Default 32 readers, actual bytes reserved within 64 MiB; up to two seconds capacity wait |
 | Browser cookie | Browser cookie jar | Opaque token, 90-day age refreshed on meaningful visits; fragments/SSE/images do not refresh |
 | Recovery JSON / image downloads | User filesystem | User-retained; not synchronized or automatically backed up by the app |
 
-Never-started work expires after one minute; already-started retries have a five-minute lifetime. River handles ordering, retries and maintenance election; the previous alternating-owner scheduler is replaced by per-owner quotas and a global outstanding budget. Deterministic render failures require explicit retry. Abandoned/infrastructure failures can retry within three attempts. No status read creates work.
+Never-started work defaults to expiry after two minutes (configurable by profile); started retries retain a five-minute lifetime. River owns ordering/retries/election; per-owner quotas and a global outstanding budget replace owner alternation. Deterministic failures require explicit retry; infrastructure/abandoned work can retry within three attempts. No status read creates work. See [profiles](../operations/limits.md).
 
 Publication validates PNG content/dimensions, records an upload intent, writes an immutable bucket key, then atomically commits its pointer/outcome and River completion. External upload and SQL cannot be one transaction; old intents and deletion tombstones enable bounded reconciliation. Pins prevent favourite previews from normal expiry; storage saturation rejects new publication rather than evicting favourites. Database volume loss loses metadata even if image objects survive; database backups are outside this task.
 

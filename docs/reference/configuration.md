@@ -15,6 +15,8 @@
 | `ART_S3_LOCAL` | `false` | Explicit disposable development allowance for HTTP S3 |
 | `ART_LOG_LEVEL` | `info` | Structured text logging: debug, info, warn or error |
 | `ART_INSTANCE_NAME` | OS/Docker hostname | Optional explicit process label; boot ID remains unique. Default Compose display names are resolved by the host-side monitor |
+| `ART_LIMITS_PROFILE` | `production`; local helper selects `local-capacity` | Validated finite request/admission/image policy; same setting for all replicas |
+| `ART_LIMITS_JSON` | empty | Partial bounded JSON overrides, e.g. `{"outstanding_jobs":24}`; unknown/invalid fields fail startup |
 | `GOMAXPROCS` | Go runtime default | Runtime CPU parallelism; Compose sets renderer to 2 |
 
 Both service pgx pools currently allow eight connections; web's result listener uses another dedicated session. PostgreSQL Compose caps connections at 40. These are code/Compose limits, not environment knobs. Expensive-operation quotas are shared in SQL; read/asset quotas remain per web process. Generation admission is changed through CLI controls rather than environment initialization.
@@ -41,5 +43,7 @@ Build identity is linker-injected `main.build`, default `development`, shared by
 ## Limits and artwork configuration
 
 Queue/runtime limits are explicit in [River worker configuration](../../internal/persistence/worker.go), [admission](../../internal/persistence/queue.go) and Compose. The public catalogue still fixes preview/download policy in `publish.Tier`. [Data limits](data.md) and [HTTP limits](http-api.md) record the bounds. Local sketch flags/profiles do not alter the public 600/1200-pixel policy.
+
+[Operational profiles](../operations/limits.md) define production/local defaults and override ranges. Private monitoring and load reports expose effective settings; render deadlines, process limits and storage caps remain separate. Local ad-hoc scale commands must preserve profile/overrides, not fall back accidentally to production defaults.
 
 Terraform inputs are documented in [provisioning](../operations/provisioning.md), with exact validators in [main.tf](../../deploy/terraform/main.tf).

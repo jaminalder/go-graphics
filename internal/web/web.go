@@ -21,7 +21,10 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
+
 	"github.com/jaminalder/go-graphics/internal/artwork"
+	"github.com/jaminalder/go-graphics/internal/limits"
 	"github.com/jaminalder/go-graphics/internal/objectstore"
 	"github.com/jaminalder/go-graphics/internal/persistence"
 	"github.com/jaminalder/go-graphics/internal/publish"
@@ -42,6 +45,7 @@ type (
 		Objects      *objectstore.Store
 		Events       *persistence.Events
 		TrustedProxy netip.Addr
+		Limits       limits.Policy
 	}
 	app struct {
 		cfg          Config
@@ -53,6 +57,7 @@ type (
 		active       chan struct{}
 		images       chan struct{}
 		streams      chan struct{}
+		imageBytes   *semaphore.Weighted
 		limits       limiter
 	}
 	page struct {
@@ -93,6 +98,14 @@ type Studio interface {
 
 // New constructs the HTTP handler and validates the publication catalogue without rendering.
 func New(c Config) (http.Handler, error) {
+	if c.Database != nil {
+		c.Limits = c.Database.Limits
+	} else if c.Limits.Profile == "" {
+		c.Limits, _ = limits.Defaults("production")
+	}
+	if err := c.Limits.Validate(); err != nil {
+		return nil, err
+	}
 	u, e := url.Parse(c.Origin)
 	if e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "" || u.User != nil {
 		return nil, errors.New("invalid canonical origin")
@@ -116,7 +129,8 @@ func New(c Config) (http.Handler, error) {
 		return nil, e
 	}
 	a := &app{active: make(chan struct{}, 128), hashes: hashes, cfg: c, host: u.Host, secure: u.Scheme == "https", cookie: "art-studio", templates: t, assets: http.StripPrefix("/assets/", http.FileServer(http.FS(assets))), limits: limiter{keys: map[string]bucket{}}}
-	a.images = make(chan struct{}, 4) // four bounded 16 MiB reads = at most 64 MiB of encoded image buffers
+	a.images = make(chan struct{}, c.Limits.ImageReaders)
+	a.imageBytes = semaphore.NewWeighted(int64(c.Limits.ImageBufferMiB) << 20)
 	a.streams = make(chan struct{}, 32)
 	if a.secure {
 		a.cookie = "__Host-art-studio"
@@ -150,11 +164,12 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "request target too long", http.StatusRequestURITooLong)
 		return
 	}
-	bucketName, rate, burst := "read:", 240.0, 30.0
+	bucketName, rate := "read:", a.cfg.Limits.ReadIP
 	if strings.HasPrefix(r.URL.Path, "/assets/") {
-		bucketName, rate, burst = "asset:", 1200, 60
+		bucketName, rate = "asset:", a.cfg.Limits.AssetIP
 	}
-	if !a.limits.allow(bucketName+a.client(r), rate, burst) {
+	if !a.limits.allow(bucketName+a.client(r), float64(rate.PerMinute), float64(rate.Burst)) {
+		w.Header().Set("X-Art-Limit", strings.TrimSuffix(bucketName, ":")+"-ip")
 		a.fail(w, r, 429, "Too many requests. Give this page a moment.")
 		return
 	}
@@ -492,7 +507,7 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if path == "/explorations" || path == "/restore" {
-		if !a.allowExpensive(w, r, "start:"+a.client(r), 12, 2) {
+		if !a.allowExpensive(w, r, "start:"+a.client(r), a.cfg.Limits.StartIP) {
 			return
 		}
 		if path == "/explorations" && !a.allowed(r, "artwork", "style", "colour", "action") {
@@ -662,25 +677,26 @@ func (a *app) post(w http.ResponseWriter, r *http.Request) {
 // A burst of three admits create, download, and similar as one natural visit.
 // Sustained quotas and the independent queue/worker bounds still cap rendering.
 func (a *app) allowGeneration(w http.ResponseWriter, r *http.Request, token string) bool {
-	if !a.allowExpensive(w, r, "generate-ip:"+a.client(r), 12, 3) || !a.allowExpensive(w, r, "generate-workspace:"+token, 6, 3) {
+	if !a.allowExpensive(w, r, "generate-ip:"+a.client(r), a.cfg.Limits.GenerateIP) || !a.allowExpensive(w, r, "generate-workspace:"+token, a.cfg.Limits.GenerateVisitor) {
 		return false
 	}
 	return true
 }
 
-func (a *app) allowExpensive(w http.ResponseWriter, r *http.Request, key string, rate, burst float64) bool {
+func (a *app) allowExpensive(w http.ResponseWriter, r *http.Request, key string, rate limits.Rate) bool {
 	ok := false
 	if a.cfg.Database == nil {
-		ok = a.limits.allow(key, rate, burst)
+		ok = a.limits.allow(key, float64(rate.PerMinute), float64(rate.Burst))
 	} else {
 		var err error
-		ok, err = a.cfg.Database.Allow(r.Context(), key, rate, burst)
+		ok, err = a.cfg.Database.Allow(r.Context(), a.cfg.Limits.Profile+":"+key, float64(rate.PerMinute), float64(rate.Burst))
 		if err != nil {
 			a.failError(w, r, err, 503)
 			return false
 		}
 	}
 	if !ok {
+		w.Header().Set("X-Art-Limit", strings.SplitN(key, ":", 2)[0])
 		a.fail(w, r, 429, "Give these images a moment, then try again.")
 	}
 	return ok
@@ -732,13 +748,6 @@ func (a *app) objectImage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	select {
-	case a.images <- struct{}{}:
-		defer func() { <-a.images }()
-	default:
-		a.fail(w, r, 503, "Downloads are busy.")
-		return
-	}
 	meta, err := a.cfg.Database.Artifact(r.Context(), id)
 	if errors.Is(err, os.ErrNotExist) {
 		a.fail(w, r, 410, "This image has expired.")
@@ -748,6 +757,19 @@ func (a *app) objectImage(w http.ResponseWriter, r *http.Request) {
 		a.failError(w, r, err, 503)
 		return
 	}
+	if meta.Size < 1 || meta.Size > objectstore.MaxImage {
+		a.fail(w, r, 503, "Invalid image metadata.")
+		return
+	}
+	// Reserve encoded bytes and a response slot for a bounded wait. The reservation
+	// lasts through the client write so slow readers cannot accumulate buffers.
+	release, reason := a.reserveImage(r.Context(), meta.Size)
+	if reason != "" {
+		w.Header().Set("X-Art-Limit", reason)
+		a.fail(w, r, 503, "Downloads are busy.")
+		return
+	}
+	defer release()
 	data, err := a.cfg.Objects.Get(r.Context(), meta.Key, meta.Digest, meta.Size)
 	if errors.Is(err, os.ErrNotExist) {
 		if e := a.cfg.Database.Missing(r.Context(), id, meta.Key); e != nil {

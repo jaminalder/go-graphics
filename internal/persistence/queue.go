@@ -82,7 +82,7 @@ func (q *QueueTx) Admit(owner string, requests []renderjob.Request) ([]string, e
 			if err = tx.QueryRow(ctx, `SELECT count(*) FROM art_interests i JOIN art_requests r ON r.id=i.request JOIN river_job j ON j.id=r.job_id WHERE i.workspace=$1 AND j.state IN `+activeStates+` AND i.request<>$2`, owner, id).Scan(&owned); err != nil {
 				return nil, err
 			}
-			if owned >= 4 {
+			if owned >= q.DB.Limits.VisitorJobs {
 				return nil, renderjob.ErrBusy
 			}
 		}
@@ -91,7 +91,7 @@ func (q *QueueTx) Admit(owner string, requests []renderjob.Request) ([]string, e
 			if err = tx.QueryRow(ctx, `SELECT count(*) FROM river_job WHERE kind='render' AND state IN `+activeStates).Scan(&outstanding); err != nil {
 				return nil, err
 			}
-			if outstanding >= 9 {
+			if outstanding >= q.DB.Limits.Outstanding {
 				return nil, renderjob.ErrBusy
 			}
 			instance := q.DB.Instance

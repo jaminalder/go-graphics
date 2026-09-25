@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/jaminalder/go-graphics/internal/limits"
 )
 
 // QueueSummary counts execution jobs, not HTTP requests or unique visitors.
@@ -37,6 +39,7 @@ type Flow struct {
 
 // MonitorSnapshot is a coherent, bounded, read-only operational snapshot.
 type MonitorSnapshot struct {
+	Limits             limits.Policy    `json:"limits"`
 	At                 time.Time        `json:"at"`
 	Enabled            bool             `json:"admission_enabled"`
 	Build              string           `json:"build"`
@@ -49,7 +52,7 @@ type MonitorSnapshot struct {
 
 // Monitor queries retained jobs and presence without keeping a transaction open between refreshes.
 func (d *DB) Monitor(ctx context.Context) (MonitorSnapshot, error) {
-	s := MonitorSnapshot{Instances: []InstanceStatus{}, Flow: []Flow{}}
+	s := MonitorSnapshot{Instances: []InstanceStatus{}, Flow: []Flow{}, Limits: d.Limits}
 	tx, err := d.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return s, err

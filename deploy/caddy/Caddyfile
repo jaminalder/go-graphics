@@ -18,7 +18,7 @@ http:// {
 	request_body {
 		max_size 64KB
 	}
-	@private path /health/* /ready /metrics /monitor /generation/*
+	@private path /health/* /ready /metrics /monitor /load-stats /generation/*
 	respond @private 404
 	reverse_proxy web:8080 {
 		flush_interval -1

@@ -22,6 +22,9 @@ func main() {
 }
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "load-stats" {
+		return loadStatsCommand(args[1:], os.Stdout)
+	}
 	if len(args) > 0 && (args[0] == "watch" || args[0] == "status") {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

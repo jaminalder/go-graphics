@@ -21,6 +21,14 @@ jobs:
       - run: make check
       - run: make test-persistence
       - run: python3 deploy/tests/test_watch.py
+      - name: Check load scenario configuration and routing
+        run: |
+          node --test web/load/config.test.js
+          python3 deploy/tests/test_load.py
+      - name: Exercise k6 journeys against disposable application
+        run: make check-load
+      - name: Exercise production policy with real k6 journeys
+        run: ART_LIMITS_PROFILE=production make check-load
       - run: go test -race ./internal/artwork ./internal/explore ./internal/publish ./internal/renderjob ./internal/studio ./internal/web ./cmd/staticart
       - run: govulncheck ./...
       - name: Real browser journeys and failure recovery

@@ -42,6 +42,8 @@ Key: the enclosing box is one application; inside boxes are components, outside 
 
 Private admin HTTP also exposes a read-only [monitor snapshot](../../internal/persistence/monitor.go), consumed by artctl rather than the public browser. Web and renderer write boot-specific presence records; enqueue stores producer metadata. The [host-side terminal helper](../../deploy/scripts/watch.py) resolves Docker names, without adding a monitoring container or application access to Docker.
 
+Both runtime services load the validated [limit policy](../../internal/limits/policy.go) at startup. Private [load timing queries](../../internal/persistence/loadstats.go) let the operator's k6 launcher collect server evidence separately from public HTTP requests; no load generator gets database credentials. Image delivery uses a [bounded byte/reader reservation](../../internal/web/image_budget.go) before S3 fetch and through response writing.
+
 ## Renderer service components
 
 Scope: the `artrender` parent process.

@@ -10,9 +10,9 @@ Responses set a same-origin Content Security Policy, deny framing, disable conte
 
 ## Resource admission
 
-The application bounds concurrent HTTP handling to 128, request targets to 4096 bytes and form bodies to 64 KiB. Token buckets separately limit reads/assets, new starts, generation per IP and generation per workspace. Default read rate is 240/minute burst 30, assets 1200/minute burst 60, starts 12/minute burst 2, generation IP 12/minute burst 3 and workspace 6/minute burst 3. Limiter keys are bounded to 10000 with idle pruning.
+HTTP concurrency is bounded to 128, targets to 4096 bytes and forms to 64 KiB. Validated [profiles](limits.md) configure read/asset/start/generation buckets. Production rates are 1200/3000/60/120/30 per minute respectively; local-capacity increases rates for renderer tests. Keys remain bounded to 10000 with pruning; no client header selects policy.
 
-The queue caps nine outstanding render jobs and four active interests per workspace. River runs one render worker per renderer; the supervisor allows one bounded child. Image object reservations, count/retention, subscribers and read buffers are bounded. SSE has 32 streams per web process, authorized snapshots and 30-second active-result reconciliation; streams do not refresh identity lifetime. See [data limits](../reference/data.md).
+Default queue caps are 16 production/64 local-capacity outstanding jobs and four active interests per workspace. River runs one child per renderer. Images reserve actual bytes (64 MiB total) and one of 32 readers, waiting at most two seconds. SSE retains 32 streams and 30-second reconciliation; streams do not renew identity lifetime. See [data limits](../reference/data.md).
 
 ## Execution and storage boundary
 

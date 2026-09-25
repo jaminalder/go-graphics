@@ -61,9 +61,9 @@ Inspect attempts/failures through private SQL against `river_job` and applicatio
 
 ## Execution and failure behavior
 
-- River v0.47.0, one render worker per renderer container; a second container adds a second execution slot. Nine outstanding render jobs globally, four active interests per visitor, 24 subscribers per rendition.
+- River v0.47.0, one worker per renderer; replicas add execution slots. Default 16 production/64 local-capacity outstanding jobs, four active interests per visitor, 24 subscribers per rendition. See [profiles](limits.md).
 - Render children: 15-second preview / 30-second download limit, 16 MiB maximum PNG, fixed executable, sanitized environment. Parent job: 90-second deadline, at most three attempts. Deterministic invalid/render/output failures are terminal; database/bucket interruption can retry.
-- First start after one minute is expired; already-started retries have a five-minute lifetime. River rescue eligibility is two minutes; its pinned rescuer runs every 30 seconds and retry scheduling adds delay. This is not a promise of exact two-minute recovery.
+- First start defaults to a two-minute maximum age; started retries retain five minutes. River rescue eligibility is two minutes with a 30-second rescuer cadence plus scheduling delay, not exact two-minute recovery.
 - River's fallback fetch interval is 30 seconds. Its scheduler runs every five seconds; leader renewal and other maintenance also cause SQL. `LISTEN`/`NOTIFY` avoids rapid idle job polling, not all background queries.
 - Web uses one dedicated result listener per process and SSE only for active pages. Reconnect signals a snapshot; active streams reconcile every 30 seconds. No listener per browser, durable event log or essential completion callback in web.
 - Upload intent is committed before unique-key upload. Publication uses a serializable transaction to check River attempt/state, application generation/epoch/interests and commit pointer + outcome + `JobCompleteTx` + notification. PostgreSQL serialization aborts are retried at most twice locally, without rerendering/reuploading; ambiguous network commits are not blindly retried/deleted.
@@ -77,7 +77,7 @@ During bucket failure the renderer checks bucket health before expensive renderi
 
 Anonymous cookies/identities expire after 90 days of inactivity. Meaningful navigation/actions refresh them; image/fragment/SSE traffic does not. No login, cross-device discovery or lost-cookie recovery is added.
 
-Favourite previews are pinned while their owner remains unexpired; un-favouriting or clearing releases the pin. Normal artifacts expire after 24 hours. Pinned and disposable images share a hard 2 GiB / 5000-object accounted budget, including uploads/deletion backlog. A full budget rejects new publication rather than deleting retained favourites. Four concurrent web image buffers cap encoded image memory at 64 MiB.
+Favourite previews are pinned until owner expiry/un-favouriting/clear. Normal artifacts expire after 24 hours. Pinned/disposable images share 2 GiB/5000 accounted objects including backlog; a full budget rejects publication. Image serving reserves actual encoded bytes within 64 MiB plus a default 32-reader cap, waiting at most two seconds for capacity.
 
 The workspace uses a bounded serialized aggregate in PostgreSQL (`bytea`), retaining the existing domain rules: four explorations, eight recent batches/actions, 24 favourites. It is loaded under a workspace transaction, not kept authoritatively in process memory. Canonical recipes are also stored byte-exact in render requests. There are at most 1000 identities and a 64 MiB aggregate snapshot budget; no unbounded permanent account store. Favourite ownership stays in the same durable aggregate; navigation pruning preserves favourite recipes. This deliberately replaces the plan's larger normalized navigation schema.
 

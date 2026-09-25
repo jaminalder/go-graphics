@@ -29,7 +29,7 @@ def request(path, headers=None):
 def main():
     assert request("/")[0] == 200
     assert request("/", {"Host": "attacker.invalid"})[0] != 200
-    for path in ("/metrics", "/monitor", "/ready", "/health/live", "/generation/off"):
+    for path in ("/metrics", "/monitor", "/load-stats", "/ready", "/health/live", "/generation/off"):
         assert request(path)[0] == 404, path
     # Visitor-supplied proxy headers do not alter routing or canonical origin.
     assert request("/", {"X-Art-Client": "192.0.2.4", "X-Forwarded-Host": "attacker.invalid"})[0] == 200
@@ -50,6 +50,10 @@ def main():
     assert not any(m["Destination"] == "/run/art" for c in containers for m in c["Mounts"])
     compose("exec", "-T", "web", "/app/artctl", "ready")
     status = json.loads(compose("exec", "-T", "web", "/app/artctl", "status", "--json").stdout)
+    assert status["limits"]["profile"] == os.environ.get("ART_LIMITS_PROFILE", "local-capacity")
+    for service in ("web", "renderer"):
+        env = dict(v.split("=", 1) for v in services[service]["Config"]["Env"] if "=" in v)
+        assert env["ART_LIMITS_PROFILE"] == status["limits"]["profile"]
     assert {i["role"] for i in status["instances"]} == {"web", "renderer"}
     watch = subprocess.run(["python3", "deploy/scripts/watch.py", "--project", os.environ["ART_COMPOSE_PROJECT"], "--once"], check=True, capture_output=True, text=True)
     assert os.environ["ART_COMPOSE_PROJECT"] + "-web-1" in watch.stdout

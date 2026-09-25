@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jaminalder/go-graphics/internal/limits"
 	"github.com/jaminalder/go-graphics/internal/persistence"
 	"github.com/jaminalder/go-graphics/internal/renderjob"
 	"github.com/jaminalder/go-graphics/internal/studio"
@@ -76,6 +77,16 @@ func TestMonitoringAttributesProducerRendererAndIdleBoots(t *testing.T) {
 	if snap.Queue.Completed != 4 || snap.Queue.Waiting != 0 || len(snap.Flow) != 1 || snap.Flow[0].Renderer.ID != renderDB.Instance.ID || snap.Flow[0].Jobs != 4 {
 		t.Fatalf("bad completed snapshot %+v", snap)
 	}
+	stats, e := db.LoadStats(ctx, time.Now().Add(-time.Minute), time.Now().Add(time.Second))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(stats) != 1 || stats[0].Jobs != 4 || stats[0].State != "completed" || stats[0].TotalP95 == nil || stats[0].ExecutionSum == nil {
+		t.Fatalf("bad server timing %+v", stats)
+	}
+	if _, e = db.LoadStats(ctx, time.Now(), time.Now().Add(-time.Second)); e == nil {
+		t.Fatal("accepted reversed window")
+	}
 	if err = renderDB.StopInstance(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +124,36 @@ func TestMonitoringAttributesProducerRendererAndIdleBoots(t *testing.T) {
 		if i.ID == producer.ID && i.Status != "stale" {
 			t.Fatal("dead producer reported live")
 		}
+	}
+}
+
+func TestConfiguredCapacityChangesAdmissionWithoutRemovingVisitorBounds(t *testing.T) {
+	for _, profile := range []string{"production", "local-capacity"} {
+		t.Run(profile, func(t *testing.T) {
+			db, _ := environment(t)
+			db.Limits, _ = limits.Defaults(profile)
+			s := &studio.Persistent{DB: db}
+			for i := 0; i < db.Limits.Outstanding/4; i++ {
+				ws, e := s.Create()
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, e = s.Enter(ws.Token, "iris", "", "", studio.Token()); e != nil {
+					t.Fatalf("early rejection at %d: %v", i, e)
+				}
+			}
+			ws, e := s.Create()
+			if e != nil {
+				t.Fatal(e)
+			}
+			if _, e = s.Enter(ws.Token, "iris", "", "", studio.Token()); e == nil {
+				t.Fatal("outstanding cap bypassed")
+			}
+			var count int
+			if e = db.Pool.QueryRow(context.Background(), "SELECT count(*) FROM river_job WHERE kind='render'").Scan(&count); e != nil || count != db.Limits.Outstanding {
+				t.Fatalf("jobs %d err %v", count, e)
+			}
+		})
 	}
 }
 

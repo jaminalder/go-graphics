@@ -141,8 +141,8 @@ func (w *Worker) begin(ctx context.Context, job *river.Job[RenderArgs], generati
 	}
 	var r renderjob.Request
 	var fresh bool
-	err = tx.QueryRow(ctx, `SELECT recipe,tier,(first_started IS NULL AND created<now()-interval '1 minute') OR (first_started IS NOT NULL AND first_started<now()-interval '5 minutes')
-      FROM art_requests WHERE id=$1 AND job_id=$2 AND epoch=$3 AND EXISTS(SELECT 1 FROM art_interests i JOIN art_workspaces ws ON ws.id=i.workspace WHERE i.request=$1 AND ws.expires>now()) FOR UPDATE`, job.Args.Request, job.ID, epoch).Scan(&r.Recipe, &r.Tier, &fresh)
+	err = tx.QueryRow(ctx, `SELECT recipe,tier,(first_started IS NULL AND created<now()-make_interval(secs=>$4)) OR (first_started IS NOT NULL AND first_started<now()-interval '5 minutes')
+      FROM art_requests WHERE id=$1 AND job_id=$2 AND epoch=$3 AND EXISTS(SELECT 1 FROM art_interests i JOIN art_workspaces ws ON ws.id=i.workspace WHERE i.request=$1 AND ws.expires>now()) FOR UPDATE`, job.Args.Request, job.ID, epoch, w.DB.Limits.QueueAgeSeconds).Scan(&r.Recipe, &r.Tier, &fresh)
 	if errors.Is(err, pgx.ErrNoRows) || build != job.Args.Build {
 		return r, epoch, river.JobCancel(errors.New("render request no longer active"))
 	}
